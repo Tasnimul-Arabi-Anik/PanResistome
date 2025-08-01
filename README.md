@@ -25,13 +25,13 @@ PanResistome integrates several state-of-the-art tools including:
 ## Workflow Overview
 
 ```
-          +-------------+        +-------------+        +-------------+        +-------------+
-          |   FetchM    |  -->   |  ABRicate   |  -->   |   PanR2     |  -->   |   Output    |
-          +-------------+        +-------------+        +-------------+        +-------------+
-          | Download     |       | ARG annotation|      | Statistical   |      | Visualizations|
-          | assemblies   |       | using databases|     | analysis      |      | & Summaries   |
-          | & metadata   |       | like NCBI      |     | + plotting    |      |               |
-          +-------------+        +-------------+        +-------------+        +-------------+
++-------------+        +-------------+        +-------------+        +-------------+
+|   FetchM    |  -->   |  ABRicate   |  -->   |   PanR2     |  -->   |   Output    |
++-------------+        +-------------+        +-------------+        +-------------+
+| Download     |       | ARG annotation|      | Statistical   |      | Visualizations|
+| assemblies   |       | using databases|     | analysis      |      | & Summaries   |
+| & metadata   |       | like NCBI      |     | + plotting    |      |               |
++-------------+        +-------------+        +-------------+        +-------------+
 ```
 
 ---
