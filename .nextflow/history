@@ -20,4 +20,3 @@
 2025-08-01 14:17:07	25m 26s	nice_plateau	ERR	e3971278c649340feaeb80607ac01465	4cc41588-0c5d-4df1-9820-2f81887b6c55	nextflow run main1.nf --input test.tsv --outdir results -profile conda --threads 24
 2025-08-01 14:47:32	3m 41s	fabulous_stone	OK	e3971278c649340feaeb80607ac01465	4cc41588-0c5d-4df1-9820-2f81887b6c55	nextflow run main1.nf --input test.tsv --outdir results -profile conda --threads 24 -resume
 2025-08-01 15:39:01	21m 46s	peaceful_mcnulty	OK	81550ab8ae1d3a2bc512818437471002	2dbeaf0f-c725-44b0-9edd-19f6a24e071c	nextflow run main1.nf --input test.tsv --outdir results -profile conda --threads 24
-2025-08-01 20:13:16	-	boring_booth	-	81550ab8ae1d3a2bc512818437471002	d5723c48-3388-499d-8503-6f16f391a2e1	nextflow run main.nf --help
