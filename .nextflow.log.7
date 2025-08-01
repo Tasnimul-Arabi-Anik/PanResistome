@@ -1,0 +1,86 @@
+Aug-01 14:04:48.474 [main] DEBUG nextflow.cli.Launcher - $> nextflow run main1.nf --input test.tsv --outdir results -profile conda --threads 24
+Aug-01 14:04:48.623 [main] DEBUG nextflow.cli.CmdRun - N E X T F L O W  ~  version 24.10.4
+Aug-01 14:04:48.654 [main] DEBUG nextflow.plugin.PluginsFacade - Setting up plugin manager > mode=prod; embedded=false; plugins-dir=/home/anik/.nextflow/plugins; core-plugins: nf-amazon@2.9.2,nf-azure@1.10.2,nf-cloudcache@0.4.2,nf-codecommit@0.2.2,nf-console@1.1.4,nf-google@1.15.3,nf-tower@1.9.3,nf-wave@1.7.4
+Aug-01 14:04:48.697 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Enabled plugins: []
+Aug-01 14:04:48.698 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Disabled plugins: []
+Aug-01 14:04:48.703 [main] INFO  org.pf4j.DefaultPluginManager - PF4J version 3.12.0 in 'deployment' mode
+Aug-01 14:04:48.727 [main] INFO  org.pf4j.AbstractPluginManager - No plugins
+Aug-01 14:04:48.755 [main] DEBUG nextflow.config.ConfigBuilder - Found config local: /home/anik/genomics/Tools_Dev/PanResistome/nextflow.config
+Aug-01 14:04:48.758 [main] DEBUG nextflow.config.ConfigBuilder - Parsing config file: /home/anik/genomics/Tools_Dev/PanResistome/nextflow.config
+Aug-01 14:04:48.815 [main] DEBUG n.secret.LocalSecretsProvider - Secrets store: /home/anik/.nextflow/secrets/store.json
+Aug-01 14:04:48.821 [main] DEBUG nextflow.secret.SecretsLoader - Discovered secrets providers: [nextflow.secret.LocalSecretsProvider@4b6ac111] - activable => nextflow.secret.LocalSecretsProvider@4b6ac111
+Aug-01 14:04:48.840 [main] DEBUG nextflow.config.ConfigBuilder - Applying config profile: `conda`
+Aug-01 14:04:49.278 [main] ERROR nextflow.cli.Launcher - Unable to parse config file: '/home/anik/genomics/Tools_Dev/PanResistome/nextflow.config'
+
+  Compile failed for sources FixedSetSources[name='/groovy/script/ScriptA5BE32277B89CECEAA12D746FA868CDD/_nf_config_a92da4ca']. Cause: org.codehaus.groovy.control.MultipleCompilationErrorsException: startup failed:
+  /groovy/script/ScriptA5BE32277B89CECEAA12D746FA868CDD/_nf_config_a92da4ca: 82: Unexpected input: '{' @ line 82, column 10.
+     profiles {
+              ^
+  
+  1 error
+
+ch.artecat.grengine.except.CompileException: Compile failed for sources FixedSetSources[name='/groovy/script/ScriptA5BE32277B89CECEAA12D746FA868CDD/_nf_config_a92da4ca']. Cause: org.codehaus.groovy.control.MultipleCompilationErrorsException: startup failed:
+/groovy/script/ScriptA5BE32277B89CECEAA12D746FA868CDD/_nf_config_a92da4ca: 82: Unexpected input: '{' @ line 82, column 10.
+   profiles {
+            ^
+
+1 error
+
+	at ch.artecat.grengine.code.groovy.DefaultGroovyCompiler.compile(DefaultGroovyCompiler.java:260)
+	at ch.artecat.grengine.load.DefaultTopCodeCache.getUpToDateCode(DefaultTopCodeCache.java:80)
+	at ch.artecat.grengine.load.LayeredClassLoader.getTopLoader(LayeredClassLoader.java:251)
+	at ch.artecat.grengine.load.LayeredClassLoader.loadMainClass(LayeredClassLoader.java:202)
+	at ch.artecat.grengine.engine.LayeredEngine.loadMainClass(LayeredEngine.java:198)
+	at ch.artecat.grengine.Grengine.loadMainClass(Grengine.java:679)
+	at ch.artecat.grengine.BaseGrengine.load(BaseGrengine.java:538)
+	at ch.artecat.grengine.BaseGrengine.load(BaseGrengine.java:421)
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.fromCache(IndyInterface.java:321)
+	at nextflow.config.ConfigParser.loadScript(ConfigParser.groovy:231)
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.fromCache(IndyInterface.java:321)
+	at nextflow.config.ConfigParser.parse(ConfigParser.groovy:312)
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.fromCache(IndyInterface.java:321)
+	at nextflow.config.ConfigBuilder.parse0(ConfigBuilder.groovy:439)
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.fromCache(IndyInterface.java:321)
+	at nextflow.config.ConfigBuilder.merge0(ConfigBuilder.groovy:425)
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.fromCache(IndyInterface.java:321)
+	at nextflow.config.ConfigBuilder.buildConfig0(ConfigBuilder.groovy:375)
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.fromCache(IndyInterface.java:321)
+	at nextflow.config.ConfigBuilder.buildGivenFiles(ConfigBuilder.groovy:320)
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.fromCache(IndyInterface.java:321)
+	at nextflow.config.ConfigBuilder.buildConfigObject(ConfigBuilder.groovy:818)
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.fromCache(IndyInterface.java:321)
+	at nextflow.config.ConfigBuilder.build(ConfigBuilder.groovy:831)
+	at nextflow.cli.CmdRun.run(CmdRun.groovy:332)
+	at nextflow.cli.Launcher.run(Launcher.groovy:503)
+	at nextflow.cli.Launcher.main(Launcher.groovy:658)
+Caused by: org.codehaus.groovy.control.MultipleCompilationErrorsException: startup failed:
+/groovy/script/ScriptA5BE32277B89CECEAA12D746FA868CDD/_nf_config_a92da4ca: 82: Unexpected input: '{' @ line 82, column 10.
+   profiles {
+            ^
+
+1 error
+
+	at org.codehaus.groovy.control.ErrorCollector.failIfErrors(ErrorCollector.java:292)
+	at org.codehaus.groovy.control.ErrorCollector.addFatalError(ErrorCollector.java:148)
+	at org.apache.groovy.parser.antlr4.AstBuilder.collectSyntaxError(AstBuilder.java:4753)
+	at org.apache.groovy.parser.antlr4.AstBuilder.access$100(AstBuilder.java:169)
+	at org.apache.groovy.parser.antlr4.AstBuilder$3.syntaxError(AstBuilder.java:4764)
+	at groovyjarjarantlr4.v4.runtime.ProxyErrorListener.syntaxError(ProxyErrorListener.java:44)
+	at groovyjarjarantlr4.v4.runtime.Parser.notifyErrorListeners(Parser.java:543)
+	at groovyjarjarantlr4.v4.runtime.DefaultErrorStrategy.notifyErrorListeners(DefaultErrorStrategy.java:154)
+	at org.apache.groovy.parser.antlr4.internal.DescriptiveErrorStrategy.reportInputMismatch(DescriptiveErrorStrategy.java:104)
+	at org.apache.groovy.parser.antlr4.internal.DescriptiveErrorStrategy.recover(DescriptiveErrorStrategy.java:55)
+	at org.apache.groovy.parser.antlr4.internal.DescriptiveErrorStrategy.recoverInline(DescriptiveErrorStrategy.java:68)
+	at groovyjarjarantlr4.v4.runtime.Parser.match(Parser.java:213)
+	at org.apache.groovy.parser.antlr4.GroovyParser.compilationUnit(GroovyParser.java:368)
+	at org.apache.groovy.parser.antlr4.AstBuilder.buildCST(AstBuilder.java:243)
+	at org.apache.groovy.parser.antlr4.AstBuilder.buildCST(AstBuilder.java:221)
+	at org.apache.groovy.parser.antlr4.AstBuilder.buildAST(AstBuilder.java:262)
+	at org.apache.groovy.parser.antlr4.Antlr4ParserPlugin.buildAST(Antlr4ParserPlugin.java:58)
+	at org.codehaus.groovy.control.SourceUnit.buildAST(SourceUnit.java:256)
+	at java.base/java.util.Iterator.forEachRemaining(Iterator.java:133)
+	at java.base/java.util.Spliterators$IteratorSpliterator.forEachRemaining(Spliterators.java:1939)
+	at java.base/java.util.stream.ReferencePipeline$Head.forEach(ReferencePipeline.java:762)
+	at org.codehaus.groovy.control.CompilationUnit.compile(CompilationUnit.java:663)
+	at ch.artecat.grengine.code.groovy.DefaultGroovyCompiler.compile(DefaultGroovyCompiler.java:229)
+	... 26 common frames omitted

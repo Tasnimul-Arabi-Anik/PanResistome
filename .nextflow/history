@@ -1,0 +1,23 @@
+2025-07-30 19:45:28	-	sad_wing	-	0b23b7d73129715d78854fa8f65b636d	54896be8-092d-40f3-a069-adf229fffb74	nextflow run main.nf --input test.tsv --outdir results -profile conda --threads 24
+2025-07-30 19:49:02	2m 2s	loquacious_brazil	ERR	5c4685f087e1428e3366f7042d7432d1	0d885700-be2e-41f4-ae38-0c3555952b2b	nextflow run main.nf --input test.tsv --outdir results -profile conda --threads 24
+2025-07-30 20:03:02	-	cheesy_bell	-	5c4685f087e1428e3366f7042d7432d1	f6457e63-e7d4-4cd4-9c01-48ee51005622	nextflow run main.nf --input test.tsv --outdir results -profile conda --threads 24
+2025-07-30 20:08:05	-	loquacious_watson	-	5c4685f087e1428e3366f7042d7432d1	3c0056df-3811-47dd-ab4c-00a5b98c4c77	nextflow run main.nf --input test.tsv --outdir results -profile conda --threads 24
+2025-07-30 20:10:45	26.4s	gigantic_carlsson	ERR	5c4685f087e1428e3366f7042d7432d1	3caf1cfc-8921-4951-8c5c-bba74c5b5b9c	nextflow run main.nf --input test.tsv --outdir results -profile conda --threads 24
+2025-07-30 20:11:30	2m 14s	tiny_rutherford	ERR	5c4685f087e1428e3366f7042d7432d1	1c654f74-88e7-469f-96b2-f020122a5266	nextflow run main.nf --input test.tsv --outdir results -profile conda --threads 24
+2025-07-30 20:16:35	19m 27s	nostalgic_keller	ERR	5c4685f087e1428e3366f7042d7432d1	36a9892f-f934-494b-9856-b4938e7cbcba	nextflow run main.nf --input test.tsv --outdir results -profile conda --threads 24
+2025-07-30 20:50:53	-	determined_ardinghelli	-	3f82f793917b091d9dc8fafc326d3194	36a9892f-f934-494b-9856-b4938e7cbcba	nextflow run main.nf --input test.tsv --outdir results -profile conda --threads 24 -resume
+2025-07-30 20:55:07	-	wise_jones	-	3f82f793917b091d9dc8fafc326d3194	36a9892f-f934-494b-9856-b4938e7cbcba	nextflow run main.nf --input test.tsv --outdir results -profile conda --threads 24 -resume
+2025-07-30 21:05:55	2m 1s	stoic_gilbert	OK	3f82f793917b091d9dc8fafc326d3194	36a9892f-f934-494b-9856-b4938e7cbcba	nextflow run main.nf --input test.tsv --outdir results -profile conda --threads 24 -resume
+2025-07-30 21:28:30	11m 28s	kickass_maxwell	OK	f89ead2149dd321ff719f523ba76ccfb	bd09c825-f8b6-4139-84fa-f40853ac4741	nextflow run main1.nf --input test.tsv --outdir results --single_sample true
+2025-07-30 22:43:31	10m 46s	nasty_caravaggio	OK	3f82f793917b091d9dc8fafc326d3194	f703c4cb-09da-4a3d-b165-e89f92c32fce	nextflow run main.nf --input test.tsv --outdir results -profile conda --threads 24
+2025-07-30 23:13:19	13m 35s	festering_ptolemy	OK	3f82f793917b091d9dc8fafc326d3194	ab51fc1d-4a55-4762-997d-ed07a5a4ddee	nextflow run main.nf --input test.tsv --outdir results -profile conda --threads 24
+2025-07-31 13:26:42	4m 41s	evil_archimedes	ERR	3f82f793917b091d9dc8fafc326d3194	63f8e38b-dda8-4f25-b367-321cf512a825	nextflow run main.nf --input test.tsv --outdir results -profile conda --threads 24
+2025-07-31 13:33:03	-	naughty_moriondo	-	3a67336045a9a87b31b2e76557c64cb3	a7ea3959-bb2d-4a1a-b735-f055b8c32224	nextflow run main1.nf --input test.tsv --outdir results -profile conda --threads 24
+2025-07-31 13:36:58	8m 19s	magical_jepsen	OK	3f82f793917b091d9dc8fafc326d3194	52d318e5-da57-418c-b7b3-c8858a5dede4	nextflow run main.nf --input test.tsv --outdir results -profile conda --threads 24
+2025-07-31 14:01:40	1m 17s	gloomy_mahavira	ERR	3f82f793917b091d9dc8fafc326d3194	b98a4f74-ab8f-4dac-bc0c-418b01893f50	nextflow run main.nf --input test.tsv --outdir results -profile conda --threads 24
+2025-07-31 14:03:55	9m 36s	intergalactic_nightingale	OK	3f82f793917b091d9dc8fafc326d3194	7b1c5f35-9afa-4a46-82d3-321e97cb6e3b	nextflow run main.nf --input test.tsv --outdir results -profile conda --threads 24
+2025-08-01 14:09:49	-	disturbed_kalam	-	e3971278c649340feaeb80607ac01465	5e088ff1-db80-46b1-bbbc-8f849ce48064	nextflow run main1.nf --input test.tsv --outdir results -profile conda --threads 24
+2025-08-01 14:17:07	25m 26s	nice_plateau	ERR	e3971278c649340feaeb80607ac01465	4cc41588-0c5d-4df1-9820-2f81887b6c55	nextflow run main1.nf --input test.tsv --outdir results -profile conda --threads 24
+2025-08-01 14:47:32	3m 41s	fabulous_stone	OK	e3971278c649340feaeb80607ac01465	4cc41588-0c5d-4df1-9820-2f81887b6c55	nextflow run main1.nf --input test.tsv --outdir results -profile conda --threads 24 -resume
+2025-08-01 15:39:01	21m 46s	peaceful_mcnulty	OK	81550ab8ae1d3a2bc512818437471002	2dbeaf0f-c725-44b0-9edd-19f6a24e071c	nextflow run main1.nf --input test.tsv --outdir results -profile conda --threads 24
+2025-08-01 20:13:16	-	boring_booth	-	81550ab8ae1d3a2bc512818437471002	d5723c48-3388-499d-8503-6f16f391a2e1	nextflow run main.nf --help

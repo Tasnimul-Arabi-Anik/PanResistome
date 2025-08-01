@@ -1,0 +1,12 @@
+
+
+Building a new DB, current time: 03/11/2025 12:06:02
+New DB name:   /home/anik/miniforge3/envs/wgs/db/ncbi/sequences
+New DB title:  ncbi
+Sequence type: Nucleotide
+Deleted existing Nucleotide BLAST database named /home/anik/miniforge3/envs/wgs/db/ncbi/sequences
+Keep MBits: T
+Maximum file size: 3000000000B
+Adding sequences from FASTA; added 7200 sequences in 0.210296 seconds.
+
+

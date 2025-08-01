@@ -1,0 +1,38 @@
+Aug-01 17:56:31.021 [main] DEBUG nextflow.cli.Launcher - $> nextflow run main.nf --help
+Aug-01 17:56:31.181 [main] DEBUG nextflow.cli.CmdRun - N E X T F L O W  ~  version 24.10.4
+Aug-01 17:56:31.208 [main] DEBUG nextflow.plugin.PluginsFacade - Setting up plugin manager > mode=prod; embedded=false; plugins-dir=/home/anik/.nextflow/plugins; core-plugins: nf-amazon@2.9.2,nf-azure@1.10.2,nf-cloudcache@0.4.2,nf-codecommit@0.2.2,nf-console@1.1.4,nf-google@1.15.3,nf-tower@1.9.3,nf-wave@1.7.4
+Aug-01 17:56:31.248 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Enabled plugins: []
+Aug-01 17:56:31.250 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Disabled plugins: []
+Aug-01 17:56:31.254 [main] INFO  org.pf4j.DefaultPluginManager - PF4J version 3.12.0 in 'deployment' mode
+Aug-01 17:56:31.271 [main] INFO  org.pf4j.AbstractPluginManager - No plugins
+Aug-01 17:56:31.299 [main] DEBUG nextflow.config.ConfigBuilder - Found config local: /home/anik/genomics/Tools_Dev/PanResistome/nextflow.config
+Aug-01 17:56:31.302 [main] DEBUG nextflow.config.ConfigBuilder - Parsing config file: /home/anik/genomics/Tools_Dev/PanResistome/nextflow.config
+Aug-01 17:56:31.338 [main] DEBUG n.secret.LocalSecretsProvider - Secrets store: /home/anik/.nextflow/secrets/store.json
+Aug-01 17:56:31.343 [main] DEBUG nextflow.secret.SecretsLoader - Discovered secrets providers: [nextflow.secret.LocalSecretsProvider@591fd34d] - activable => nextflow.secret.LocalSecretsProvider@591fd34d
+Aug-01 17:56:31.361 [main] DEBUG nextflow.config.ConfigBuilder - Applying config profile: `standard`
+Aug-01 17:56:32.120 [main] DEBUG nextflow.config.ConfigBuilder - In the following config snippet the attribute `report.params.outdir` is empty:
+  help=true
+
+Aug-01 17:56:32.124 [main] ERROR nextflow.cli.Launcher - Unknown config attribute `report.params.outdir` -- check config file: /home/anik/genomics/Tools_Dev/PanResistome/nextflow.config
+nextflow.exception.ConfigParseException: Unknown config attribute `report.params.outdir` -- check config file: /home/anik/genomics/Tools_Dev/PanResistome/nextflow.config
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.fromCache(IndyInterface.java:321)
+	at nextflow.config.ConfigBuilder.validate(ConfigBuilder.groovy:465)
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.selectMethod(IndyInterface.java:355)
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.fromCache(IndyInterface.java:321)
+	at nextflow.config.ConfigBuilder.validate(ConfigBuilder.groovy:472)
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.fromCache(IndyInterface.java:321)
+	at nextflow.config.ConfigBuilder.validate(ConfigBuilder.groovy:472)
+	at nextflow.config.ConfigBuilder.validate(ConfigBuilder.groovy:452)
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.fromCache(IndyInterface.java:321)
+	at nextflow.config.ConfigBuilder.merge0(ConfigBuilder.groovy:426)
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.fromCache(IndyInterface.java:321)
+	at nextflow.config.ConfigBuilder.buildConfig0(ConfigBuilder.groovy:375)
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.fromCache(IndyInterface.java:321)
+	at nextflow.config.ConfigBuilder.buildGivenFiles(ConfigBuilder.groovy:320)
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.fromCache(IndyInterface.java:321)
+	at nextflow.config.ConfigBuilder.buildConfigObject(ConfigBuilder.groovy:818)
+	at org.codehaus.groovy.vmplugin.v8.IndyInterface.fromCache(IndyInterface.java:321)
+	at nextflow.config.ConfigBuilder.build(ConfigBuilder.groovy:831)
+	at nextflow.cli.CmdRun.run(CmdRun.groovy:332)
+	at nextflow.cli.Launcher.run(Launcher.groovy:503)
+	at nextflow.cli.Launcher.main(Launcher.groovy:658)

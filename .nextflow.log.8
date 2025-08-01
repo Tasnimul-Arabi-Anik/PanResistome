@@ -1,0 +1,86 @@
+Jul-31 14:03:54.248 [main] DEBUG nextflow.cli.Launcher - $> nextflow run main.nf --input test.tsv --outdir results -profile conda --threads 24
+Jul-31 14:03:54.348 [main] DEBUG nextflow.cli.CmdRun - N E X T F L O W  ~  version 24.10.4
+Jul-31 14:03:54.366 [main] DEBUG nextflow.plugin.PluginsFacade - Setting up plugin manager > mode=prod; embedded=false; plugins-dir=/home/anik/.nextflow/plugins; core-plugins: nf-amazon@2.9.2,nf-azure@1.10.2,nf-cloudcache@0.4.2,nf-codecommit@0.2.2,nf-console@1.1.4,nf-google@1.15.3,nf-tower@1.9.3,nf-wave@1.7.4
+Jul-31 14:03:54.389 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Enabled plugins: []
+Jul-31 14:03:54.390 [main] INFO  o.pf4j.DefaultPluginStatusProvider - Disabled plugins: []
+Jul-31 14:03:54.392 [main] INFO  org.pf4j.DefaultPluginManager - PF4J version 3.12.0 in 'deployment' mode
+Jul-31 14:03:54.403 [main] INFO  org.pf4j.AbstractPluginManager - No plugins
+Jul-31 14:03:54.422 [main] DEBUG nextflow.config.ConfigBuilder - Found config local: /home/anik/genomics/PanResistome/nextflow.config
+Jul-31 14:03:54.424 [main] DEBUG nextflow.config.ConfigBuilder - Parsing config file: /home/anik/genomics/PanResistome/nextflow.config
+Jul-31 14:03:54.455 [main] DEBUG n.secret.LocalSecretsProvider - Secrets store: /home/anik/.nextflow/secrets/store.json
+Jul-31 14:03:54.458 [main] DEBUG nextflow.secret.SecretsLoader - Discovered secrets providers: [nextflow.secret.LocalSecretsProvider@6fe46b62] - activable => nextflow.secret.LocalSecretsProvider@6fe46b62
+Jul-31 14:03:54.470 [main] DEBUG nextflow.config.ConfigBuilder - Applying config profile: `conda`
+Jul-31 14:03:54.908 [main] DEBUG nextflow.config.ConfigBuilder - Available config profiles: [conda]
+Jul-31 14:03:54.933 [main] DEBUG nextflow.cli.CmdRun - Applied DSL=2 from script declaration
+Jul-31 14:03:54.944 [main] DEBUG nextflow.cli.CmdRun - Launching `main.nf` [intergalactic_nightingale] DSL2 - revision: 3f82f79391
+Jul-31 14:03:54.945 [main] DEBUG nextflow.plugin.PluginsFacade - Plugins default=[]
+Jul-31 14:03:54.946 [main] DEBUG nextflow.plugin.PluginsFacade - Plugins resolved requirement=[]
+Jul-31 14:03:54.985 [main] DEBUG nextflow.Session - Session UUID: 7b1c5f35-9afa-4a46-82d3-321e97cb6e3b
+Jul-31 14:03:54.985 [main] DEBUG nextflow.Session - Run name: intergalactic_nightingale
+Jul-31 14:03:54.986 [main] DEBUG nextflow.Session - Executor pool size: 24
+Jul-31 14:03:54.992 [main] DEBUG nextflow.file.FilePorter - File porter settings maxRetries=3; maxTransfers=50; pollTimeout=null
+Jul-31 14:03:54.997 [main] DEBUG nextflow.util.ThreadPoolBuilder - Creating thread pool 'FileTransfer' minSize=10; maxSize=72; workQueue=LinkedBlockingQueue[10000]; allowCoreThreadTimeout=false
+Jul-31 14:03:55.013 [main] DEBUG nextflow.cli.CmdRun - 
+  Version: 24.10.4 build 5934
+  Created: 20-01-2025 16:47 UTC (22:47 BDST)
+  System: Linux 6.11.0-29-generic
+  Runtime: Groovy 4.0.23 on OpenJDK 64-Bit Server VM 21.0.8+9-Ubuntu-0ubuntu124.04.1
+  Encoding: UTF-8 (UTF-8)
+  Process: 202117@anik-OMEN-by-HP-Gaming-Laptop-16-wf00xxxx [127.0.1.1]
+  CPUs: 24 - Mem: 15.3 GB (784.5 MB) - Swap: 4 GB (2.3 GB)
+Jul-31 14:03:55.034 [main] DEBUG nextflow.Session - Work-dir: /home/anik/genomics/PanResistome/work [ext2/ext3]
+Jul-31 14:03:55.068 [main] DEBUG nextflow.executor.ExecutorFactory - Extension executors providers=[]
+Jul-31 14:03:55.085 [main] DEBUG nextflow.Session - Observer factory: DefaultObserverFactory
+Jul-31 14:03:55.129 [main] DEBUG nextflow.cache.CacheFactory - Using Nextflow cache factory: nextflow.cache.DefaultCacheFactory
+Jul-31 14:03:55.137 [main] DEBUG nextflow.util.CustomThreadPool - Creating default thread pool > poolSize: 25; maxThreads: 1000
+Jul-31 14:03:55.181 [main] DEBUG nextflow.Session - Session start
+Jul-31 14:03:55.184 [main] DEBUG nextflow.trace.TraceFileObserver - Workflow started -- trace file: /home/anik/genomics/PanResistome/results/pipeline_trace.txt
+Jul-31 14:03:55.525 [main] DEBUG nextflow.script.ScriptRunner - > Launching execution
+Jul-31 14:03:55.643 [main] DEBUG nextflow.script.ProcessConfig - Config settings `withName:FETCHM` matches process FETCHM
+Jul-31 14:03:55.654 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: local
+Jul-31 14:03:55.654 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'local'
+Jul-31 14:03:55.660 [main] DEBUG nextflow.executor.Executor - [warm up] executor > local
+Jul-31 14:03:55.667 [main] DEBUG n.processor.LocalPollingMonitor - Creating local task monitor for executor 'local' > cpus=24; memory=16 GB; capacity=24; pollInterval=100ms; dumpInterval=5m
+Jul-31 14:03:55.670 [main] DEBUG n.processor.TaskPollingMonitor - >>> barrier register (monitor: local)
+Jul-31 14:03:55.743 [main] DEBUG nextflow.script.ProcessConfig - Config settings `withName:ABRICATE` matches process ABRICATE
+Jul-31 14:03:55.744 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: local
+Jul-31 14:03:55.744 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'local'
+Jul-31 14:03:55.749 [main] DEBUG nextflow.script.ProcessConfig - Config settings `withName:PANR` matches process PANR
+Jul-31 14:03:55.750 [main] DEBUG nextflow.executor.ExecutorFactory - << taskConfig executor: local
+Jul-31 14:03:55.750 [main] DEBUG nextflow.executor.ExecutorFactory - >> processorType: 'local'
+Jul-31 14:03:55.760 [main] DEBUG nextflow.Session - Workflow process names [dsl2]: PANR, FETCHM, ABRICATE
+Jul-31 14:03:55.761 [main] DEBUG nextflow.Session - Igniting dataflow network (4)
+Jul-31 14:03:55.766 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > FETCHM
+Jul-31 14:03:55.766 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > ABRICATE
+Jul-31 14:03:55.767 [main] DEBUG nextflow.processor.TaskProcessor - Starting process > PANR
+Jul-31 14:03:55.768 [main] DEBUG nextflow.script.ScriptRunner - Parsed script files:
+  Script_a76479af53197032: /home/anik/genomics/PanResistome/main.nf
+Jul-31 14:03:55.768 [main] DEBUG nextflow.script.ScriptRunner - > Awaiting termination 
+Jul-31 14:03:55.768 [main] DEBUG nextflow.Session - Session await
+Jul-31 14:03:55.864 [Actor Thread 12] INFO  nextflow.conda.CondaCache - Creating env using conda: envs/fetchm.yaml [cache /home/anik/genomics/PanResistome/work/conda/env-1667c7384c2c3e34-d026ffc686f3842b1c5c33c46f77560e]
+Jul-31 14:04:20.289 [Actor Thread 12] DEBUG nextflow.conda.CondaCache - 'conda' create complete env=envs/fetchm.yaml path=/home/anik/genomics/PanResistome/work/conda/env-1667c7384c2c3e34-d026ffc686f3842b1c5c33c46f77560e
+Jul-31 14:04:20.363 [Task submitter] DEBUG n.executor.local.LocalTaskHandler - Launch cmd line: /bin/bash -ue .command.run
+Jul-31 14:04:20.365 [Task submitter] INFO  nextflow.Session - [51/cc12c0] Submitted process > FETCHM (1)
+Jul-31 14:08:55.779 [Task monitor] DEBUG n.processor.TaskPollingMonitor - !! executor local > tasks to be completed: 1 -- submitted tasks are shown below
+~> TaskHandler[id: 1; name: FETCHM (1); status: RUNNING; exit: -; error: -; workDir: /home/anik/genomics/PanResistome/work/51/cc12c068e93b2bebf589be88ede332]
+Jul-31 14:11:35.726 [Task monitor] DEBUG n.processor.TaskPollingMonitor - Task completed > TaskHandler[id: 1; name: FETCHM (1); status: COMPLETED; exit: 0; error: -; workDir: /home/anik/genomics/PanResistome/work/51/cc12c068e93b2bebf589be88ede332]
+Jul-31 14:11:35.727 [Task monitor] DEBUG nextflow.util.ThreadPoolBuilder - Creating thread pool 'TaskFinalizer' minSize=10; maxSize=72; workQueue=LinkedBlockingQueue[10000]; allowCoreThreadTimeout=false
+Jul-31 14:11:35.765 [Actor Thread 24] INFO  nextflow.conda.CondaCache - Creating env using conda: envs/abricate.yaml [cache /home/anik/genomics/PanResistome/work/conda/env-1eabe2f5aeb7a08b-505fe3c052ff66adb1497bd9db4fa1ae]
+Jul-31 14:11:51.862 [Actor Thread 24] DEBUG nextflow.conda.CondaCache - 'conda' create complete env=envs/abricate.yaml path=/home/anik/genomics/PanResistome/work/conda/env-1eabe2f5aeb7a08b-505fe3c052ff66adb1497bd9db4fa1ae
+Jul-31 14:11:51.871 [Task submitter] DEBUG n.executor.local.LocalTaskHandler - Launch cmd line: /bin/bash -ue .command.run
+Jul-31 14:11:51.871 [Task submitter] INFO  nextflow.Session - [8a/913d42] Submitted process > ABRICATE (1)
+Jul-31 14:13:00.966 [Task monitor] DEBUG n.processor.TaskPollingMonitor - Task completed > TaskHandler[id: 2; name: ABRICATE (1); status: COMPLETED; exit: 0; error: -; workDir: /home/anik/genomics/PanResistome/work/8a/913d4245f947f16e2c11e5190ebb0c]
+Jul-31 14:13:00.985 [Task submitter] DEBUG n.executor.local.LocalTaskHandler - Launch cmd line: /bin/bash -ue .command.run
+Jul-31 14:13:00.986 [Task submitter] INFO  nextflow.Session - [15/2df5d4] Submitted process > PANR (1)
+Jul-31 14:13:30.530 [Task monitor] DEBUG n.processor.TaskPollingMonitor - Task completed > TaskHandler[id: 3; name: PANR (1); status: COMPLETED; exit: 0; error: -; workDir: /home/anik/genomics/PanResistome/work/15/2df5d40be4454109dc55fb28327d5c]
+Jul-31 14:13:30.534 [main] DEBUG nextflow.Session - Session await > all processes finished
+Jul-31 14:13:30.631 [Task monitor] DEBUG n.processor.TaskPollingMonitor - <<< barrier arrives (monitor: local) - terminating tasks monitor poll loop
+Jul-31 14:13:30.631 [main] DEBUG nextflow.Session - Session await > all barriers passed
+Jul-31 14:13:30.638 [main] DEBUG nextflow.util.ThreadPoolManager - Thread pool 'TaskFinalizer' shutdown completed (hard=false)
+Jul-31 14:13:30.646 [main] DEBUG n.trace.WorkflowStatsObserver - Workflow completed > WorkflowStats[succeededCount=3; failedCount=0; ignoredCount=0; cachedCount=0; pendingCount=0; submittedCount=0; runningCount=0; retriesCount=0; abortedCount=0; succeedDuration=52m 50s; failedDuration=0ms; cachedDuration=0ms;loadCpus=0; loadMemory=0; peakRunning=1; peakCpus=24; peakMemory=16 GB; ]
+Jul-31 14:13:30.646 [main] DEBUG nextflow.trace.TraceFileObserver - Workflow completed -- saving trace file
+Jul-31 14:13:30.648 [main] DEBUG nextflow.trace.ReportObserver - Workflow completed -- rendering execution report
+Jul-31 14:13:31.227 [main] DEBUG nextflow.trace.TimelineObserver - Workflow completed -- rendering execution timeline
+Jul-31 14:13:31.364 [main] DEBUG nextflow.cache.CacheDB - Closing CacheDB done
+Jul-31 14:13:31.378 [main] DEBUG nextflow.util.ThreadPoolManager - Thread pool 'FileTransfer' shutdown completed (hard=false)
+Jul-31 14:13:31.378 [main] DEBUG nextflow.script.ScriptRunner - > Execution complete -- Goodbye
