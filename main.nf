@@ -3,7 +3,7 @@
 nextflow.enable.dsl=2
 
 // Parameters
-params.pipeline_version = '0.2.0'
+params.pipeline_version = '0.2.1-dev'
 params.checkm = null
 params.ani = 'all'
 params.sleep = 0.5
@@ -21,6 +21,9 @@ params.help = false
 params.format = "png"
 params.genep   = null
 params.nseq    = null
+params.local_samples = null
+params.capture_versions = true
+params.sequence_qc_engine = 'seqkit'
 params.qc_filter = false
 params.min_total_length = null
 params.max_contigs = null
@@ -31,6 +34,7 @@ params.max_ambiguous_bases = null
 params.checkm2_db = null
 params.min_completeness = null
 params.max_contamination = null
+params.run_checkm2 = true
 params.checkm2_lowmem = true
 params.stop_after_qc = false
 params.run_gtdbtk = false
@@ -87,6 +91,8 @@ def helpMessage() {
       --run_gtdbtk             Enable GTDB-Tk taxonomy QC [default: false]
       --gtdbtk_data_path       Optional GTDB-Tk reference data path
       --taxonomy_match_rank    Compare GTDB-Tk classification to metadata at genus or species [default: genus]
+      --local_samples          Optional directory of prebuilt sample folders for offline tests
+      --run_checkm2            Enable CheckM2 QC [default: true]
 
     🔧 Other options:
   --threads          Number of threads for CheckM2, GTDB-Tk, and abricate [default: 8]
@@ -226,6 +232,7 @@ process FETCHM {
 // Process 6: Generate assembly QC stats and enrich metadata
 process SEQUENCE_QC {
     conda 'envs/fetchm.yaml'
+    stageInMode { params.local_samples ? 'copy' : 'symlink' }
 
     input:
     path sample_dir
@@ -240,7 +247,78 @@ process SEQUENCE_QC {
     rm -rf ${sample_dir}/sequence_filtered
     mkdir -p ${sample_dir}/sequence_filtered
 
-    if [ -d "${sample_dir}/sequence" ] && [ -n "\$(find ${sample_dir}/sequence -name "*.fna" -print -quit)" ]; then
+    if [ "${params.sequence_qc_engine}" = "python" ] && [ -d "${sample_dir}/sequence" ] && [ -n "\$(find ${sample_dir}/sequence -name "*.fna" -print -quit)" ]; then
+        python - <<'PY'
+from pathlib import Path
+
+sample_dir = Path("${sample_dir}")
+stats_path = sample_dir / "sequence_qc" / "assembly_stats.tsv"
+
+def fasta_lengths(path):
+    lengths = []
+    current = 0
+    gc = 0
+    gaps = 0
+    total = 0
+    with path.open() as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith(">"):
+                if current:
+                    lengths.append(current)
+                current = 0
+                continue
+            seq = line.upper()
+            current += len(seq)
+            total += len(seq)
+            gc += seq.count("G") + seq.count("C")
+            gaps += sum(1 for base in seq if base not in {"A", "C", "G", "T"})
+    if current:
+        lengths.append(current)
+    return lengths, total, gc, gaps
+
+def n50(lengths):
+    if not lengths:
+        return 0
+    half = sum(lengths) / 2
+    running = 0
+    for length in sorted(lengths, reverse=True):
+        running += length
+        if running >= half:
+            return length
+    return 0
+
+header = [
+    "file", "format", "type", "num_seqs", "sum_len", "min_len", "avg_len",
+    "max_len", "Q1", "Q2", "Q3", "sum_gap", "N50", "Q20(%)", "Q30(%)", "GC(%)",
+]
+with stats_path.open("w") as out:
+    out.write("\\t".join(header) + "\\n")
+    for path in sorted((sample_dir / "sequence").glob("*.fna")):
+        lengths, total, gc, gaps = fasta_lengths(path)
+        row = {
+            "file": str(path),
+            "format": "FASTA",
+            "type": "DNA",
+            "num_seqs": len(lengths),
+            "sum_len": total,
+            "min_len": min(lengths) if lengths else 0,
+            "avg_len": f"{(total / len(lengths)):.1f}" if lengths else "0",
+            "max_len": max(lengths) if lengths else 0,
+            "Q1": "",
+            "Q2": "",
+            "Q3": "",
+            "sum_gap": gaps,
+            "N50": n50(lengths),
+            "Q20(%)": "",
+            "Q30(%)": "",
+            "GC(%)": f"{((gc / total) * 100):.2f}" if total else "0",
+        }
+        out.write("\\t".join(str(row[field]) for field in header) + "\\n")
+PY
+    elif [ -d "${sample_dir}/sequence" ] && [ -n "\$(find ${sample_dir}/sequence -name "*.fna" -print -quit)" ]; then
         seqkit stats -a -T ${sample_dir}/sequence/*.fna > ${sample_dir}/sequence_qc/assembly_stats.tsv
     else
         echo "Warning: No .fna files found in ${sample_dir}/sequence/ for sequence QC" >&2
@@ -1058,42 +1136,54 @@ workflow {
     input_ch = Channel.fromPath(params.input, checkIfExists: true)
 
     // Capture reproducibility metadata for each Conda environment
-    FETCHM_ENV_VERSIONS()
-    ABRICATE_ENV_VERSIONS()
-    CHECKM2_ENV_VERSIONS()
-    version_reports = FETCHM_ENV_VERSIONS.out.fetchm_versions
-        .mix(ABRICATE_ENV_VERSIONS.out.abricate_versions)
-        .mix(CHECKM2_ENV_VERSIONS.out.checkm2_versions)
-    if (params.run_gtdbtk) {
-        GTDBTK_ENV_VERSIONS()
-        version_reports = version_reports.mix(GTDBTK_ENV_VERSIONS.out.gtdbtk_versions)
-    }
-    version_reports.view { version_file -> "Version report saved: ${version_file}" }
-    
-    // Run fetchM
-    FETCHM(input_ch)
-    
-    // Create channel for sample directories
-    sample_dirs = FETCHM.out.fetchm_results
-        .map { results_dir -> 
-            results_dir.listFiles().findAll { it.isDirectory() }
+    if (params.capture_versions) {
+        FETCHM_ENV_VERSIONS()
+        ABRICATE_ENV_VERSIONS()
+        version_reports = FETCHM_ENV_VERSIONS.out.fetchm_versions
+            .mix(ABRICATE_ENV_VERSIONS.out.abricate_versions)
+        if (params.run_checkm2) {
+            CHECKM2_ENV_VERSIONS()
+            version_reports = version_reports.mix(CHECKM2_ENV_VERSIONS.out.checkm2_versions)
         }
-        .flatten()
+        if (params.run_gtdbtk) {
+            GTDBTK_ENV_VERSIONS()
+            version_reports = version_reports.mix(GTDBTK_ENV_VERSIONS.out.gtdbtk_versions)
+        }
+        version_reports.view { version_file -> "Version report saved: ${version_file}" }
+    }
+    
+    if (params.local_samples) {
+        sample_dirs = Channel.fromPath("${params.local_samples}/*", type: 'dir', checkIfExists: true)
+    } else {
+        // Run fetchM
+        FETCHM(input_ch)
+
+        // Create channel for sample directories
+        sample_dirs = FETCHM.out.fetchm_results
+            .map { results_dir ->
+                results_dir.listFiles().findAll { it.isDirectory() }
+            }
+            .flatten()
+    }
     
     // Generate sequence QC stats and enriched metadata
     SEQUENCE_QC(sample_dirs)
 
-    // Add CheckM2 completeness/contamination QC
-    CHECKM2_QC(SEQUENCE_QC.out.qc_results)
+    qc_ready_ch = SEQUENCE_QC.out.qc_results
+
+    if (params.run_checkm2) {
+        // Add CheckM2 completeness/contamination QC
+        CHECKM2_QC(SEQUENCE_QC.out.qc_results)
+        qc_ready_ch = CHECKM2_QC.out.checkm2_results
+    }
 
     if (params.stop_after_qc) {
         // Collect QC-only results to output directory
-        COLLECT_RESULTS(CHECKM2_QC.out.checkm2_results)
+        COLLECT_RESULTS(qc_ready_ch)
     } else {
-        qc_ready_ch = CHECKM2_QC.out.checkm2_results
         if (params.run_gtdbtk) {
             // Add GTDB-Tk taxonomy match QC
-            GTDBTK_QC(CHECKM2_QC.out.checkm2_results)
+            GTDBTK_QC(qc_ready_ch)
             qc_ready_ch = GTDBTK_QC.out.gtdbtk_results
         }
         

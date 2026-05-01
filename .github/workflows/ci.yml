@@ -41,3 +41,15 @@ jobs:
           version="$(cat VERSION)"
           grep -q "params.pipeline_version = '${version}'" main.nf
           grep -q "Current pipeline version: \`${version}\`" README.md
+
+      - name: Run offline fixture profile
+        run: nextflow run main.nf -profile test
+
+      - name: Check offline fixture outputs
+        run: |
+          test -s test_output/Klebsiella_oxytoca/metadata_output/ncbi_enriched.csv
+          test -s test_output/Klebsiella_oxytoca/metadata_output/ncbi_clean_qc_pass.csv
+          test -s test_output/Klebsiella_oxytoca/sequence_qc/qc_decisions.tsv
+          grep -q "sequence_qc_status" test_output/Klebsiella_oxytoca/metadata_output/ncbi_enriched.csv
+          pass_count="$(tail -n +2 test_output/Klebsiella_oxytoca/sequence_qc/qc_decisions.tsv | awk -F'\t' '$2 == "PASS" { count++ } END { print count + 0 }')"
+          test "$pass_count" -eq 2

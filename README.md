@@ -1,6 +1,6 @@
 # PanResistome: Scalable Pipeline for Global Antimicrobial Resistance Analysis
 
-Current pipeline version: `0.2.0`
+Current pipeline version: `0.2.1-dev`
 
 ## Overview
 
@@ -87,6 +87,16 @@ scripts/bootstrap.sh \
 ```
 
 The script prints ready-to-run validation and full pipeline commands using the checked paths.
+
+### 🧪 Offline CI Test
+
+The repository includes tiny local fixtures for syntax-safe CI and development checks. This profile does not download from NCBI and does not require CheckM2, ABRicate, PanR2, or GTDB-Tk databases.
+
+```bash
+nextflow run main.nf -profile test
+```
+
+It validates sequence QC, metadata enrichment, pass-only metadata generation, and result collection using `tests/fixtures/local_samples/`.
 
 ## Input
 Download ncbi_dataset.tsv of your target organism(s) from the [NCBI genome database](https://www.ncbi.nlm.nih.gov/datasets/genome/).

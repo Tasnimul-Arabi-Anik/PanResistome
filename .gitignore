@@ -7,6 +7,12 @@ work/
 results/*
 !results/.gitkeep
 results_*/
+test_output/
+tests/fixtures/local_samples/*/metadata_output/ncbi_clean_qc_pass.csv
+tests/fixtures/local_samples/*/metadata_output/ncbi_clean_unfiltered.csv
+tests/fixtures/local_samples/*/metadata_output/ncbi_enriched.csv
+tests/fixtures/local_samples/*/sequence_filtered/
+tests/fixtures/local_samples/*/sequence_qc/
 pipeline_report.html
 pipeline_timeline.html
 pipeline_trace.txt

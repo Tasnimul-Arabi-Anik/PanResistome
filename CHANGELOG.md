@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Offline `test` profile using tiny local fixtures.
+- Python sequence-stat fallback for fixture-based CI tests.
+- CI checks for offline sequence QC and metadata enrichment outputs.
+
 ## 0.2.0 - 2026-05-01
 
 ### Added
