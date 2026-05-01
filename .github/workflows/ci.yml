@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  syntax:
+    name: Syntax and Preflight Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Nextflow
+        run: |
+          curl -s https://get.nextflow.io | bash
+          sudo mv nextflow /usr/local/bin/
+          nextflow -version
+
+      - name: Check bootstrap script syntax
+        run: bash -n scripts/bootstrap.sh
+
+      - name: Check Nextflow help path
+        run: nextflow run main.nf --help --run_gtdbtk false --stop_after_qc true
+
+      - name: Check pipeline version consistency
+        run: |
+          version="$(cat VERSION)"
+          grep -q "params.pipeline_version = '${version}'" main.nf
+          grep -q "Current pipeline version: \`${version}\`" README.md
