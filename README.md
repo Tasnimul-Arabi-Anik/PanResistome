@@ -1,5 +1,7 @@
 # PanResistome: Scalable Pipeline for Global Antimicrobial Resistance Analysis
 
+Current pipeline version: `0.2.0`
+
 ## Overview
 
 **PanResistome** is a scalable, modular, and reproducible bioinformatics pipeline built using [Nextflow](https://www.nextflow.io/). It automates the end-to-end analysis of global antimicrobial resistance (AMR) patterns in bacterial populations using genome assemblies. The pipeline is designed for researchers working in microbial genomics, resistome surveillance, and public health, enabling large-scale comparative analysis of resistance gene profiles across time and geography.
@@ -7,6 +9,8 @@
 PanResistome integrates several state-of-the-art tools including:
 
 * [**FetchM**](https://github.com/Tasnimul-Arabi-Anik/FetchM): for fetching genome assemblies and standardized NCBI metadata
+* [**CheckM2**](https://github.com/chklovski/CheckM2): for genome completeness and contamination quality assessment
+* [**GTDB-Tk**](https://github.com/Ecogenomics/GTDBTk): for taxonomy classification and genus/species consistency checks
 * [**ABRicate**](https://github.com/tseemann/abricate): for resistance gene annotation using curated ANCBI databases
 * [**PanR2**](https://github.com/Tasnimul-Arabi-Anik/PanR2): for downstream statistical analysis and interactive visualization of resistome data
 
@@ -25,14 +29,25 @@ PanResistome integrates several state-of-the-art tools including:
 ## Workflow Overview
 
 ```
-+-------------+        +-------------+        +-------------+        +-------------+
-|   FetchM    |  -->   |  ABRicate   |  -->   |   PanR2     |  -->   |   Output    |
-+-------------+        +-------------+        +-------------+        +-------------+
-| Download     |       | ARG annotation|      | Statistical   |      | Visualizations|
-| assemblies   |       | using databases|     | analysis      |      | & Summaries   |
-| & metadata   |       | like NCBI      |     | + plotting    |      |               |
-+-------------+        +-------------+        +-------------+        +-------------+
++-------------+   +-------------+   +---------+   +----------+   +-------+   +--------+
+|   FetchM    |-->| Sequence QC |-->| CheckM2 |-->| ABRicate |-->| PanR2 |-->| Output |
++-------------+   +-------------+   +---------+   +----------+   +-------+   +--------+
+| Assemblies  |   | Assembly    |   | Quality |   | AMR gene |   | Stats |   | Reports|
+| & metadata  |   | stats       |   | metrics |   | calls    |   | plots |   | tables |
++-------------+   +-------------+   +---------+   +----------+   +-------+   +--------+
+
+Optional: add `--run_gtdbtk true` to insert GTDB-Tk taxonomy matching between CheckM2 and ABRicate.
 ```
+
+Each run also writes Conda environment version reports under `pipeline_versions/` so analyses can be traced back to the exact tool versions used.
+
+Sequence QC filtering is optional. By default, the pipeline reports QC metrics but keeps all assemblies for downstream analysis. Add `--qc_filter true` with one or more thresholds to exclude failed assemblies from ABRicate, PanR2, and later tools.
+
+CheckM2 requires its genome-quality database to be available in the run environment. If it is not configured globally, pass the database location with `--checkm2_db /path/to/checkm2_database`.
+
+For a lighter validation run on modest hardware, use `--stop_after_qc true`. This runs FetchM, sequence QC, and CheckM2, then collects QC outputs without running GTDB-Tk, ABRicate, or PanR2.
+
+GTDB-Tk is disabled by default because it is resource-intensive. If enabled, it requires its reference data to be available in the run environment. If `GTDBTK_DATA_PATH` is not configured globally, pass the location with `--gtdbtk_data_path /path/to/gtdbtk_data`. Taxonomy matching compares GTDB-Tk classification against the organism/species metadata at genus rank by default; use `--taxonomy_match_rank species` for stricter matching.
 
 ---
 
@@ -51,14 +66,58 @@ git clone https://github.com/Tasnimul-Arabi-Anik/PanResistome.git
 cd PanResistome
 ```
 
+### ✅ Preflight Setup
+
+Run the bootstrap script before launching a long analysis. It checks Java, Nextflow, Conda, environment files, ABRicate database files, CheckM2 database path, and Nextflow syntax.
+
+If you already have the CheckM2 database:
+
+```bash
+scripts/bootstrap.sh \
+  --checkm2-db /path/to/CheckM2_database/uniref100.KO.1.dmnd \
+  --abricate-db ./db
+```
+
+To download the CheckM2 database:
+
+```bash
+scripts/bootstrap.sh \
+  --download-checkm2-db "$HOME/databases" \
+  --abricate-db ./db
+```
+
+The script prints ready-to-run validation and full pipeline commands using the checked paths.
+
 ## Input
 Download ncbi_dataset.tsv of your target organism(s) from the [NCBI genome database](https://www.ncbi.nlm.nih.gov/datasets/genome/).
 -**ncbi_dataset.tsv**
 
 ## 🧪 Running the Pipeline
 
+First validate the download and QC path:
+
 ```bash
-nextflow run main.nf --input test.tsv --outdir results -profile conda --threads 24 
+nextflow run main.nf \
+  --input test_small.tsv \
+  --outdir results_small \
+  -profile conda \
+  --stop_after_qc true \
+  --run_gtdbtk false \
+  --threads 8 \
+  --checkm2_db /path/to/CheckM2_database/uniref100.KO.1.dmnd
+```
+
+Then run the downstream analysis with QC filtering:
+
+```bash
+nextflow run main.nf \
+  --input test_small.tsv \
+  --outdir results_small \
+  -profile conda \
+  --run_gtdbtk false \
+  --qc_filter true \
+  --threads 8 \
+  --checkm2_db /path/to/CheckM2_database/uniref100.KO.1.dmnd
 
 ```
 
@@ -110,11 +169,31 @@ PanResistome/
 | `--nseq`   | int   | -       | Minimum number of sequences required per group in heatmaps |
 | `--format` | str   | png     | Output format for figures (tiff, svg, png, pdf)            |
 
+### 🧪 Optional Arguments for Sequence QC Filtering
+
+| Argument                | Type  | Default | Description                                      |
+| ----------------------- | ----- | ------- | ------------------------------------------------ |
+| `--qc_filter`           | bool  | false   | Use only QC-passing assemblies downstream        |
+| `--min_total_length`    | int   | -       | Minimum assembly length required to pass QC      |
+| `--max_contigs`         | int   | -       | Maximum contig count allowed to pass QC          |
+| `--min_n50`             | int   | -       | Minimum N50 required to pass QC                  |
+| `--min_gc`              | float | -       | Minimum GC percentage allowed to pass QC         |
+| `--max_gc`              | float | -       | Maximum GC percentage allowed to pass QC         |
+| `--max_ambiguous_bases` | int   | -       | Maximum ambiguous/gap bases allowed to pass QC   |
+| `--checkm2_db`          | path  | -       | Optional CheckM2 database path                   |
+| `--min_completeness`    | float | -       | Minimum CheckM2 completeness required to pass QC |
+| `--max_contamination`   | float | -       | Maximum CheckM2 contamination allowed to pass QC |
+| `--checkm2_lowmem`      | bool  | true    | Run CheckM2 in low-memory mode                   |
+| `--stop_after_qc`       | bool  | false   | Stop after sequence QC and CheckM2               |
+| `--run_gtdbtk`          | bool  | false   | Enable GTDB-Tk taxonomy QC                       |
+| `--gtdbtk_data_path`    | path  | -       | Optional GTDB-Tk reference data path             |
+| `--taxonomy_match_rank` | str   | genus   | Compare expected taxonomy at genus or species    |
+
 ### 🔧 Other Options
 
 | Argument    | Type | Default | Description                             |
 | ----------- | ---- | ------- | --------------------------------------- |
-| `--threads` | int  | 24      | Number of threads for abricate          |
+| `--threads` | int  | 8       | Number of threads for CheckM2, GTDB-Tk, and abricate |
 | `--db`      | str  | ./db    | Directory containing abricate databases |
 | `--help`    | flag | -       | Show help message and exit              |
 
@@ -133,7 +212,24 @@ results/
     │   └── Stat_analysis/
     ├── merged_output/       # Cleaned, joined resistance tables
     ├── metadata_output/     # Assembly, annotation and metadata summary
+    │   ├── ncbi_clean.csv
+    │   ├── ncbi_clean_unfiltered.csv # original metadata when --qc_filter true
+    │   ├── ncbi_clean_qc_pass.csv    # metadata rows passing enabled QC checks
+    │   └── ncbi_enriched.csv # ncbi_clean.csv plus sequence QC, CheckM2, and optional GTDB-Tk columns
+    ├── sequence_qc/
+    │   ├── assembly_stats.tsv # seqkit assembly statistics
+    │   └── qc_decisions.tsv   # sequence, CheckM2, GTDB-Tk, and combined QC decisions
+    ├── checkm2/
+    │   └── quality_report.tsv # CheckM2 completeness and contamination report
+    ├── gtdbtk/                # only when --run_gtdbtk true
+    │   └── *.summary.tsv      # GTDB-Tk taxonomy classification summaries
+    ├── sequence_filtered/     # pass-only FASTA files used when --qc_filter true
     └── sequence/            # Downloaded genome FASTA files        
+pipeline_versions/
+├── fetchm_env_versions.txt   # Python, FetchM, PanR2, seqkit versions
+├── checkm2_env_versions.txt  # CheckM2 version
+├── gtdbtk_env_versions.txt   # GTDB-Tk version, only when --run_gtdbtk true
+└── abricate_env_versions.txt # ABRicate and Perl versions
 ```
 
 You can open `index.html` in a browser for easy navigation of visual outputs.

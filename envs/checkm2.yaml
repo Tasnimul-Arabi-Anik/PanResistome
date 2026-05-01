@@ -1,0 +1,9 @@
+name: checkm2_env
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - checkm2=1.1.0=pyh7e72e81_1
+  - tensorflow-cpu=2.17
