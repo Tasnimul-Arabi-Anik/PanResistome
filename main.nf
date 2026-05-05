@@ -40,6 +40,14 @@ params.stop_after_qc = false
 params.run_gtdbtk = false
 params.gtdbtk_data_path = null
 params.taxonomy_match_rank = 'genus'
+params.run_quast = false
+params.run_ani = false
+params.ani_tool = 'fastani'
+params.ani_duplicate_threshold = 99.9
+params.ani_species_threshold = 95.0
+params.run_mash = false
+params.representative_only = false
+params.export_panr2_inputs = true
 
 
 // Help message
@@ -91,6 +99,14 @@ def helpMessage() {
       --run_gtdbtk             Enable GTDB-Tk taxonomy QC [default: false]
       --gtdbtk_data_path       Optional GTDB-Tk reference data path
       --taxonomy_match_rank    Compare GTDB-Tk classification to metadata at genus or species [default: genus]
+      --run_quast              Enable QUAST assembly-structure QC [default: false]
+      --run_ani                Enable FastANI/skani pairwise ANI analysis [default: false]
+      --ani_tool               ANI tool: fastani or skani [default: fastani]
+      --ani_duplicate_threshold ANI threshold for near-duplicate clusters [default: 99.9]
+      --ani_species_threshold  ANI warning threshold for species consistency [default: 95.0]
+      --run_mash               Enable Mash sketch/distance pre-screen [default: false]
+      --representative_only    Keep one representative per near-duplicate ANI cluster for PanR2 when --qc_filter true [default: false]
+      --export_panr2_inputs    Export standardized panr2_inputs handoff directory [default: true]
       --local_samples          Optional directory of prebuilt sample folders for offline tests
       --run_checkm2            Enable CheckM2 QC [default: true]
 
@@ -199,6 +215,55 @@ process GTDBTK_ENV_VERSIONS {
         date -u +"run_timestamp_utc=%Y-%m-%dT%H:%M:%SZ"
         gtdbtk --version || true
     } > gtdbtk_env_versions.txt
+    """
+}
+
+process ANI_ENV_VERSIONS {
+    conda 'envs/ani.yaml'
+    publishDir "${params.outdir}/pipeline_versions", mode: 'copy'
+
+    output:
+    path "ani_env_versions.txt", emit: ani_versions
+
+    script:
+    """
+    {
+        echo "[ani_env]"
+        fastANI --version || true
+        skani --version || true
+    } > ani_env_versions.txt
+    """
+}
+
+process QUAST_ENV_VERSIONS {
+    conda 'envs/quast.yaml'
+    publishDir "${params.outdir}/pipeline_versions", mode: 'copy'
+
+    output:
+    path "quast_env_versions.txt", emit: quast_versions
+
+    script:
+    """
+    {
+        echo "[quast_env]"
+        quast.py --version || true
+    } > quast_env_versions.txt
+    """
+}
+
+process MASH_ENV_VERSIONS {
+    conda 'envs/mash.yaml'
+    publishDir "${params.outdir}/pipeline_versions", mode: 'copy'
+
+    output:
+    path "mash_env_versions.txt", emit: mash_versions
+
+    script:
+    """
+    {
+        echo "[mash_env]"
+        mash --version || true
+    } > mash_env_versions.txt
     """
 }
 
@@ -1042,7 +1107,128 @@ PY
     """
 }
 
-// Process 9: Run abricate
+// Process 9: Optional QUAST assembly-structure QC
+process QUAST_QC {
+    conda 'envs/quast.yaml'
+
+    input:
+    path sample_dir
+
+    output:
+    path "${sample_dir}", emit: quast_results
+
+    script:
+    """
+    mkdir -p ${sample_dir}/quast
+    sequence_dir="${sample_dir}/sequence"
+    if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
+        sequence_dir="${sample_dir}/sequence_filtered"
+    fi
+
+    if [ -d "\${sequence_dir}" ] && [ -n "\$(find \${sequence_dir} -name "*.fna" -print -quit)" ]; then
+        quast.py -t ${params.threads} -o ${sample_dir}/quast \${sequence_dir}/*.fna || true
+    else
+        echo "Warning: No .fna files found in \${sequence_dir}/ for QUAST" >&2
+    fi
+    python ${baseDir}/scripts/quast_summary.py --sample-dir ${sample_dir}
+    """
+}
+
+// Process 10: Optional FastANI/skani comparative ANI
+process ANI_ANALYSIS {
+    conda 'envs/ani.yaml'
+
+    input:
+    path sample_dir
+
+    output:
+    path "${sample_dir}", emit: ani_results
+
+    script:
+    """
+    mkdir -p ${sample_dir}/ani/analysis
+    sequence_dir="${sample_dir}/sequence"
+    if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
+        sequence_dir="${sample_dir}/sequence_filtered"
+    fi
+    find \${sequence_dir} -name "*.fna" | sort > ${sample_dir}/ani/genomes.list || true
+    genome_count=\$(wc -l < ${sample_dir}/ani/genomes.list || echo 0)
+    if [ "\${genome_count}" -ge 2 ]; then
+        if [ "${params.ani_tool}" = "skani" ]; then
+            skani triangle -t ${params.threads} \$(cat ${sample_dir}/ani/genomes.list) > ${sample_dir}/ani/skani_pairs.tsv || true
+            pair_file="${sample_dir}/ani/skani_pairs.tsv"
+        else
+            fastANI --ql ${sample_dir}/ani/genomes.list --rl ${sample_dir}/ani/genomes.list -t ${params.threads} -o ${sample_dir}/ani/fastani_pairs.tsv || true
+            pair_file="${sample_dir}/ani/fastani_pairs.tsv"
+        fi
+        python ${baseDir}/scripts/ani_summary.py \\
+            --sample-dir ${sample_dir} \\
+            --pairs \${pair_file} \\
+            --tool ${params.ani_tool} \\
+            --duplicate-threshold ${params.ani_duplicate_threshold} \\
+            --species-threshold ${params.ani_species_threshold}
+    else
+        printf "query\\treference\\tani\\tfragments_mapped\\tfragments_total\\n" > ${sample_dir}/ani/fastani_pairs.tsv
+        python ${baseDir}/scripts/ani_summary.py --sample-dir ${sample_dir} --pairs ${sample_dir}/ani/fastani_pairs.tsv --tool ${params.ani_tool}
+    fi
+    """
+}
+
+// Process 11: Optional Mash sketching pre-screen
+process MASH_PRESCREEN {
+    conda 'envs/mash.yaml'
+
+    input:
+    path sample_dir
+
+    output:
+    path "${sample_dir}", emit: mash_results
+
+    script:
+    """
+    mkdir -p ${sample_dir}/mash/analysis
+    sequence_dir="${sample_dir}/sequence"
+    if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
+        sequence_dir="${sample_dir}/sequence_filtered"
+    fi
+    find \${sequence_dir} -name "*.fna" | sort > ${sample_dir}/mash/genomes.list || true
+    genome_count=\$(wc -l < ${sample_dir}/mash/genomes.list || echo 0)
+    if [ "\${genome_count}" -ge 2 ]; then
+        mash sketch -o ${sample_dir}/mash/genomes \$(cat ${sample_dir}/mash/genomes.list)
+        mash dist ${sample_dir}/mash/genomes.msh \$(cat ${sample_dir}/mash/genomes.list) > ${sample_dir}/mash/mash_dist.tsv || true
+    else
+        touch ${sample_dir}/mash/mash_dist.tsv
+    fi
+    python ${baseDir}/scripts/mash_summary.py --sample-dir ${sample_dir} --dist ${sample_dir}/mash/mash_dist.tsv
+    """
+}
+
+// Process 12: Combined QC decision engine and optional filtering
+process COMBINED_QC {
+    conda 'envs/fetchm.yaml'
+
+    input:
+    path sample_dir
+
+    output:
+    path "${sample_dir}", emit: combined_qc_results
+
+    script:
+    def max_contigs_arg = params.max_contigs ? "--max-contigs ${params.max_contigs}" : ""
+    def min_n50_arg = params.min_n50 ? "--min-n50 ${params.min_n50}" : ""
+    def min_completeness_arg = params.min_completeness ? "--min-completeness ${params.min_completeness}" : ""
+    def max_contamination_arg = params.max_contamination ? "--max-contamination ${params.max_contamination}" : ""
+    """
+    python ${baseDir}/scripts/qc_master.py \\
+        --sample-dir ${sample_dir} \\
+        --qc-filter ${params.qc_filter} \\
+        --representative-only ${params.representative_only} \\
+        --ani-species-threshold ${params.ani_species_threshold} \\
+        ${max_contigs_arg} ${min_n50_arg} ${min_completeness_arg} ${max_contamination_arg}
+    """
+}
+
+// Process 13: Run abricate
 process ABRICATE {
     conda 'envs/abricate.yaml'
     
@@ -1081,7 +1267,25 @@ process ABRICATE {
     """
 }
 
-// Process 10: Run panR2
+// Process 14: Export PanR2-ready handoff directory
+process EXPORT_PANR2_INPUTS {
+    conda 'envs/fetchm.yaml'
+
+    input:
+    path sample_dir
+
+    output:
+    path "${sample_dir}", emit: panr2_inputs_results
+
+    script:
+    """
+    if [ "${params.export_panr2_inputs}" = "true" ]; then
+        python ${baseDir}/scripts/export_panr2_inputs.py --sample-dir ${sample_dir} --versions-dir ${params.outdir}/pipeline_versions
+    fi
+    """
+}
+
+// Process 15: Run panR2
 process PANR {
     conda 'envs/fetchm.yaml'
     
@@ -1149,6 +1353,18 @@ workflow {
             GTDBTK_ENV_VERSIONS()
             version_reports = version_reports.mix(GTDBTK_ENV_VERSIONS.out.gtdbtk_versions)
         }
+        if (params.run_ani) {
+            ANI_ENV_VERSIONS()
+            version_reports = version_reports.mix(ANI_ENV_VERSIONS.out.ani_versions)
+        }
+        if (params.run_quast) {
+            QUAST_ENV_VERSIONS()
+            version_reports = version_reports.mix(QUAST_ENV_VERSIONS.out.quast_versions)
+        }
+        if (params.run_mash) {
+            MASH_ENV_VERSIONS()
+            version_reports = version_reports.mix(MASH_ENV_VERSIONS.out.mash_versions)
+        }
         version_reports.view { version_file -> "Version report saved: ${version_file}" }
     }
     
@@ -1177,21 +1393,41 @@ workflow {
         qc_ready_ch = CHECKM2_QC.out.checkm2_results
     }
 
+    if (params.run_gtdbtk) {
+        // Add GTDB-Tk taxonomy match QC
+        GTDBTK_QC(qc_ready_ch)
+        qc_ready_ch = GTDBTK_QC.out.gtdbtk_results
+    }
+
+    if (params.run_quast) {
+        QUAST_QC(qc_ready_ch)
+        qc_ready_ch = QUAST_QC.out.quast_results
+    }
+
+    if (params.run_ani) {
+        ANI_ANALYSIS(qc_ready_ch)
+        qc_ready_ch = ANI_ANALYSIS.out.ani_results
+    }
+
+    if (params.run_mash) {
+        MASH_PRESCREEN(qc_ready_ch)
+        qc_ready_ch = MASH_PRESCREEN.out.mash_results
+    }
+
+    COMBINED_QC(qc_ready_ch)
+    qc_ready_ch = COMBINED_QC.out.combined_qc_results
+
     if (params.stop_after_qc) {
         // Collect QC-only results to output directory
         COLLECT_RESULTS(qc_ready_ch)
     } else {
-        if (params.run_gtdbtk) {
-            // Add GTDB-Tk taxonomy match QC
-            GTDBTK_QC(qc_ready_ch)
-            qc_ready_ch = GTDBTK_QC.out.gtdbtk_results
-        }
-        
         // Run abricate on each sample directory
         ABRICATE(qc_ready_ch)
+
+        EXPORT_PANR2_INPUTS(ABRICATE.out.abricate_results)
         
         // Run panR on each sample directory after abricate
-        PANR(ABRICATE.out.abricate_results)
+        PANR(EXPORT_PANR2_INPUTS.out.panr2_inputs_results)
         
         // Collect final results to output directory
         COLLECT_RESULTS(PANR.out.panr_results)

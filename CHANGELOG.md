@@ -3,6 +3,14 @@
 ## Unreleased
 
 ### Added
+- Optional QUAST assembly-structure QC module with PanR2-ready assembly QC export.
+- Optional FastANI/skani pairwise ANI module with ANI matrix, closest-genome table, near-duplicate clusters, ANI outlier report, and PanR2-ready ANI summary.
+- Optional Mash sketch/distance pre-screen module for fast large-dataset screening.
+- Combined QC decision engine writing `qc/qc_master_report.csv`, pass/fail/warning sample lists, and `qc/excluded_for_panr2.csv`.
+- Optional representative-genome selection using ANI duplicate clusters with `--representative_only`.
+- `panr2_inputs/` handoff export directory with metadata, AMR tables, QC reports, ANI summaries, QUAST summaries, manifests, and the formal feature contract columns.
+- Formal PanR2 input contract documentation under `docs/panr2_input_contract.md`.
+- New Conda environments for ANI (`envs/ani.yaml`), QUAST (`envs/quast.yaml`), and Mash (`envs/mash.yaml`).
 - Offline `test` profile using tiny local fixtures.
 - Python sequence-stat fallback for fixture-based CI tests.
 - CI checks for offline sequence QC and metadata enrichment outputs.

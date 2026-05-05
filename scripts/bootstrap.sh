@@ -101,7 +101,7 @@ fi
 
 echo "OK: required commands found"
 
-for env_file in envs/fetchm.yaml envs/checkm2.yaml envs/abricate.yaml; do
+for env_file in envs/fetchm.yaml envs/checkm2.yaml envs/abricate.yaml envs/ani.yaml envs/quast.yaml envs/mash.yaml; do
     [[ -f "$env_file" ]] || fail "Missing environment file: $env_file"
 done
 
@@ -168,6 +168,13 @@ echo
 echo
 echo "Recommended full command after QC validation:"
 printf "nextflow run main.nf --input test_small.tsv --outdir results_small -profile conda --run_gtdbtk false --qc_filter true --threads 8 --db %q" "$ABRICATE_DB"
+if [[ -n "$CHECKM2_DB" ]]; then
+    printf " --checkm2_db %q" "$CHECKM2_DB"
+fi
+echo
+echo
+echo "Optional comparative-genomics command:"
+printf "nextflow run main.nf --input test_small.tsv --outdir results_comparative -profile conda --run_gtdbtk false --run_quast true --run_ani true --run_mash true --qc_filter true --threads 8 --db %q" "$ABRICATE_DB"
 if [[ -n "$CHECKM2_DB" ]]; then
     printf " --checkm2_db %q" "$CHECKM2_DB"
 fi

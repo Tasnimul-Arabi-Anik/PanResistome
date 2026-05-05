@@ -1,0 +1,9 @@
+name: ani_env
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - fastani
+  - skani
+  - python=3.12

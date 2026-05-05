@@ -11,6 +11,9 @@ PanResistome integrates several state-of-the-art tools including:
 * [**FetchM**](https://github.com/Tasnimul-Arabi-Anik/FetchM): for fetching genome assemblies and standardized NCBI metadata
 * [**CheckM2**](https://github.com/chklovski/CheckM2): for genome completeness and contamination quality assessment
 * [**GTDB-Tk**](https://github.com/Ecogenomics/GTDBTk): for taxonomy classification and genus/species consistency checks
+* [**QUAST**](https://github.com/ablab/quast): for assembly structure metrics such as N50, contig count, GC, and total length
+* [**FastANI/skani**](https://github.com/ParBLiSS/FastANI): for pairwise ANI, species-consistency screening, and near-duplicate clustering
+* [**Mash**](https://github.com/marbl/Mash): for optional fast sketch-based distance pre-screening
 * [**ABRicate**](https://github.com/tseemann/abricate): for resistance gene annotation using curated ANCBI databases
 * [**PanR2**](https://github.com/Tasnimul-Arabi-Anik/PanR2): for downstream statistical analysis and interactive visualization of resistome data
 
@@ -23,20 +26,21 @@ PanResistome integrates several state-of-the-art tools including:
 * 🌍 **Geospatial & temporal comparison** of AMR gene prevalence
 * 💡 **Epidemic signal detection** by comparing ARG prevalence across time and location
 * ⚙️ **Nextflow-based** for reproducibility, scalability, and cloud/HPC compatibility
+* 🧾 **PanR2 handoff exports** so heavy tool execution stays in PanResistome while PanR2 stays lightweight
 
 ---
 
 ## Workflow Overview
 
 ```
-+-------------+   +-------------+   +---------+   +----------+   +-------+   +--------+
-|   FetchM    |-->| Sequence QC |-->| CheckM2 |-->| ABRicate |-->| PanR2 |-->| Output |
-+-------------+   +-------------+   +---------+   +----------+   +-------+   +--------+
-| Assemblies  |   | Assembly    |   | Quality |   | AMR gene |   | Stats |   | Reports|
-| & metadata  |   | stats       |   | metrics |   | calls    |   | plots |   | tables |
-+-------------+   +-------------+   +---------+   +----------+   +-------+   +--------+
++-------------+   +-------------+   +----------------------+   +----------+   +-------+
+|   FetchM    |-->| Sequence QC |-->| CheckM2/QUAST/ANI/QC |-->| ABRicate |-->| PanR2 |
++-------------+   +-------------+   +----------------------+   +----------+   +-------+
+| Assemblies  |   | Assembly    |   | Heavy comparative    |   | AMR gene |   | Report|
+| & metadata  |   | stats       |   | genomics + filtering |   | calls    |   | plots |
++-------------+   +-------------+   +----------------------+   +----------+   +-------+
 
-Optional: add `--run_gtdbtk true` to insert GTDB-Tk taxonomy matching between CheckM2 and ABRicate.
+Optional: add `--run_gtdbtk true`, `--run_quast true`, `--run_ani true`, or `--run_mash true` to insert heavier comparative-genomics checks before ABRicate and PanR2.
 ```
 
 Each run also writes Conda environment version reports under `pipeline_versions/` so analyses can be traced back to the exact tool versions used.
@@ -48,6 +52,8 @@ CheckM2 requires its genome-quality database to be available in the run environm
 For a lighter validation run on modest hardware, use `--stop_after_qc true`. This runs FetchM, sequence QC, and CheckM2, then collects QC outputs without running GTDB-Tk, ABRicate, or PanR2.
 
 GTDB-Tk is disabled by default because it is resource-intensive. If enabled, it requires its reference data to be available in the run environment. If `GTDBTK_DATA_PATH` is not configured globally, pass the location with `--gtdbtk_data_path /path/to/gtdbtk_data`. Taxonomy matching compares GTDB-Tk classification against the organism/species metadata at genus rank by default; use `--taxonomy_match_rank species` for stricter matching.
+
+QUAST, FastANI/skani, and Mash are also optional. They are part of PanResistome because they require external tools and can be expensive on large genome sets. Their outputs are summarized into standardized tables and exported under `panr2_inputs/` for PanR2 to analyze without inheriting the heavy dependencies.
 
 ---
 
@@ -198,12 +204,20 @@ PanResistome/
 | `--run_gtdbtk`          | bool  | false   | Enable GTDB-Tk taxonomy QC                       |
 | `--gtdbtk_data_path`    | path  | -       | Optional GTDB-Tk reference data path             |
 | `--taxonomy_match_rank` | str   | genus   | Compare expected taxonomy at genus or species    |
+| `--run_quast`           | bool  | false   | Enable QUAST assembly-structure QC               |
+| `--run_ani`             | bool  | false   | Enable FastANI/skani pairwise ANI analysis       |
+| `--ani_tool`            | str   | fastani | ANI engine: `fastani` or `skani`                 |
+| `--ani_duplicate_threshold` | float | 99.9 | ANI threshold for near-duplicate clusters        |
+| `--ani_species_threshold` | float | 95.0 | ANI warning threshold for species consistency    |
+| `--run_mash`            | bool  | false   | Enable Mash sketch/distance pre-screening        |
+| `--representative_only` | bool  | false   | Keep one representative per near-duplicate ANI cluster when filtering |
+| `--export_panr2_inputs` | bool  | true    | Export standardized `panr2_inputs/` handoff directory |
 
 ### 🔧 Other Options
 
 | Argument    | Type | Default | Description                             |
 | ----------- | ---- | ------- | --------------------------------------- |
-| `--threads` | int  | 8       | Number of threads for CheckM2, GTDB-Tk, and abricate |
+| `--threads` | int  | 8       | Number of threads for CheckM2, GTDB-Tk, QUAST, ANI, and abricate |
 | `--db`      | str  | ./db    | Directory containing abricate databases |
 | `--help`    | flag | -       | Show help message and exit              |
 
@@ -233,16 +247,49 @@ results/
     │   └── quality_report.tsv # CheckM2 completeness and contamination report
     ├── gtdbtk/                # only when --run_gtdbtk true
     │   └── *.summary.tsv      # GTDB-Tk taxonomy classification summaries
+    ├── quast/                 # only when --run_quast true
+    │   └── analysis/assembly_qc.csv
+    ├── ani/                   # only when --run_ani true
+    │   └── analysis/
+    │       ├── pairwise_ani_long.csv
+    │       ├── ani_matrix.csv
+    │       ├── closest_genome.csv
+    │       ├── duplicate_clusters.csv
+    │       └── ani_outliers.csv
+    ├── mash/                  # only when --run_mash true
+    │   └── analysis/
+    ├── qc/
+    │   ├── qc_master_report.csv
+    │   ├── qc_pass_samples.txt
+    │   ├── qc_fail_samples.txt
+    │   ├── qc_warning_samples.txt
+    │   └── excluded_for_panr2.csv
+    ├── panr2_inputs/          # standardized handoff bundle for PanR2
+    │   ├── metadata/
+    │   ├── amr/
+    │   ├── ani/
+    │   ├── assembly_qc/
+    │   ├── qc/
+    │   └── manifest/
     ├── sequence_filtered/     # pass-only FASTA files used when --qc_filter true
     └── sequence/            # Downloaded genome FASTA files        
 pipeline_versions/
 ├── fetchm_env_versions.txt   # Python, FetchM, PanR2, seqkit versions
 ├── checkm2_env_versions.txt  # CheckM2 version
 ├── gtdbtk_env_versions.txt   # GTDB-Tk version, only when --run_gtdbtk true
+├── ani_env_versions.txt      # FastANI/skani versions, only when --run_ani true
+├── quast_env_versions.txt    # QUAST version, only when --run_quast true
+├── mash_env_versions.txt     # Mash version, only when --run_mash true
 └── abricate_env_versions.txt # ABRicate and Perl versions
 ```
 
 You can open `index.html` in a browser for easy navigation of visual outputs.
+
+## PanResistome And PanR2 Responsibilities
+
+PanResistome should run heavy tools, manage Conda environments/databases, capture versions, filter genomes, and export standardized tables. PanR2 should remain a lightweight comparative analysis and reporting tool that reads standardized outputs.
+
+Every new PanResistome module should export PanR2-compatible records when possible. The formal schema is documented in [`docs/panr2_input_contract.md`](docs/panr2_input_contract.md).
 
 ---
 

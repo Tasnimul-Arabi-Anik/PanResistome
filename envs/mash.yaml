@@ -1,0 +1,8 @@
+name: mash_env
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - mash
+  - python=3.12

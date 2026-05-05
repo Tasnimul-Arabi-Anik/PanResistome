@@ -1,0 +1,8 @@
+name: quast_env
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - quast
+  - python=3.12
