@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Added
+- FetchM2 is now the default metadata engine, adding richer standardized host, source, environment, geography, disease/health, collection-year, and metadata-audit fields while retaining a reversible legacy FetchM mode.
+- PanResistome-owned FetchM2 sequence downloader for robust assembly downloads from `fetchm2_clean.csv`, avoiding the FetchM2 0.1.3 sequence-cache threading failure observed during broader validation.
+- FetchM2 compatibility adapter that preserves `fetchm2_clean.csv/.tsv`, writes legacy-compatible `ncbi_clean.csv`, records `metadata_engine.txt`, and organizes FetchM2 metadata analysis/audit outputs under each sample directory.
+- FetchM2-specific filters for standardized sample type, isolation source, environment medium, and collection-year ranges.
+- PanR2 skip precheck so runs with no valid downstream ABRicate/PanR2 inputs end cleanly and write `panr_output/panr2_input_status.txt`.
 - Optional QUAST assembly-structure QC module with PanR2-ready assembly QC export.
 - Optional FastANI/skani pairwise ANI module with ANI matrix, closest-genome table, near-duplicate clusters, ANI outlier report, and PanR2-ready ANI summary.
 - Optional Mash sketch/distance pre-screen module for fast large-dataset screening.
@@ -29,6 +34,8 @@
 - `test_small.tsv` for lightweight full downstream validation.
 
 ### Changed
+- Default metadata wording, environment version capture, README, and PanR2 handoff documentation now refer to FetchM2 as the preferred metadata source.
+- ABRicate empty-output handling now writes parseable header-only summary/result files instead of malformed empty files.
 - `--local_samples` now ignores support directories such as `pipeline_versions`, preventing local validation runs from treating version folders as sample inputs.
 - Empty sequence-QC header writing is now safe for column names containing percent signs.
 - `envs/fetchm.yaml` now installs PanR2 from the GitHub source so PanResistome uses the current PanR2 reporting layer during integrated runs.
@@ -37,5 +44,6 @@
 - FetchM process now writes to an internal work output folder so any `--outdir` value works.
 
 ### Validated
+- Broader FetchM2 validation on `test.tsv` with CheckM2, QUAST, FastANI, Mash, QC filtering, ABRicate, PanR2, and PanR2 handoff export enabled; 80 FetchM2 metadata rows were standardized, 16 assemblies were downloaded for the constrained test subset, and all 17 Nextflow processes completed successfully.
 - `test.tsv` through FetchM, sequence QC, and CheckM2 with GTDB-Tk disabled.
 - `test_small.tsv` through FetchM, sequence QC, CheckM2, ABRicate, PanR2, and result collection with `--qc_filter true`.

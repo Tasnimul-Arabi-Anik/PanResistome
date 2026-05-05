@@ -1,13 +1,13 @@
-name: fetchm_env
+name: fetchm2_env
 channels:
   - conda-forge
   - bioconda
   - defaults
 dependencies:
-  - python=3.9
+  - python=3.10
   - seqkit
   - pip
   - pip:
+    - fetchm2==0.1.3
     - fetchM
     - git+https://github.com/Tasnimul-Arabi-Anik/PanR2.git
-

@@ -25,12 +25,23 @@ Required columns:
 
 ## Current PanResistome Exports
 
-PanResistome writes `panr2_inputs/` after annotation when `--export_panr2_inputs true`.
+PanResistome writes `panr2_inputs/` after annotation when `--export_panr2_inputs true`. FetchM2 is the default metadata source, but PanResistome also writes legacy-compatible `ncbi_clean.csv` files so PanR2 and older downstream scripts can read the same run.
 
 ```text
 panr2_inputs/
 ├── metadata/ncbi_clean.csv
+├── metadata/fetchm2_clean.csv
+├── metadata/fetchm2_clean.tsv
+├── metadata/fetchm2_clean_compat.csv
+├── metadata/fetchm2_report.md
+├── metadata/metadata_engine.txt
 ├── metadata/ncbi_enriched.csv
+├── metadata_analysis/metadata_analysis_report.md
+├── metadata_audit/standardization_summary.csv
+├── metadata_audit/standardization_audit.md
+├── metadata_audit/production_readiness_gate.md
+├── sequence/sequence_download_summary.csv
+├── sequence/failed_accessions.txt
 ├── amr/ncbi_summary.tab
 ├── amr/ncbi_results.tab
 ├── ani/analysis/panr2_ani_summary.csv

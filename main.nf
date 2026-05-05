@@ -12,6 +12,21 @@ params.year = []
 params.country = []
 params.cont = []
 params.subcont = []
+params.metadata_engine = 'fetchm2'
+params.fetchm2_offline = false
+params.fetchm2_no_analysis = false
+params.fetchm2_download = true
+params.fetchm2_workers = 3
+params.fetchm2_download_workers = 1
+params.fetchm2_retries = 3
+params.fetchm2_retry_delay = 5.0
+params.fetchm2_keep_gz = false
+params.fetchm2_max_genomes = null
+params.sample_type = []
+params.isolation_source = []
+params.environment_medium = []
+params.year_from = null
+params.year_to = null
 
 params.input = "test.tsv"
 params.outdir = "results"
@@ -50,6 +65,50 @@ params.representative_only = false
 params.export_panr2_inputs = true
 
 
+def paramList(value) {
+    if (value == null || value == false) {
+        return []
+    }
+    if (value instanceof List) {
+        return value.findAll { it != null && it.toString().trim() }
+    }
+    return value.toString().split(',').collect { it.trim() }.findAll { it }
+}
+
+def shellQuote(value) {
+    return "'" + value.toString().replace("'", "'\"'\"'") + "'"
+}
+
+def joinedOption(name, value) {
+    def values = paramList(value)
+    return values ? "${name} ${values.collect { shellQuote(it) }.join(' ')}" : ""
+}
+
+def yearRangeOptions(value) {
+    def values = paramList(value)
+    if (!values) {
+        return ""
+    }
+    def options = []
+    values.each { item ->
+        def text = item.toString().trim()
+        if (text.contains('-')) {
+            def parts = text.split('-', 2).collect { it.trim() }
+            if (parts[0]) {
+                options << "--year-from ${shellQuote(parts[0])}"
+            }
+            if (parts.size() > 1 && parts[1]) {
+                options << "--year-to ${shellQuote(parts[1])}"
+            }
+        } else if (text) {
+            options << "--year-from ${shellQuote(text)}"
+            options << "--year-to ${shellQuote(text)}"
+        }
+    }
+    return options.join(' ')
+}
+
+
 // Help message
 def helpMessage() {
     log.info """
@@ -64,10 +123,17 @@ def helpMessage() {
       --input            Input TSV file listing genome accessions
       --outdir           Output directory for results
 
-    ⚙️ Optional arguments for fetchM:
+    ⚙️ Optional arguments for FetchM2 metadata/download:
+      --metadata_engine   Metadata engine: fetchm2 or legacy_fetchm [default: fetchm2]
       --checkm           Minimum CheckM completeness threshold (e.g. 90. Default: null)
       --ani              ANI filter status (Choices: OK, Inconclusive, Failed, all. Default: all)
       --sleep            Time to wait between fetch requests (default: 0.5s)
+      --fetchm2_offline   Use FetchM2 offline metadata mode [default: false]
+      --fetchm2_no_analysis Skip FetchM2 metadata analysis figures/tables [default: false]
+      --fetchm2_download Download assemblies from FetchM2 metadata with the PanResistome downloader [default: true]
+      --fetchm2_workers   FetchM2 BioSample fetch workers [default: 3]
+      --fetchm2_download_workers FetchM2 sequence download workers [default: 1; safest for FetchM2 0.1.3 sequence cache]
+      --fetchm2_max_genomes Maximum genomes selected for FetchM2 sequence download
 
         🧬 Instead of global resistance analysis, you may do specific analysis by providing: 
       --host             Host species (e.g. "Homo sapiens" "Bos taurus")
@@ -75,6 +141,11 @@ def helpMessage() {
       --country          Country filter (e.g. "Bangladesh" "USA")
       --cont             Continent filter (e.g. "Asia", "Africa")
       --subcont          Subcontinent filter (e.g. "Southern Asia")
+      --sample_type      FetchM2 Sample_Type_SD filter
+      --isolation_source FetchM2 Isolation_Source_SD filter
+      --environment_medium FetchM2 Environment_Medium_SD filter
+      --year_from        FetchM2 minimum Collection_Year filter
+      --year_to          FetchM2 maximum Collection_Year filter
 
     🧬 Optional arguments for PanR2:
       --genep            Minimum % gene presence to include in heatmap (float)
@@ -82,7 +153,7 @@ def helpMessage() {
       --format           Output format for plots (tiff, svg, png, pdf) [default: png]
 
     🧪 Sequence QC:
-      After FetchM downloads assemblies, seqkit generates assembly stats and the pipeline writes
+      After assemblies are downloaded from FetchM2 metadata, seqkit generates assembly stats and the pipeline writes
       metadata_output/ncbi_enriched.csv with sequence QC columns appended to ncbi_clean.csv.
       --qc_filter              Exclude failed assemblies from downstream tools [default: false]
       --min_total_length       Minimum assembly length required to pass QC
@@ -131,7 +202,7 @@ if (!file(params.db).exists()) {
     exit 1
 }
 
-// Process 1: Capture versions from the FetchM/PanR2/seqkit environment
+// Process 1: Capture versions from the FetchM2/PanR2/seqkit environment
 process FETCHM_ENV_VERSIONS {
     conda 'envs/fetchm.yaml'
     publishDir "${params.outdir}/pipeline_versions", mode: 'copy'
@@ -147,10 +218,12 @@ process FETCHM_ENV_VERSIONS {
         date -u +"run_timestamp_utc=%Y-%m-%dT%H:%M:%SZ"
         python --version
         seqkit version || true
+        fetchm2 --version || true
+        fetchM --version || true
         python - <<'PY'
 from importlib.metadata import PackageNotFoundError, version
 
-for package in ("fetchM", "PanR2"):
+for package in ("fetchm2", "fetchM", "PanR2"):
     try:
         print(f"{package}=={version(package)}")
     except PackageNotFoundError:
@@ -267,7 +340,7 @@ process MASH_ENV_VERSIONS {
     """
 }
 
-// Process 5: Run fetchM
+// Process 5: Run FetchM2 by default, with a reversible legacy FetchM mode.
 process FETCHM {
     conda 'envs/fetchm.yaml'
     
@@ -278,19 +351,77 @@ process FETCHM {
     path "fetchm_results", emit: fetchm_results
     
     script:
+    def fetchm2Ani = paramList(params.ani) ?: ['all']
+    def fetchm2Args = [
+        "--input ${input_file}",
+        "--outdir fetchm_results",
+        "--ani ${fetchm2Ani.collect { shellQuote(it) }.join(' ')}",
+        "--workers ${params.fetchm2_workers}",
+        "--sleep ${params.sleep}",
+    ]
+    if (params.checkm) {
+        fetchm2Args << "--checkm ${params.checkm}"
+    }
+    if (params.fetchm2_offline) {
+        fetchm2Args << "--offline"
+    }
+    if (params.fetchm2_no_analysis) {
+        fetchm2Args << "--no-analysis"
+    }
+    def explicitYearOptions = []
+    if (params.year_from) {
+        explicitYearOptions << "--year-from ${shellQuote(params.year_from)}"
+    }
+    if (params.year_to) {
+        explicitYearOptions << "--year-to ${shellQuote(params.year_to)}"
+    }
+    def filterArgs = [
+        joinedOption("--host", params.host),
+        joinedOption("--country", params.country),
+        joinedOption("--continent", params.cont),
+        joinedOption("--subcontinent", params.subcont),
+        joinedOption("--sample-type", params.sample_type),
+        joinedOption("--isolation-source", params.isolation_source),
+        joinedOption("--environment-medium", params.environment_medium),
+        explicitYearOptions ? explicitYearOptions.join(' ') : yearRangeOptions(params.year),
+    ].findAll { it }
+    fetchm2Args.addAll(filterArgs)
+    def downloadArgs = [
+        "--input fetchm_results/metadata_output/fetchm2_clean.csv",
+        "--outdir fetchm_results/sequence",
+        "--workers ${params.fetchm2_download_workers}",
+        "--retries ${params.fetchm2_retries}",
+        "--retry-delay ${params.fetchm2_retry_delay}",
+        params.fetchm2_max_genomes ? "--max-genomes ${params.fetchm2_max_genomes}" : "",
+        params.fetchm2_keep_gz ? "--keep-gz" : "",
+    ].findAll { it }
+    downloadArgs.addAll(filterArgs)
+    def legacyArgs = [
+        "--input ${input_file}",
+        "--outdir fetchm_results/",
+        params.checkm ? "--checkm ${params.checkm}" : "",
+        "--ani ${params.ani}",
+        "--sleep ${params.sleep}",
+        "--seq",
+        joinedOption("--host", params.host),
+        joinedOption("--year", params.year),
+        joinedOption("--country", params.country),
+        joinedOption("--cont", params.cont),
+        joinedOption("--subcont", params.subcont),
+    ].findAll { it }
     """
-    fetchM \\
-        --input ${input_file} \\
-        --outdir fetchm_results/ \\
-        ${params.checkm ? "--checkm ${params.checkm}" : ""} \\
-        --ani ${params.ani} \\
-        --sleep ${params.sleep} \\
-        --seq
-        ${params.host ? "--host ${params.host.join(' ')}" : ""} \\
-        ${params.year ? "--year ${params.year.join(' ')}" : ""} \\
-        ${params.country ? "--country ${params.country.join(' ')}" : ""} \\
-        ${params.cont ? "--cont ${params.cont.join(' ')}" : ""} \\
-        ${params.subcont ? "--subcont ${params.subcont.join(' ')}" : ""}
+    if [ "${params.metadata_engine}" = "fetchm2" ]; then
+        fetchm2 metadata ${fetchm2Args.join(' ')}
+        if [ "${params.fetchm2_download}" = "true" ]; then
+            python ${baseDir}/scripts/download_fetchm2_sequences.py ${downloadArgs.join(' ')}
+        fi
+        python ${baseDir}/scripts/normalize_fetchm2_output.py --results-dir fetchm_results
+    elif [ "${params.metadata_engine}" = "legacy_fetchm" ] || [ "${params.metadata_engine}" = "fetchm" ]; then
+        fetchM ${legacyArgs.join(' ')}
+    else
+        echo "Unsupported metadata engine: ${params.metadata_engine}" >&2
+        exit 1
+    fi
     """
 }
 
@@ -1257,12 +1388,13 @@ process ABRICATE {
         if [ -s "${sample_dir}/abricate/ncbi_results.tab" ]; then
             abricate --summary ${sample_dir}/abricate/ncbi_results.tab > ${sample_dir}/abricate/ncbi_summary.tab
         else
-            echo "No results found for ${sample_name}" > ${sample_dir}/abricate/ncbi_summary.tab
+            printf '#FILE\\tNUM_FOUND\\n' > ${sample_dir}/abricate/ncbi_summary.tab
+            printf '#FILE\\tSEQUENCE\\tSTART\\tEND\\tGENE\\tCOVERAGE\\tCOVERAGE_MAP\\tGAPS\\t%%COVERAGE\\t%%IDENTITY\\tDATABASE\\tACCESSION\\tPRODUCT\\tRESISTANCE\\n' > ${sample_dir}/abricate/ncbi_results.tab
         fi
     else
         echo "Warning: No .fna files found in \${sequence_dir}/" >&2
-        touch ${sample_dir}/abricate/ncbi_results.tab
-        echo "No .fna files found" > ${sample_dir}/abricate/ncbi_summary.tab
+        printf '#FILE\\tNUM_FOUND\\n' > ${sample_dir}/abricate/ncbi_summary.tab
+        printf '#FILE\\tSEQUENCE\\tSTART\\tEND\\tGENE\\tCOVERAGE\\tCOVERAGE_MAP\\tGAPS\\t%%COVERAGE\\t%%IDENTITY\\tDATABASE\\tACCESSION\\tPRODUCT\\tRESISTANCE\\n' > ${sample_dir}/abricate/ncbi_results.tab
     fi
     """
 }
@@ -1300,8 +1432,12 @@ process PANR {
     """
     # Check if required directories exist
     if [ -d "${sample_dir}/metadata_output" ] && [ -d "${sample_dir}/abricate" ]; then
-        echo "Running panR2 for ${sample_name}"
-        panr --ncbi-dir ${sample_dir}/metadata_output/ --abricate-dir ${sample_dir}/abricate/ --output-dir ${sample_dir}/ --format ${params.format}
+        if python ${baseDir}/scripts/should_run_panr.py --sample-dir ${sample_dir} --reason-file ${sample_dir}/panr_output/panr2_input_status.txt; then
+            echo "Running panR2 for ${sample_name}"
+            panr --ncbi-dir ${sample_dir}/metadata_output/ --abricate-dir ${sample_dir}/abricate/ --output-dir ${sample_dir}/ --format ${params.format}
+        else
+            echo "Skipping panR2 for ${sample_name}: \$(cat ${sample_dir}/panr_output/panr2_input_status.txt)" >&2
+        fi
     else
         echo "Warning: Required directories not found for ${sample_name}" >&2
         if [ ! -d "${sample_dir}/metadata_output" ]; then
@@ -1372,7 +1508,7 @@ workflow {
         sample_dirs = Channel.fromPath("${params.local_samples}/*", type: 'dir', checkIfExists: true)
             .filter { sample_dir -> !(sample_dir.name in ['pipeline_versions', 'work', 'report', 'trace']) }
     } else {
-        // Run fetchM
+        // Run FetchM2 metadata/download adapter
         FETCHM(input_ch)
 
         // Create channel for sample directories

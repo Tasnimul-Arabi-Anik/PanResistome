@@ -8,13 +8,13 @@ Current pipeline version: `0.2.1-dev`
 
 PanResistome integrates several state-of-the-art tools including:
 
-* [**FetchM**](https://github.com/Tasnimul-Arabi-Anik/FetchM): for fetching genome assemblies and standardized NCBI metadata
+* [**FetchM2**](https://github.com/Tasnimul-Arabi-Anik/FetchM2): for standardized genome metadata, host/source/environment normalization, metadata audit reports, and download-ready assembly tables
 * [**CheckM2**](https://github.com/chklovski/CheckM2): for genome completeness and contamination quality assessment
 * [**GTDB-Tk**](https://github.com/Ecogenomics/GTDBTk): for taxonomy classification and genus/species consistency checks
 * [**QUAST**](https://github.com/ablab/quast): for assembly structure metrics such as N50, contig count, GC, and total length
 * [**FastANI/skani**](https://github.com/ParBLiSS/FastANI): for pairwise ANI, species-consistency screening, and near-duplicate clustering
 * [**Mash**](https://github.com/marbl/Mash): for optional fast sketch-based distance pre-screening
-* [**ABRicate**](https://github.com/tseemann/abricate): for resistance gene annotation using curated ANCBI databases
+* [**ABRicate**](https://github.com/tseemann/abricate): for resistance gene annotation using curated NCBI-compatible databases
 * [**PanR2**](https://github.com/Tasnimul-Arabi-Anik/PanR2): for downstream statistical analysis and interactive visualization of resistome data
 
 ## Key Features
@@ -34,7 +34,7 @@ PanResistome integrates several state-of-the-art tools including:
 
 ```
 +-------------+   +-------------+   +----------------------+   +----------+   +-------+
-|   FetchM    |-->| Sequence QC |-->| CheckM2/QUAST/ANI/QC |-->| ABRicate |-->| PanR2 |
+|   FetchM2   |-->| Sequence QC |-->| CheckM2/QUAST/ANI/QC |-->| ABRicate |-->| PanR2 |
 +-------------+   +-------------+   +----------------------+   +----------+   +-------+
 | Assemblies  |   | Assembly    |   | Heavy comparative    |   | AMR gene |   | Report|
 | & metadata  |   | stats       |   | genomics + filtering |   | calls    |   | plots |
@@ -49,7 +49,7 @@ Sequence QC filtering is optional. By default, the pipeline reports QC metrics b
 
 CheckM2 requires its genome-quality database to be available in the run environment. If it is not configured globally, pass the database location with `--checkm2_db /path/to/checkm2_database`.
 
-For a lighter validation run on modest hardware, use `--stop_after_qc true`. This runs FetchM, sequence QC, and CheckM2, then collects QC outputs without running GTDB-Tk, ABRicate, or PanR2.
+For a lighter validation run on modest hardware, use `--stop_after_qc true`. This runs FetchM2 metadata processing, sequence QC, and CheckM2, then collects QC outputs without running GTDB-Tk, ABRicate, or PanR2.
 
 GTDB-Tk is disabled by default because it is resource-intensive. If enabled, it requires its reference data to be available in the run environment. If `GTDBTK_DATA_PATH` is not configured globally, pass the location with `--gtdbtk_data_path /path/to/gtdbtk_data`. Taxonomy matching compares GTDB-Tk classification against the organism/species metadata at genus rank by default; use `--taxonomy_match_rank species` for stricter matching.
 
@@ -144,7 +144,7 @@ PanResistome/
 ├── main.nf
 ├── nextflow.config
 ├── envs/
-│   ├── fetchm.yml
+│   ├── fetchm.yaml
 │   └── abricate.yml
 ├── results/
 ├── figures/ 
@@ -164,18 +164,30 @@ PanResistome/
 | `--input`  | Input TSV file listing genome accessions |
 | `--outdir` | Output directory for results             |
 
-### ⚙️ Optional Arguments for FetchM
+### ⚙️ Optional Arguments for FetchM2
 
 | Argument    | Type   | Default | Description                                           |
 | ----------- | ------ | ------- | ----------------------------------------------------- |
 | `--checkm`  | float  | -       | Minimum CheckM completeness threshold (e.g., 90)      |
 | `--ani`     | str    | all     | ANI filter status: OK, Inconclusive, Failed, or all   |
 | `--sleep`   | float  | 0.5     | Time to wait between fetch requests (in seconds)      |
+| `--metadata_engine` | str | fetchm2 | Metadata engine: `fetchm2` or reversible legacy `legacy_fetchm` |
+| `--fetchm2_offline` | bool | false | Use FetchM2 offline metadata mode |
+| `--fetchm2_no_analysis` | bool | false | Skip FetchM2 metadata analysis figures/tables |
+| `--fetchm2_download` | bool | true | Download selected assemblies from FetchM2 metadata using the PanResistome downloader |
+| `--fetchm2_workers` | int | 3 | FetchM2 BioSample metadata workers |
+| `--fetchm2_download_workers` | int | 1 | Sequence-download workers; increase cautiously for larger runs |
+| `--fetchm2_max_genomes` | int | - | Maximum genomes selected for sequence download after metadata filtering |
 | `--host`    | str\[] | -       | Host species (e.g., "Homo sapiens", "Bos taurus")     |
 | `--year`    | str\[] | -       | Filter by year or range (e.g., "2015" or "2015-2023") |
 | `--country` | str\[] | -       | Filter by country (e.g., "Bangladesh", "USA")         |
 | `--cont`    | str\[] | -       | Filter by continent (e.g., "Asia", "Africa")          |
 | `--subcont` | str\[] | -       | Filter by subcontinent (e.g., "Southern Asia")        |
+| `--sample_type` | str\[] | - | FetchM2 `Sample_Type_SD` filter |
+| `--isolation_source` | str\[] | - | FetchM2 `Isolation_Source_SD` filter |
+| `--environment_medium` | str\[] | - | FetchM2 `Environment_Medium_SD` filter |
+| `--year_from` | int | - | Minimum FetchM2 `Collection_Year` |
+| `--year_to` | int | - | Maximum FetchM2 `Collection_Year` |
 
 ### 🧬 Optional Arguments for PanR2
 
@@ -235,7 +247,11 @@ results/
     │   ├── index.html       # Navigation page to generated reports
     │   └── Stat_analysis/
     ├── merged_output/       # Cleaned, joined resistance tables
-    ├── metadata_output/     # Assembly, annotation and metadata summary
+    ├── metadata_output/     # FetchM2 assembly, annotation, and standardized metadata summary
+    │   ├── fetchm2_clean.csv
+    │   ├── fetchm2_clean.tsv
+    │   ├── fetchm2_report.md
+    │   ├── metadata_engine.txt
     │   ├── ncbi_clean.csv
     │   ├── ncbi_clean_unfiltered.csv # original metadata when --qc_filter true
     │   ├── ncbi_clean_qc_pass.csv    # metadata rows passing enabled QC checks
@@ -266,6 +282,9 @@ results/
     │   └── excluded_for_panr2.csv
     ├── panr2_inputs/          # standardized handoff bundle for PanR2
     │   ├── metadata/
+    │   ├── metadata_analysis/
+    │   ├── metadata_audit/
+    │   ├── sequence/
     │   ├── amr/
     │   ├── ani/
     │   ├── assembly_qc/
@@ -274,7 +293,7 @@ results/
     ├── sequence_filtered/     # pass-only FASTA files used when --qc_filter true
     └── sequence/            # Downloaded genome FASTA files        
 pipeline_versions/
-├── fetchm_env_versions.txt   # Python, FetchM, PanR2, seqkit versions
+├── fetchm_env_versions.txt   # Python, FetchM2/legacy FetchM, PanR2, seqkit versions
 ├── checkm2_env_versions.txt  # CheckM2 version
 ├── gtdbtk_env_versions.txt   # GTDB-Tk version, only when --run_gtdbtk true
 ├── ani_env_versions.txt      # FastANI/skani versions, only when --run_ani true
@@ -287,7 +306,7 @@ You can open `index.html` in a browser for easy navigation of visual outputs.
 
 ## PanResistome And PanR2 Responsibilities
 
-PanResistome should run heavy tools, manage Conda environments/databases, capture versions, filter genomes, and export standardized tables. PanR2 should remain a lightweight comparative analysis and reporting tool that reads standardized outputs.
+PanResistome should run heavy tools, manage Conda environments/databases, capture versions, filter genomes, and export standardized tables. FetchM2 is the default metadata engine because it provides richer standardized host, source, environment, geography, year, disease, and metadata-audit fields than the legacy FetchM path. PanR2 should remain a lightweight comparative analysis and reporting tool that reads standardized outputs.
 
 Every new PanResistome module should export PanR2-compatible records when possible. The formal schema is documented in [`docs/panr2_input_contract.md`](docs/panr2_input_contract.md).
 
@@ -347,14 +366,14 @@ You can explore an example output showcasing PanResistome's capabilities:
 ## 🧾 Citations
 
 If you use this pipeline in your research, please cite the following tools:
-Here are updated citation entries with proper formatting, pointing to the shared preprint for both FetchM and PanR2:
+Recommended citation entries:
 
 ---
 
 * **Nextflow:** Di Tommaso *et al.* (2017). Nextflow enables reproducible computational workflows. *Nature Biotechnology*. [https://doi.org/10.1038/nbt.3820](https://doi.org/10.1038/nbt.3820)
 * **ABRicate:** Seemann T. ABRicate: Mass screening of contigs for antimicrobial and virulence genes. GitHub repository: [https://github.com/tseemann/abricate](https://github.com/tseemann/abricate)
-* **FetchM & PanR2:**
-  Anik TA. *FetchM: Streamlining Genome and Metadata Integration for Microbial Comparative Genomics* (2025). Preprint available via ResearchGate/bioRxiv, DOI: 10.1101/2025.04.08.647722 ([researchgate.net](https://www.researchgate.net/publication/390754932_FetchM_Streamlining_Genome_and_Metadata_Integration_for_Microbial_Comparative_Genomics?utm_source=chatgpt.com))
+* **FetchM2:** FetchM2 metadata standardization, audit, and sequence-download workflow. GitHub repository: [https://github.com/Tasnimul-Arabi-Anik/FetchM2](https://github.com/Tasnimul-Arabi-Anik/FetchM2)
+* **PanR2:** Anik TA. *PanR2: Panresistome Analysis Tool*. DOI: 10.1101/2025.04.08.647722
 
 ---
 
