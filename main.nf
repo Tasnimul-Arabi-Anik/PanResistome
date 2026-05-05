@@ -387,7 +387,7 @@ PY
         seqkit stats -a -T ${sample_dir}/sequence/*.fna > ${sample_dir}/sequence_qc/assembly_stats.tsv
     else
         echo "Warning: No .fna files found in ${sample_dir}/sequence/ for sequence QC" >&2
-        printf "file\\tformat\\ttype\\tnum_seqs\\tsum_len\\tmin_len\\tavg_len\\tmax_len\\tQ1\\tQ2\\tQ3\\tsum_gap\\tN50\\tQ20(%)\\tQ30(%)\\tGC(%)\\n" > ${sample_dir}/sequence_qc/assembly_stats.tsv
+        printf '%b\\n' "file\\tformat\\ttype\\tnum_seqs\\tsum_len\\tmin_len\\tavg_len\\tmax_len\\tQ1\\tQ2\\tQ3\\tsum_gap\\tN50\\tQ20(%)\\tQ30(%)\\tGC(%)" > ${sample_dir}/sequence_qc/assembly_stats.tsv
     fi
 
     python - <<'PY'
@@ -1370,6 +1370,7 @@ workflow {
     
     if (params.local_samples) {
         sample_dirs = Channel.fromPath("${params.local_samples}/*", type: 'dir', checkIfExists: true)
+            .filter { sample_dir -> !(sample_dir.name in ['pipeline_versions', 'work', 'report', 'trace']) }
     } else {
         // Run fetchM
         FETCHM(input_ch)

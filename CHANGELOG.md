@@ -29,6 +29,9 @@
 - `test_small.tsv` for lightweight full downstream validation.
 
 ### Changed
+- `--local_samples` now ignores support directories such as `pipeline_versions`, preventing local validation runs from treating version folders as sample inputs.
+- Empty sequence-QC header writing is now safe for column names containing percent signs.
+- `envs/fetchm.yaml` now installs PanR2 from the GitHub source so PanResistome uses the current PanR2 reporting layer during integrated runs.
 - Default thread count is now 8.
 - CheckM2 process resources default to 8 CPUs and 8 GB RAM.
 - FetchM process now writes to an internal work output folder so any `--outdir` value works.

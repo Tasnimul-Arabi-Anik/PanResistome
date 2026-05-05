@@ -9,6 +9,5 @@ dependencies:
   - pip
   - pip:
     - fetchM
-    - PanR2
-
+    - git+https://github.com/Tasnimul-Arabi-Anik/PanR2.git
 
