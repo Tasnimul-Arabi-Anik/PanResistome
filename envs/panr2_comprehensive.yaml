@@ -20,4 +20,4 @@ dependencies:
   - mlst
   - pip:
       - MobileElementFinder
-      - git+https://github.com/Tasnimul-Arabi-Anik/PanR2.git@b25c58e
+      - git+https://github.com/Tasnimul-Arabi-Anik/PanR2.git@v0.1.3

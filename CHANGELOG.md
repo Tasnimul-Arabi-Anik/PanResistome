@@ -1,10 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 - 2026-05-06
 
 ### Added
 - FetchM2 dependency pin updated to `fetchm2==0.1.7`, including downstream contract files such as `sample_map.csv`, `metadata_completeness.csv`, `metadata_bias_warning.txt`, and `fetchm2_manifest.json`.
-- Comprehensive PanR2 mode now pins PanR2 commit `b25c58e`, adding PanR2 analysis support for MOB-suite, Kleborate, Kaptive, ECTyper, SerotypeFinder, and SCCmecFinder table inputs.
+- Comprehensive PanR2 mode now pins PanR2 release `v0.1.3`, adding PanR2 analysis support for MOB-suite, Kleborate, Kaptive, ECTyper, SerotypeFinder, and SCCmecFinder table inputs.
 - Automatic CheckM2 database download support through `--checkm2_auto_download_db` and `--checkm2_db_dir` when `--checkm2_db` is not supplied.
 - Optional MOB-suite plasmid reconstruction/typing process with PanR2 handoff under `mobsuite/`.
 - Optional geNomad prophage/viral-region process with PanR2 handoff under `prophage/` when a geNomad database is provided.
@@ -30,6 +30,17 @@
 - Offline `test` profile using tiny local fixtures.
 - Python sequence-stat fallback for fixture-based CI tests.
 - CI checks for offline sequence QC and metadata enrichment outputs.
+
+### Fixed
+- Relative `--checkm2_db_dir` values are now resolved from the launch directory instead of the Nextflow task work directory.
+- CheckM2 automatic database downloads now retry transient download failures before failing the run.
+- GitHub Actions CI now installs pinned Nextflow 24.10.4 through `nf-core/setup-nextflow@v2` instead of a brittle raw installer command.
+
+### Validated
+- Fresh remote-style run on `test.tsv` with FetchM2 0.1.7, native sequence download, CheckM2 automatic database download, QUAST, FastANI, Mash, QC filtering, comprehensive PanR2 mode, PanR2 handoff export, and GTDB-Tk disabled completed successfully.
+- The validated run downloaded 10/10 selected assemblies, downloaded and verified the CheckM2 database under `<outdir>/databases/checkm2`, produced CheckM2 quality reports for 10 assemblies, and completed all 17 Nextflow processes.
+- Comprehensive PanR2 mode generated NCBI AMR, VFDB, PlasmidFinder, MobileElementFinder, IntegronFinder, MLST, cross-database, temporal, QC, citation, software-version, and dashboard outputs.
+- GitHub Actions CI passed for PanR2 `v0.1.3` and PanResistome after the hardened Nextflow setup update.
 
 ## 0.2.0 - 2026-05-01
 
