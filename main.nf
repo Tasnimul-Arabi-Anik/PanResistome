@@ -65,6 +65,15 @@ params.ani_species_threshold = 95.0
 params.run_mash = false
 params.representative_only = false
 params.export_panr2_inputs = true
+params.run_panr2_comprehensive = false
+params.panr2_setup_abricate_db = true
+params.panr2_abricate_dbs = 'ncbi,vfdb,plasmidfinder'
+params.panr2_min_identity = 90
+params.panr2_plot_style = 'publication'
+params.panr2_label_max_length = 40
+params.panr2_cross_database_max_features = 300
+params.panr2_force_tool_run = false
+params.panr2_run_defensefinder = false
 
 
 def paramList(value) {
@@ -182,6 +191,13 @@ def helpMessage() {
       --run_mash               Enable Mash sketch/distance pre-screen [default: false]
       --representative_only    Keep one representative per near-duplicate ANI cluster for PanR2 when --qc_filter true [default: false]
       --export_panr2_inputs    Export standardized panr2_inputs handoff directory [default: true]
+      --run_panr2_comprehensive Run PanR2 integrated runners for ABRicate ncbi/vfdb/plasmidfinder, MobileElementFinder, IntegronFinder, and MLST [default: false]
+      --panr2_run_defensefinder Add DefenseFinder to comprehensive PanR2 mode when a working installation is available [default: false]
+      --panr2_setup_abricate_db Run panr setup-db before comprehensive PanR2 analysis [default: true]
+      --panr2_abricate_dbs     ABRicate databases for PanR2 comprehensive mode [default: ncbi,vfdb,plasmidfinder; add isfinder only if installed]
+      --panr2_min_identity     Minimum identity for PanR2 integrated feature analysis [default: 90]
+      --panr2_plot_style       PanR2 plot style: publication, dashboard, compact [default: publication]
+      --panr2_label_max_length Maximum feature-label length in PanR2 plots [default: 40]
       --local_samples          Optional directory of prebuilt sample folders for offline tests
       --run_checkm2            Enable CheckM2 QC [default: true]
 
@@ -254,6 +270,30 @@ process ABRICATE_ENV_VERSIONS {
         abricate --version || true
         perl -e 'print "perl==" . \$^V . "\\n"'
     } > abricate_env_versions.txt
+    """
+}
+
+process PANR2_COMPREHENSIVE_ENV_VERSIONS {
+    conda 'envs/panr2_comprehensive.yaml'
+    publishDir "${params.outdir}/pipeline_versions", mode: 'copy'
+
+    output:
+    path "panr2_comprehensive_env_versions.txt", emit: panr2_comprehensive_versions
+
+    script:
+    """
+    {
+        echo "[panr2_comprehensive_env]"
+        python --version
+        panr --version || true
+        panr doctor || true
+        abricate --version || true
+        abricate --list || true
+        integron_finder --version || true
+        mlst --version || true
+        defense-finder --version || true
+        mefinder --version || true
+    } > panr2_comprehensive_env_versions.txt
     """
 }
 
@@ -427,6 +467,9 @@ process FETCHM {
         joinedOption("--subcont", params.subcont),
     ].findAll { it }
     """
+    export MPLCONFIGDIR="\$(pwd)/.matplotlib"
+    mkdir -p "\${MPLCONFIGDIR}"
+
     if [ "${params.metadata_engine}" = "fetchm2" ]; then
         fetchm2 metadata ${fetchm2Args.join(' ')}
         if [ "${params.fetchm2_download}" = "true" ]; then
@@ -1482,6 +1525,68 @@ process PANR {
     """
 }
 
+process PANR2_COMPREHENSIVE {
+    conda 'envs/panr2_comprehensive.yaml'
+
+    input:
+    path sample_dir
+
+    output:
+    path "${sample_dir}", emit: panr2_comprehensive_results
+
+    script:
+    def sample_name = sample_dir.name
+    def optionalArgs = []
+    if (params.panr2_label_max_length) {
+        optionalArgs << "--label-max-length ${params.panr2_label_max_length}"
+    }
+    if (params.panr2_force_tool_run) {
+        optionalArgs << "--force-tool-run"
+    }
+    if (params.panr2_run_defensefinder) {
+        optionalArgs << "--run-defensefinder"
+    }
+    def optionalArgText = optionalArgs.join(' ')
+    def setupCmd = params.panr2_setup_abricate_db ? "panr setup-db --dbs ${params.panr2_abricate_dbs}" : "panr setup-db --dbs ${params.panr2_abricate_dbs} --check-only"
+    """
+    sequence_dir="${sample_dir}/sequence"
+    if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
+        sequence_dir="${sample_dir}/sequence_filtered"
+    fi
+
+    mkdir -p ${sample_dir}/panr_output
+    if [ ! -d "${sample_dir}/metadata_output" ]; then
+        echo "Processing failed: missing ${sample_dir}/metadata_output" > ${sample_dir}/panr_output/error.log
+        exit 1
+    fi
+    if [ ! -d "\${sequence_dir}" ] || [ -z "\$(find "\${sequence_dir}" -name "*.fna" -print -quit)" ]; then
+        echo "Processing failed: no .fna files found in \${sequence_dir}" > ${sample_dir}/panr_output/error.log
+        exit 1
+    fi
+
+    echo "Preparing ABRicate databases for comprehensive PanR2 analysis: ${params.panr2_abricate_dbs}"
+    ${setupCmd}
+
+    echo "Running comprehensive PanR2 for ${sample_name}"
+    panr \\
+        --ncbi-dir ${sample_dir}/metadata_output/ \\
+        --sequence-dir "\${sequence_dir}" \\
+        --output-dir ${sample_dir}/ \\
+        --run-abricate \\
+        --run-mobileelementfinder \\
+        --run-integronfinder \\
+        --run-mlst \\
+        --format ${params.format} \\
+        --abricate-dbs ${params.panr2_abricate_dbs} \\
+        --min-identity ${params.panr2_min_identity} \\
+        --plot-style ${params.panr2_plot_style} \\
+        --cross-database-max-features ${params.panr2_cross_database_max_features} \\
+        --mobileelementfinder-threads ${params.threads} \\
+        --integronfinder-threads ${params.threads} \\
+        ${optionalArgText}
+    """
+}
+
 // Process 11: Collect final results
 process COLLECT_RESULTS {
     publishDir "${params.outdir}", mode: 'copy'
@@ -1510,6 +1615,10 @@ workflow {
         ABRICATE_ENV_VERSIONS()
         version_reports = FETCHM_ENV_VERSIONS.out.fetchm_versions
             .mix(ABRICATE_ENV_VERSIONS.out.abricate_versions)
+        if (params.run_panr2_comprehensive) {
+            PANR2_COMPREHENSIVE_ENV_VERSIONS()
+            version_reports = version_reports.mix(PANR2_COMPREHENSIVE_ENV_VERSIONS.out.panr2_comprehensive_versions)
+        }
         if (params.run_checkm2) {
             CHECKM2_ENV_VERSIONS()
             version_reports = version_reports.mix(CHECKM2_ENV_VERSIONS.out.checkm2_versions)
@@ -1587,16 +1696,22 @@ workflow {
         // Collect QC-only results to output directory
         COLLECT_RESULTS(qc_ready_ch)
     } else {
-        // Run abricate on each sample directory
-        ABRICATE(qc_ready_ch)
+        if (params.run_panr2_comprehensive) {
+            PANR2_COMPREHENSIVE(qc_ready_ch)
+            EXPORT_PANR2_INPUTS(PANR2_COMPREHENSIVE.out.panr2_comprehensive_results)
+            COLLECT_RESULTS(EXPORT_PANR2_INPUTS.out.panr2_inputs_results)
+        } else {
+            // Run abricate on each sample directory
+            ABRICATE(qc_ready_ch)
 
-        EXPORT_PANR2_INPUTS(ABRICATE.out.abricate_results)
-        
-        // Run panR on each sample directory after abricate
-        PANR(EXPORT_PANR2_INPUTS.out.panr2_inputs_results)
-        
-        // Collect final results to output directory
-        COLLECT_RESULTS(PANR.out.panr_results)
+            EXPORT_PANR2_INPUTS(ABRICATE.out.abricate_results)
+            
+            // Run panR on each sample directory after abricate
+            PANR(EXPORT_PANR2_INPUTS.out.panr2_inputs_results)
+            
+            // Collect final results to output directory
+            COLLECT_RESULTS(PANR.out.panr_results)
+        }
     }
     
     // Display completion message

@@ -8,6 +8,6 @@ dependencies:
   - seqkit
   - pip
   - pip:
-    - fetchm2==0.1.5
+    - fetchm2==0.1.7
     - fetchM
-    - git+https://github.com/Tasnimul-Arabi-Anik/PanR2.git
+    - git+https://github.com/Tasnimul-Arabi-Anik/PanR2.git@ebcf4f1

@@ -33,8 +33,13 @@ panr2_inputs/
 ├── metadata/fetchm2_clean.csv
 ├── metadata/fetchm2_clean.tsv
 ├── metadata/fetchm2_all_assemblies.csv
+├── metadata/fetchm2_all_assemblies.tsv
 ├── metadata/fetchm2_clean_compat.csv
 ├── metadata/fetchm2_report.md
+├── metadata/fetchm2_manifest.json
+├── metadata/sample_map.csv
+├── metadata/metadata_completeness.csv
+├── metadata/metadata_bias_warning.txt
 ├── metadata/metadata_engine.txt
 ├── metadata/ncbi_enriched.csv
 ├── metadata_analysis/metadata_analysis_report.md
@@ -47,6 +52,13 @@ panr2_inputs/
 ├── amr/ncbi_results.tab
 ├── ani/analysis/panr2_ani_summary.csv
 ├── assembly_qc/analysis/panr2_quast_summary.csv
+├── vfdb/
+├── plasmidfinder/
+├── mobileelementfinder/
+├── integronfinder/
+├── mlst/
+├── cross_database/
+├── report/
 ├── qc/qc_master_report.csv
 ├── qc/excluded_for_panr2.csv
 └── manifest/

@@ -101,7 +101,7 @@ fi
 
 echo "OK: required commands found"
 
-for env_file in envs/fetchm.yaml envs/checkm2.yaml envs/abricate.yaml envs/ani.yaml envs/quast.yaml envs/mash.yaml; do
+for env_file in envs/fetchm.yaml envs/checkm2.yaml envs/abricate.yaml envs/ani.yaml envs/quast.yaml envs/mash.yaml envs/panr2_comprehensive.yaml; do
     [[ -f "$env_file" ]] || fail "Missing environment file: $env_file"
 done
 

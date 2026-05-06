@@ -19,6 +19,14 @@ def copy_if_exists(src, dst):
         shutil.copy2(src, dst)
 
 
+def copytree_if_exists(src, dst):
+    if src.exists() and src.is_dir():
+        if dst.exists():
+            shutil.rmtree(dst)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(src, dst)
+
+
 def parse_version_line(line, fallback_component):
     if not line or line.startswith("WARNING:"):
         return None
@@ -50,8 +58,13 @@ def main():
     copy_if_exists(sample_dir / "metadata_output" / "fetchm2_clean.csv", out / "metadata" / "fetchm2_clean.csv")
     copy_if_exists(sample_dir / "metadata_output" / "fetchm2_clean.tsv", out / "metadata" / "fetchm2_clean.tsv")
     copy_if_exists(sample_dir / "metadata_output" / "fetchm2_all_assemblies.csv", out / "metadata" / "fetchm2_all_assemblies.csv")
+    copy_if_exists(sample_dir / "metadata_output" / "fetchm2_all_assemblies.tsv", out / "metadata" / "fetchm2_all_assemblies.tsv")
     copy_if_exists(sample_dir / "metadata_output" / "fetchm2_clean_compat.csv", out / "metadata" / "fetchm2_clean_compat.csv")
     copy_if_exists(sample_dir / "metadata_output" / "fetchm2_report.md", out / "metadata" / "fetchm2_report.md")
+    copy_if_exists(sample_dir / "metadata_output" / "fetchm2_manifest.json", out / "metadata" / "fetchm2_manifest.json")
+    copy_if_exists(sample_dir / "metadata_output" / "sample_map.csv", out / "metadata" / "sample_map.csv")
+    copy_if_exists(sample_dir / "metadata_output" / "metadata_completeness.csv", out / "metadata" / "metadata_completeness.csv")
+    copy_if_exists(sample_dir / "metadata_output" / "metadata_bias_warning.txt", out / "metadata" / "metadata_bias_warning.txt")
     copy_if_exists(sample_dir / "metadata_output" / "metadata_engine.txt", out / "metadata" / "metadata_engine.txt")
     copy_if_exists(sample_dir / "metadata_analysis" / "metadata_analysis_report.md", out / "metadata_analysis" / "metadata_analysis_report.md")
     copy_if_exists(sample_dir / "metadata_analysis" / "tables" / "field_coverage_summary.csv", out / "metadata_analysis" / "tables" / "field_coverage_summary.csv")
@@ -65,6 +78,23 @@ def main():
     copy_if_exists(sample_dir / "sequence" / "failed_accessions.txt", out / "sequence" / "failed_accessions.txt")
     copy_if_exists(sample_dir / "abricate" / "ncbi_summary.tab", out / "amr" / "ncbi_summary.tab")
     copy_if_exists(sample_dir / "abricate" / "ncbi_results.tab", out / "amr" / "ncbi_results.tab")
+    for database_dir in [
+        "ncbi",
+        "vfdb",
+        "plasmidfinder",
+        "mobileelementfinder",
+        "isfinder",
+        "integronfinder",
+        "iceberg",
+        "mlst",
+        "defensefinder",
+        "prophage",
+        "cross_database",
+        "temporal",
+        "report",
+    ]:
+        copytree_if_exists(sample_dir / database_dir, out / database_dir)
+    copytree_if_exists(sample_dir / "tool_results", out / "tool_results")
     copy_if_exists(sample_dir / "qc" / "qc_master_report.csv", out / "qc" / "qc_master_report.csv")
     copy_if_exists(sample_dir / "qc" / "excluded_for_panr2.csv", out / "qc" / "excluded_for_panr2.csv")
     copy_if_exists(sample_dir / "ani" / "analysis" / "panr2_ani_summary.csv", out / "ani" / "analysis" / "panr2_ani_summary.csv")

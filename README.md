@@ -14,13 +14,17 @@ PanResistome integrates several state-of-the-art tools including:
 * [**QUAST**](https://github.com/ablab/quast): for assembly structure metrics such as N50, contig count, GC, and total length
 * [**FastANI/skani**](https://github.com/ParBLiSS/FastANI): for pairwise ANI, species-consistency screening, and near-duplicate clustering
 * [**Mash**](https://github.com/marbl/Mash): for optional fast sketch-based distance pre-screening
-* [**ABRicate**](https://github.com/tseemann/abricate): for resistance gene annotation using curated NCBI-compatible databases
-* [**PanR2**](https://github.com/Tasnimul-Arabi-Anik/PanR2): for downstream statistical analysis and interactive visualization of resistome data
+* [**ABRicate**](https://github.com/tseemann/abricate): for AMR, virulence, and plasmid database annotation through the PanR2 comprehensive mode
+* [**MobileElementFinder**](https://bitbucket.org/genomicepidemiology/mobileelementfinder): for mobile genetic element annotation in comprehensive mode
+* [**IntegronFinder**](https://github.com/gem-pasteur/Integron_Finder): for integron annotation in comprehensive mode
+* [**MLST**](https://github.com/tseemann/mlst): for sequence-type context in comprehensive mode
+* [**PanR2**](https://github.com/Tasnimul-Arabi-Anik/PanR2): for downstream statistical analysis, cross-database associations, reports, and interactive visualization
 
 ## Key Features
 
 * 🔄 **Fully automated** end-to-end pipeline from genome download to visualization
 * 🧬 **Panresistome analysis** using resistance gene profiling from ABRicate
+* 🧫 **Comprehensive feature mode** for NCBI AMR, VFDB, PlasmidFinder, MobileElementFinder, IntegronFinder, and MLST through PanR2
 * 📊 **Visualization-ready outputs** including heatmaps, barplots, boxplots, and interactive HTML figures
 * 📈 **Statistical summaries** and correlation-based insights on resistance gene distribution
 * 🌍 **Geospatial & temporal comparison** of AMR gene prevalence
@@ -33,12 +37,12 @@ PanResistome integrates several state-of-the-art tools including:
 ## Workflow Overview
 
 ```
-+-------------+   +-------------+   +----------------------+   +----------+   +-------+
-|   FetchM2   |-->| Sequence QC |-->| CheckM2/QUAST/ANI/QC |-->| ABRicate |-->| PanR2 |
-+-------------+   +-------------+   +----------------------+   +----------+   +-------+
-| Assemblies  |   | Assembly    |   | Heavy comparative    |   | AMR gene |   | Report|
-| & metadata  |   | stats       |   | genomics + filtering |   | calls    |   | plots |
-+-------------+   +-------------+   +----------------------+   +----------+   +-------+
++-------------+   +-------------+   +----------------------+   +----------------------+   +-------+
+|   FetchM2   |-->| Sequence QC |-->| CheckM2/QUAST/ANI/QC |-->| PanR2 comprehensive  |-->| Report|
++-------------+   +-------------+   +----------------------+   +----------------------+   +-------+
+| Assemblies  |   | Assembly    |   | Heavy comparative    |   | ABRicate databases, |   | plots |
+| & metadata  |   | stats       |   | genomics + filtering |   | MGE, integron, MLST |   | HTML  |
++-------------+   +-------------+   +----------------------+   +----------------------+   +-------+
 
 Optional: add `--run_gtdbtk true`, `--run_quast true`, `--run_ani true`, or `--run_mash true` to insert heavier comparative-genomics checks before ABRicate and PanR2.
 ```
@@ -54,6 +58,10 @@ For a lighter validation run on modest hardware, use `--stop_after_qc true`. Thi
 GTDB-Tk is disabled by default because it is resource-intensive. If enabled, it requires its reference data to be available in the run environment. If `GTDBTK_DATA_PATH` is not configured globally, pass the location with `--gtdbtk_data_path /path/to/gtdbtk_data`. Taxonomy matching compares GTDB-Tk classification against the organism/species metadata at genus rank by default; use `--taxonomy_match_rank species` for stricter matching.
 
 QUAST, FastANI/skani, and Mash are also optional. They are part of PanResistome because they require external tools and can be expensive on large genome sets. Their outputs are summarized into standardized tables and exported under `panr2_inputs/` for PanR2 to analyze without inheriting the heavy dependencies.
+
+For the broader database/tool workflow, add `--run_panr2_comprehensive true`. This makes PanResistome call PanR2's integrated runners from the pinned comprehensive Conda environment. The tested default comprehensive mode runs ABRicate `ncbi`, `vfdb`, and `plasmidfinder`, plus MobileElementFinder, IntegronFinder, and MLST. It also writes PanR2 database-specific folders, cross-database associations, temporal summaries, a top-level dashboard at `report/index.html`, citations, software versions, and a standardized `panr2_inputs/` handoff bundle.
+
+DefenseFinder remains available as `--panr2_run_defensefinder true`, but it is not part of the default comprehensive mode until its Conda dependency stack is stable across fresh installs. GTDB-Tk remains off by default because it requires a large external reference database.
 
 ---
 
@@ -226,6 +234,13 @@ PanResistome/
 | `--run_mash`            | bool  | false   | Enable Mash sketch/distance pre-screening        |
 | `--representative_only` | bool  | false   | Keep one representative per near-duplicate ANI cluster when filtering |
 | `--export_panr2_inputs` | bool  | true    | Export standardized `panr2_inputs/` handoff directory |
+| `--run_panr2_comprehensive` | bool | false | Run PanR2 integrated ABRicate NCBI/VFDB/PlasmidFinder, MobileElementFinder, IntegronFinder, and MLST |
+| `--panr2_setup_abricate_db` | bool | true | Run `panr setup-db` before comprehensive analysis |
+| `--panr2_abricate_dbs` | str | ncbi,vfdb,plasmidfinder | ABRicate databases used in comprehensive mode; add `isfinder` only if installed |
+| `--panr2_run_defensefinder` | bool | false | Add DefenseFinder when a working installation is available |
+| `--panr2_min_identity` | float | 90 | Minimum identity threshold for PanR2 feature calls |
+| `--panr2_plot_style` | str | publication | PanR2 plot preset: `publication`, `dashboard`, or `compact` |
+| `--panr2_label_max_length` | int | 40 | Maximum feature label length in crowded plots |
 
 ### 🔧 Other Options
 
@@ -253,6 +268,10 @@ results/
     │   ├── fetchm2_clean.csv
     │   ├── fetchm2_clean.tsv
     │   ├── fetchm2_all_assemblies.csv
+    │   ├── sample_map.csv
+    │   ├── metadata_completeness.csv
+    │   ├── metadata_bias_warning.txt
+    │   ├── fetchm2_manifest.json
     │   ├── fetchm2_report.md
     │   ├── metadata_engine.txt
     │   ├── ncbi_clean.csv
@@ -277,6 +296,15 @@ results/
     │       └── ani_outliers.csv
     ├── mash/                  # only when --run_mash true
     │   └── analysis/
+    ├── vfdb/                  # only when --run_panr2_comprehensive true
+    ├── plasmidfinder/         # only when --run_panr2_comprehensive true
+    ├── mobileelementfinder/   # only when --run_panr2_comprehensive true
+    ├── integronfinder/        # only when --run_panr2_comprehensive true
+    ├── mlst/                  # only when --run_panr2_comprehensive true
+    ├── cross_database/        # PanR2 cross-feature associations
+    ├── temporal/              # PanR2 temporal trend summaries
+    ├── report/                # PanR2 report, dashboard, citations
+    │   └── index.html
     ├── qc/
     │   ├── qc_master_report.csv
     │   ├── qc_pass_samples.txt
