@@ -23,6 +23,28 @@ Required columns:
 | `tool_version` | Tool version if available |
 | `database_version` | Database version/date if available |
 
+Optional standardized columns may also be present and should be preserved by downstream tools when possible:
+
+```text
+feature_name
+feature_description
+feature_subcategory
+mechanism
+drug_class
+product
+sequence_id
+strand
+source_table
+source_file
+source_database
+raw_feature_id
+raw_category
+raw_method
+evidence_type
+confidence
+notes
+```
+
 ## Current PanResistome Exports
 
 PanResistome writes `panr2_inputs/` after annotation when `--export_panr2_inputs true`. FetchM2 is the default metadata source, but PanResistome also writes legacy-compatible `ncbi_clean.csv` files so PanR2 and older downstream scripts can read the same run.
@@ -32,6 +54,7 @@ For external table inputs whose sample names do not contain `GCF_`/`GCA_` assemb
 ```text
 panr2_inputs/
 ├── metadata/ncbi_clean.csv
+├── metadata/ncbi_clean_qc_pass.csv
 ├── metadata/fetchm2_clean.csv
 ├── metadata/fetchm2_clean.tsv
 ├── metadata/fetchm2_all_assemblies.csv
@@ -57,6 +80,24 @@ panr2_inputs/
 │   ├── amr.features.tsv
 │   ├── amrfinderplus.features.tsv
 │   └── <database>.features.tsv
+├── feature_matrices/
+│   ├── all_features_presence_absence.tsv
+│   └── <database>_presence_absence.tsv
+├── metadata_feature_analysis/
+│   ├── fetchm2_metadata_audit.tsv
+│   ├── metadata_column_eligibility.tsv
+│   ├── metadata_normalized_for_analysis.tsv
+│   ├── feature_eligibility.tsv
+│   ├── database_burden_by_sample.tsv
+│   ├── top_findings.tsv
+│   ├── top_findings.md
+│   └── prevalence_tables/
+├── cross_database/
+│   ├── feature_cooccurrence.tsv
+│   ├── database_cooccurrence_summary.tsv
+│   ├── amr_mge_context.tsv
+│   ├── amr_plasmid_context.tsv
+│   └── amrfinder_abricate_concordance.tsv
 ├── ani/analysis/panr2_ani_summary.csv
 ├── assembly_qc/analysis/panr2_quast_summary.csv
 ├── vfdb/
@@ -79,8 +120,13 @@ panr2_inputs/
 └── manifest/
     ├── software_versions.csv
     ├── panr2_feature_contract_columns.txt
+    ├── panr2_feature_contract_all_columns.txt
     ├── schema_validation_report.csv
     ├── schema_validation_summary.txt
+    ├── feature_completeness_audit.tsv
+    ├── module_status_summary.tsv
+    ├── invalid_feature_rows.csv
+    ├── duplicate_features.csv
     └── unmatched_features.csv
 ```
 

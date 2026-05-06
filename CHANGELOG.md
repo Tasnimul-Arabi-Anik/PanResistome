@@ -6,6 +6,11 @@
 - Optional NCBI AMRFinderPlus runner (`--run_amrfinderplus`) and precomputed table input (`--amrfinderplus_dir`) with version capture and standardized PanR2 contract export.
 - Analysis profile presets through `--analysis_profile` for `qc_only`, `amr_basic`, `amr_vp`, `amr_vp_mge`, and `comprehensive` runs.
 - Strict `panr2_inputs/features/*.features.tsv` contract exports plus schema validation reports, unmatched-feature reports, and all-feature merged tables.
+- Optional standardized PanR2 feature columns for feature names/descriptions, mechanism, drug class, source table/file, raw IDs, evidence type, confidence, and notes.
+- Feature completeness audit, module status summary, invalid/duplicate feature reports, metadata audit, metadata eligibility, feature eligibility, prevalence tables, database burden summaries, feature matrices, and cross-database context outputs with exact Fisher screening p-values and BH-FDR q-values in the PanR2 handoff bundle.
+- MLST results are now standardized into `panr2_inputs/features/mlst.features.tsv`, including sequence-type and allele-level feature rows.
+- Reproducible current NCBI Assembly validation input for `Delftia tsuruhatensis` under `validation/delftia_tsuruhatensis_current/`.
+- `scripts/generate_ncbi_assembly_input.py` for creating FetchM2/PanResistome-compatible validation inputs from NCBI Assembly E-utilities.
 - README module stability table clarifying stable, active-development, and experimental modules for public users.
 - `pytest.ini` limiting test discovery to repository tests so local runs do not collect Nextflow work-directory Conda package tests.
 

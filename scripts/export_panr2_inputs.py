@@ -5,7 +5,7 @@ import re
 import shutil
 from pathlib import Path
 
-from panr2_contract import CONTRACT_COLUMNS, export_contract
+from panr2_contract import CONTRACT_COLUMNS, FEATURE_COLUMNS, export_contract
 
 
 def copy_if_exists(src, dst):
@@ -49,6 +49,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
 
     copy_if_exists(sample_dir / "metadata_output" / "ncbi_clean.csv", out / "metadata" / "ncbi_clean.csv")
+    copy_if_exists(sample_dir / "metadata_output" / "ncbi_clean_qc_pass.csv", out / "metadata" / "ncbi_clean_qc_pass.csv")
     copy_if_exists(sample_dir / "metadata_output" / "ncbi_enriched.csv", out / "metadata" / "ncbi_enriched.csv")
     copy_if_exists(sample_dir / "metadata_output" / "fetchm2_clean.csv", out / "metadata" / "fetchm2_clean.csv")
     copy_if_exists(sample_dir / "metadata_output" / "fetchm2_clean.tsv", out / "metadata" / "fetchm2_clean.tsv")
@@ -134,6 +135,8 @@ def main():
 
     schema_path = out / "manifest" / "panr2_feature_contract_columns.txt"
     schema_path.write_text("\n".join(CONTRACT_COLUMNS) + "\n")
+    all_schema_path = out / "manifest" / "panr2_feature_contract_all_columns.txt"
+    all_schema_path.write_text("\n".join(FEATURE_COLUMNS) + "\n")
     export_contract(sample_dir, out)
 
 

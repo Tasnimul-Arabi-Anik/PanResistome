@@ -82,9 +82,11 @@ class FetchM2AdapterTests(unittest.TestCase):
             metadata_dir = sample_dir / "metadata_output"
             abricate_dir = sample_dir / "abricate"
             amrfinder_dir = sample_dir / "amrfinderplus" / "raw"
+            mlst_dir = sample_dir / "mlst" / "merged_output"
             metadata_dir.mkdir(parents=True)
             abricate_dir.mkdir()
             amrfinder_dir.mkdir(parents=True)
+            mlst_dir.mkdir(parents=True)
 
             pd.DataFrame(
                 [
@@ -106,21 +108,33 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "sampleB\ttet(A)\ttetracycline\t98.2\t99.0\tcontig2\t5\t80\n",
                 encoding="utf-8",
             )
+            (mlst_dir / "mlst_merged.csv").write_text(
+                "Assembly Accession,sample,scheme,st,allele_profile,sequence_type\n"
+                "GCF_000000001.1,sampleA.fna,koxytoca,199,gapA(2);infB(2),koxytoca:ST199\n",
+                encoding="utf-8",
+            )
 
             outputs = export_contract(sample_dir, sample_dir / "panr2_inputs")
 
             self.assertTrue(Path(outputs["amr"]).exists())
             self.assertTrue(Path(outputs["amrfinderplus"]).exists())
+            self.assertTrue(Path(outputs["mlst"]).exists())
             all_features = pd.read_csv(outputs["all_features"], sep="\t")
-            self.assertEqual(set(all_features["database"]), {"amr", "amrfinderplus"})
+            self.assertEqual(set(all_features["database"]), {"amr", "amrfinderplus", "mlst"})
             self.assertEqual(
                 set(all_features["assembly_accession"]),
                 {"GCF_000000001.1", "GCF_000000002.1"},
             )
+            self.assertTrue({"koxytoca:ST199", "ST_199", "gapA_2", "infB_2"}.issubset(set(all_features["feature_id"])))
             summary = Path(outputs["schema_validation_summary"]).read_text(encoding="utf-8")
-            self.assertIn("feature_rows=2", summary)
+            self.assertIn("feature_rows=6", summary)
             unmatched = pd.read_csv(outputs["unmatched_features"])
             self.assertEqual(len(unmatched), 0)
+            audit = pd.read_csv(outputs["feature_completeness_audit"], sep="\t")
+            mlst_status = audit.loc[audit["database"] == "mlst", "status"].iloc[0]
+            self.assertEqual(mlst_status, "PASS")
+            self.assertTrue(Path(outputs["all_feature_matrix"]).exists())
+            self.assertTrue(Path(outputs["feature_cooccurrence"]).exists())
 
 
 if __name__ == "__main__":

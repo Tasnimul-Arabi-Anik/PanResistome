@@ -188,6 +188,30 @@ nextflow run main.nf -profile test
 
 It validates sequence QC, metadata enrichment, pass-only metadata generation, and result collection using `tests/fixtures/local_samples/`.
 
+### Delftia Validation And Example HTML
+
+The repository includes a reproducible current NCBI Assembly input for `Delftia tsuruhatensis` under:
+
+```text
+validation/delftia_tsuruhatensis_current/ncbi_dataset.tsv
+```
+
+It was generated from NCBI Assembly E-utilities with:
+
+```bash
+python scripts/generate_ncbi_assembly_input.py \
+  --organism "Delftia tsuruhatensis" \
+  --outdir validation/delftia_tsuruhatensis_current
+```
+
+A comprehensive run writes the main combined HTML dashboard here:
+
+```text
+validation_runs/delftia_current/<organism>/report/index.html
+```
+
+The full run directory can be large, so the preferred GitHub pattern is to keep the reproducible input and command in git, then publish a trimmed `report/` or GitHub Pages snapshot after manual validation rather than committing genomes, raw databases, and all intermediate outputs.
+
 ## Input
 Download ncbi_dataset.tsv of your target organism(s) from the [NCBI genome database](https://www.ncbi.nlm.nih.gov/datasets/genome/).
 -**ncbi_dataset.tsv**
