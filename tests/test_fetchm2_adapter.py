@@ -9,9 +9,24 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from normalize_fetchm2_output import normalize_fetchm2_output
+from export_panr2_inputs import parse_version_line
 
 
 class FetchM2AdapterTests(unittest.TestCase):
+    def test_parses_tool_named_version_lines(self):
+        self.assertEqual(
+            parse_version_line("seqkit v2.13.0", "fetchm_env_versions"),
+            {"component": "seqkit", "version": "2.13.0"},
+        )
+        self.assertEqual(
+            parse_version_line("abricate 1.4.0", "abricate_env_versions"),
+            {"component": "abricate", "version": "1.4.0"},
+        )
+        self.assertEqual(
+            parse_version_line("QUAST v5.3.0", "quast_env_versions"),
+            {"component": "QUAST", "version": "5.3.0"},
+        )
+
     def test_normalizes_fetchm2_output_to_panresistome_layout(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir) / "fetchm_results"
@@ -35,6 +50,10 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "Assembly Accession\tCountry\nGCF_000001.1\tBangladesh\n",
                 encoding="utf-8",
             )
+            (metadata_dir / "fetchm2_all_assemblies.csv").write_text(
+                "Assembly Accession,Assembly Name\nGCF_000001.1,ASM1\nGCA_000001.1,ASM1\n",
+                encoding="utf-8",
+            )
             (root / "metadata_analysis" / "tables").mkdir(parents=True)
             (root / "audit").mkdir()
             (root / "sequence").mkdir()
@@ -43,6 +62,7 @@ class FetchM2AdapterTests(unittest.TestCase):
 
             self.assertEqual(sample_dir.name, "Klebsiella_oxytoca")
             self.assertTrue((sample_dir / "metadata_output" / "fetchm2_clean.csv").exists())
+            self.assertTrue((sample_dir / "metadata_output" / "fetchm2_all_assemblies.csv").exists())
             self.assertTrue((sample_dir / "metadata_output" / "ncbi_clean.csv").exists())
             self.assertTrue((sample_dir / "metadata_analysis" / "tables").is_dir())
             self.assertTrue((sample_dir / "sequence").is_dir())

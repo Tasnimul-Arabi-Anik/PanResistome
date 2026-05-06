@@ -174,10 +174,12 @@ PanResistome/
 | `--metadata_engine` | str | fetchm2 | Metadata engine: `fetchm2` or reversible legacy `legacy_fetchm` |
 | `--fetchm2_offline` | bool | false | Use FetchM2 offline metadata mode |
 | `--fetchm2_no_analysis` | bool | false | Skip FetchM2 metadata analysis figures/tables |
-| `--fetchm2_download` | bool | true | Download selected assemblies from FetchM2 metadata using the PanResistome downloader |
+| `--fetchm2_download` | bool | true | Download selected assemblies from FetchM2 metadata |
+| `--fetchm2_download_engine` | str | native | Sequence downloader: `native` uses `fetchm2 seq`; `panresistome` uses the fallback downloader |
 | `--fetchm2_workers` | int | 3 | FetchM2 BioSample metadata workers |
 | `--fetchm2_download_workers` | int | 1 | Sequence-download workers; increase cautiously for larger runs |
 | `--fetchm2_max_genomes` | int | - | Maximum genomes selected for sequence download after metadata filtering |
+| `--fetchm2_keep_assembly_duplicates` | bool | false | Keep paired GCA/GCF assembly rows in `fetchm2_clean.csv`; by default FetchM2 keeps one representative row per Assembly Name |
 | `--host`    | str\[] | -       | Host species (e.g., "Homo sapiens", "Bos taurus")     |
 | `--year`    | str\[] | -       | Filter by year or range (e.g., "2015" or "2015-2023") |
 | `--country` | str\[] | -       | Filter by country (e.g., "Bangladesh", "USA")         |
@@ -250,6 +252,7 @@ results/
     ├── metadata_output/     # FetchM2 assembly, annotation, and standardized metadata summary
     │   ├── fetchm2_clean.csv
     │   ├── fetchm2_clean.tsv
+    │   ├── fetchm2_all_assemblies.csv
     │   ├── fetchm2_report.md
     │   ├── metadata_engine.txt
     │   ├── ncbi_clean.csv

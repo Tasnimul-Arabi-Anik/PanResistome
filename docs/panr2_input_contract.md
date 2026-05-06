@@ -32,6 +32,7 @@ panr2_inputs/
 ├── metadata/ncbi_clean.csv
 ├── metadata/fetchm2_clean.csv
 ├── metadata/fetchm2_clean.tsv
+├── metadata/fetchm2_all_assemblies.csv
 ├── metadata/fetchm2_clean_compat.csv
 ├── metadata/fetchm2_report.md
 ├── metadata/metadata_engine.txt

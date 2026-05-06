@@ -3,8 +3,10 @@
 ## Unreleased
 
 ### Added
+- FetchM2 dependency pin updated to `fetchm2==0.1.5`, using its representative GCF-preferred `fetchm2_clean.csv` behavior by default while preserving full uncollapsed rows in `fetchm2_all_assemblies.csv`.
+- `--fetchm2_keep_assembly_duplicates` to pass FetchM2's `--keep-assembly-duplicates` option when users intentionally want paired GCA/GCF rows in `fetchm2_clean.csv`.
+- `--fetchm2_download_engine` with native `fetchm2 seq` as the default downloader and the PanResistome downloader retained as an explicit/fallback path.
 - FetchM2 is now the default metadata engine, adding richer standardized host, source, environment, geography, disease/health, collection-year, and metadata-audit fields while retaining a reversible legacy FetchM mode.
-- PanResistome-owned FetchM2 sequence downloader for robust assembly downloads from `fetchm2_clean.csv`, avoiding the FetchM2 0.1.3 sequence-cache threading failure observed during broader validation.
 - FetchM2 compatibility adapter that preserves `fetchm2_clean.csv/.tsv`, writes legacy-compatible `ncbi_clean.csv`, records `metadata_engine.txt`, and organizes FetchM2 metadata analysis/audit outputs under each sample directory.
 - FetchM2-specific filters for standardized sample type, isolation source, environment medium, and collection-year ranges.
 - PanR2 skip precheck so runs with no valid downstream ABRicate/PanR2 inputs end cleanly and write `panr_output/panr2_input_status.txt`.
@@ -44,6 +46,8 @@
 - FetchM process now writes to an internal work output folder so any `--outdir` value works.
 
 ### Validated
-- Broader FetchM2 validation on `test.tsv` with CheckM2, QUAST, FastANI, Mash, QC filtering, ABRicate, PanR2, and PanR2 handoff export enabled; 80 FetchM2 metadata rows were standardized, 16 assemblies were downloaded for the constrained test subset, and all 17 Nextflow processes completed successfully.
+- FetchM2 0.1.5 smoke validation on `test.tsv` with native `fetchm2 seq`; `fetchm2_clean.csv` contained 40 representative GCF rows, `fetchm2_all_assemblies.csv` contained 80 full rows, and 2/2 selected assemblies downloaded successfully.
+- FetchM2 0.1.5 broader validation on `test.tsv` with native sequence download, CheckM2, QUAST, FastANI, Mash, QC filtering, ABRicate, PanR2, and PanR2 handoff export enabled; all 17 Nextflow processes completed successfully, 16/16 selected assemblies downloaded, `qc_master_status` reported 16 PASS and 24 FAIL rows, and `panr2_inputs/manifest/software_versions.csv` captured `fetchm2==0.1.5`.
+- Earlier FetchM2 adapter validation on `test.tsv` with CheckM2, QUAST, FastANI, Mash, QC filtering, ABRicate, PanR2, and PanR2 handoff export enabled completed successfully before the FetchM2 0.1.5 representative-row update.
 - `test.tsv` through FetchM, sequence QC, and CheckM2 with GTDB-Tk disabled.
 - `test_small.tsv` through FetchM, sequence QC, CheckM2, ABRicate, PanR2, and result collection with `--qc_filter true`.

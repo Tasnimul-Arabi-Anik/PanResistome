@@ -16,12 +16,14 @@ params.metadata_engine = 'fetchm2'
 params.fetchm2_offline = false
 params.fetchm2_no_analysis = false
 params.fetchm2_download = true
+params.fetchm2_download_engine = 'native'
 params.fetchm2_workers = 3
 params.fetchm2_download_workers = 1
 params.fetchm2_retries = 3
 params.fetchm2_retry_delay = 5.0
 params.fetchm2_keep_gz = false
 params.fetchm2_max_genomes = null
+params.fetchm2_keep_assembly_duplicates = false
 params.sample_type = []
 params.isolation_source = []
 params.environment_medium = []
@@ -130,10 +132,12 @@ def helpMessage() {
       --sleep            Time to wait between fetch requests (default: 0.5s)
       --fetchm2_offline   Use FetchM2 offline metadata mode [default: false]
       --fetchm2_no_analysis Skip FetchM2 metadata analysis figures/tables [default: false]
-      --fetchm2_download Download assemblies from FetchM2 metadata with the PanResistome downloader [default: true]
+      --fetchm2_download Download assemblies from FetchM2 metadata [default: true]
+      --fetchm2_download_engine Sequence downloader: native or panresistome [default: native]
       --fetchm2_workers   FetchM2 BioSample fetch workers [default: 3]
-      --fetchm2_download_workers FetchM2 sequence download workers [default: 1; safest for FetchM2 0.1.3 sequence cache]
+      --fetchm2_download_workers FetchM2 sequence download workers [default: 1]
       --fetchm2_max_genomes Maximum genomes selected for FetchM2 sequence download
+      --fetchm2_keep_assembly_duplicates Keep paired GCA/GCF rows in fetchm2_clean.csv [default: false]
 
         🧬 Instead of global resistance analysis, you may do specific analysis by providing: 
       --host             Host species (e.g. "Homo sapiens" "Bos taurus")
@@ -368,6 +372,9 @@ process FETCHM {
     if (params.fetchm2_no_analysis) {
         fetchm2Args << "--no-analysis"
     }
+    if (params.fetchm2_keep_assembly_duplicates) {
+        fetchm2Args << "--keep-assembly-duplicates"
+    }
     def explicitYearOptions = []
     if (params.year_from) {
         explicitYearOptions << "--year-from ${shellQuote(params.year_from)}"
@@ -386,7 +393,17 @@ process FETCHM {
         explicitYearOptions ? explicitYearOptions.join(' ') : yearRangeOptions(params.year),
     ].findAll { it }
     fetchm2Args.addAll(filterArgs)
-    def downloadArgs = [
+    def nativeDownloadArgs = [
+        "--input fetchm_results/metadata_output/fetchm2_clean.csv",
+        "--outdir fetchm_results/sequence",
+        "--download-workers ${params.fetchm2_download_workers}",
+        "--retries ${params.fetchm2_retries}",
+        "--retry-delay ${params.fetchm2_retry_delay}",
+        params.fetchm2_max_genomes ? "--max-genomes ${params.fetchm2_max_genomes}" : "",
+        params.fetchm2_keep_gz ? "--keep-gz" : "",
+    ].findAll { it }
+    nativeDownloadArgs.addAll(filterArgs)
+    def panresistomeDownloadArgs = [
         "--input fetchm_results/metadata_output/fetchm2_clean.csv",
         "--outdir fetchm_results/sequence",
         "--workers ${params.fetchm2_download_workers}",
@@ -395,7 +412,7 @@ process FETCHM {
         params.fetchm2_max_genomes ? "--max-genomes ${params.fetchm2_max_genomes}" : "",
         params.fetchm2_keep_gz ? "--keep-gz" : "",
     ].findAll { it }
-    downloadArgs.addAll(filterArgs)
+    panresistomeDownloadArgs.addAll(filterArgs)
     def legacyArgs = [
         "--input ${input_file}",
         "--outdir fetchm_results/",
@@ -413,7 +430,18 @@ process FETCHM {
     if [ "${params.metadata_engine}" = "fetchm2" ]; then
         fetchm2 metadata ${fetchm2Args.join(' ')}
         if [ "${params.fetchm2_download}" = "true" ]; then
-            python ${baseDir}/scripts/download_fetchm2_sequences.py ${downloadArgs.join(' ')}
+            if [ "${params.fetchm2_download_engine}" = "native" ]; then
+                fetchm2 seq ${nativeDownloadArgs.join(' ')} || {
+                    echo "Warning: native fetchm2 seq failed; falling back to PanResistome downloader" >&2
+                    rm -rf fetchm_results/sequence
+                    python ${baseDir}/scripts/download_fetchm2_sequences.py ${panresistomeDownloadArgs.join(' ')}
+                }
+            elif [ "${params.fetchm2_download_engine}" = "panresistome" ]; then
+                python ${baseDir}/scripts/download_fetchm2_sequences.py ${panresistomeDownloadArgs.join(' ')}
+            else
+                echo "Unsupported fetchm2_download_engine: ${params.fetchm2_download_engine}" >&2
+                exit 1
+            fi
         fi
         python ${baseDir}/scripts/normalize_fetchm2_output.py --results-dir fetchm_results
     elif [ "${params.metadata_engine}" = "legacy_fetchm" ] || [ "${params.metadata_engine}" = "fetchm" ]; then
@@ -1410,9 +1438,10 @@ process EXPORT_PANR2_INPUTS {
     path "${sample_dir}", emit: panr2_inputs_results
 
     script:
+    def versionReportsDir = params.outdir.toString().startsWith("/") ? "${params.outdir}/pipeline_versions" : "${launchDir}/${params.outdir}/pipeline_versions"
     """
     if [ "${params.export_panr2_inputs}" = "true" ]; then
-        python ${baseDir}/scripts/export_panr2_inputs.py --sample-dir ${sample_dir} --versions-dir ${params.outdir}/pipeline_versions
+        python ${baseDir}/scripts/export_panr2_inputs.py --sample-dir ${sample_dir} --versions-dir ${shellQuote(versionReportsDir)}
     fi
     """
 }

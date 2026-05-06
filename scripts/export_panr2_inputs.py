@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import csv
+import re
 import shutil
 from pathlib import Path
 
@@ -18,6 +19,23 @@ def copy_if_exists(src, dst):
         shutil.copy2(src, dst)
 
 
+def parse_version_line(line, fallback_component):
+    if not line or line.startswith("WARNING:"):
+        return None
+    if line.startswith("[") and line.endswith("]"):
+        return {"component": line.strip("[]"), "version": ""}
+    if "==" in line:
+        component, version = line.split("==", 1)
+        return {"component": component.strip(), "version": version.strip()}
+    if "=" in line:
+        component, version = line.split("=", 1)
+        return {"component": component.strip(), "version": version.strip()}
+    match = re.match(r"^([A-Za-z][A-Za-z0-9_.+-]*)\s+(?:version\s+)?v?(.+)$", line)
+    if match and re.search(r"\d", match.group(2)):
+        return {"component": match.group(1).strip(), "version": match.group(2).strip()}
+    return {"component": fallback_component, "version": line}
+
+
 def main():
     parser = argparse.ArgumentParser(description="Export a PanResistome sample directory into PanR2-ready inputs.")
     parser.add_argument("--sample-dir", required=True)
@@ -31,6 +49,7 @@ def main():
     copy_if_exists(sample_dir / "metadata_output" / "ncbi_enriched.csv", out / "metadata" / "ncbi_enriched.csv")
     copy_if_exists(sample_dir / "metadata_output" / "fetchm2_clean.csv", out / "metadata" / "fetchm2_clean.csv")
     copy_if_exists(sample_dir / "metadata_output" / "fetchm2_clean.tsv", out / "metadata" / "fetchm2_clean.tsv")
+    copy_if_exists(sample_dir / "metadata_output" / "fetchm2_all_assemblies.csv", out / "metadata" / "fetchm2_all_assemblies.csv")
     copy_if_exists(sample_dir / "metadata_output" / "fetchm2_clean_compat.csv", out / "metadata" / "fetchm2_clean_compat.csv")
     copy_if_exists(sample_dir / "metadata_output" / "fetchm2_report.md", out / "metadata" / "fetchm2_report.md")
     copy_if_exists(sample_dir / "metadata_output" / "metadata_engine.txt", out / "metadata" / "metadata_engine.txt")
@@ -70,13 +89,10 @@ def main():
                 manifest_rows.append({"component": version_file.stem, "version": "", "source_file": str(version_file)})
                 continue
             for line in lines:
-                if "==" in line:
-                    component, version = line.split("==", 1)
-                elif "=" in line:
-                    component, version = line.split("=", 1)
-                else:
-                    component, version = version_file.stem, line
-                manifest_rows.append({"component": component.strip(), "version": version.strip(), "source_file": str(version_file)})
+                parsed = parse_version_line(line, version_file.stem)
+                if parsed:
+                    parsed["source_file"] = str(version_file)
+                    manifest_rows.append(parsed)
     manifest_path = out / "manifest" / "software_versions.csv"
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     with manifest_path.open("w", newline="") as handle:

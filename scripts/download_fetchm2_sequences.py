@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Download NCBI assembly FASTA files from FetchM2 clean metadata.
-
-This avoids FetchM2 0.1.3's threaded SQLite cache issue while preserving the
-same sequence output files expected by PanResistome.
-"""
+"""Fallback downloader for NCBI assembly FASTA files from FetchM2 metadata."""
 
 from __future__ import annotations
 
