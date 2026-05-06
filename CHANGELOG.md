@@ -3,7 +3,16 @@
 ## Unreleased
 
 ### Added
-- FetchM2 dependency pin updated to `fetchm2==0.1.5`, using its representative GCF-preferred `fetchm2_clean.csv` behavior by default while preserving full uncollapsed rows in `fetchm2_all_assemblies.csv`.
+- FetchM2 dependency pin updated to `fetchm2==0.1.7`, including downstream contract files such as `sample_map.csv`, `metadata_completeness.csv`, `metadata_bias_warning.txt`, and `fetchm2_manifest.json`.
+- Comprehensive PanR2 mode now pins PanR2 commit `b25c58e`, adding PanR2 analysis support for MOB-suite, Kleborate, Kaptive, ECTyper, SerotypeFinder, and SCCmecFinder table inputs.
+- Automatic CheckM2 database download support through `--checkm2_auto_download_db` and `--checkm2_db_dir` when `--checkm2_db` is not supplied.
+- Optional MOB-suite plasmid reconstruction/typing process with PanR2 handoff under `mobsuite/`.
+- Optional geNomad prophage/viral-region process with PanR2 handoff under `prophage/` when a geNomad database is provided.
+- Optional organism-specific typing process for Kleborate, Kaptive, and ECTyper, plus SerotypeFinder/SCCmecFinder table passthrough to PanR2.
+- Explicit precomputed table passthrough parameters for DefenseFinder, MOB-suite, prophage/geNomad-style tables, Kleborate, Kaptive, ECTyper, SerotypeFinder, and SCCmecFinder so PanR2 can analyze these feature families without forcing every external runner into the default environment.
+- `--panr2_sample_map` passthrough plus automatic use of FetchM2 `metadata_output/sample_map.csv` when available for matching external tool sample IDs to assembly accessions.
+- A `mamba` Nextflow profile and bootstrap guidance for faster optional heavy-tool environment resolution.
+- FetchM2 representative GCF-preferred `fetchm2_clean.csv` behavior is used by default while preserving full uncollapsed rows in `fetchm2_all_assemblies.csv`.
 - `--fetchm2_keep_assembly_duplicates` to pass FetchM2's `--keep-assembly-duplicates` option when users intentionally want paired GCA/GCF rows in `fetchm2_clean.csv`.
 - `--fetchm2_download_engine` with native `fetchm2 seq` as the default downloader and the PanResistome downloader retained as an explicit/fallback path.
 - FetchM2 is now the default metadata engine, adding richer standardized host, source, environment, geography, disease/health, collection-year, and metadata-audit fields while retaining a reversible legacy FetchM mode.

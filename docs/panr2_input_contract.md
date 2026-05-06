@@ -10,7 +10,7 @@ Required columns:
 | --- | --- |
 | `sample_id` | Local sample name, filename stem, or user-provided sample identifier |
 | `assembly_accession` | Stable assembly accession or normalized genome ID used for merging |
-| `database` | Feature family or database name, for example `amr`, `vfdb`, `plasmidfinder`, `ani`, `assembly_qc` |
+| `database` | Feature family or database name, for example `amr`, `vfdb`, `plasmidfinder`, `mobileelementfinder`, `integronfinder`, `mlst`, `defensefinder`, `mobsuite`, `prophage`, `kleborate`, `kaptive`, `ectyper`, `serotypefinder`, `sccmecfinder`, `ani`, or `assembly_qc` |
 | `feature_id` | Gene, replicon, system, type, cluster, or feature identifier |
 | `feature_category` | Higher-level category where available |
 | `presence` | `1` for present, `0` for absent |
@@ -26,6 +26,8 @@ Required columns:
 ## Current PanResistome Exports
 
 PanResistome writes `panr2_inputs/` after annotation when `--export_panr2_inputs true`. FetchM2 is the default metadata source, but PanResistome also writes legacy-compatible `ncbi_clean.csv` files so PanR2 and older downstream scripts can read the same run.
+
+For external table inputs whose sample names do not contain `GCF_`/`GCA_` assembly accessions, pass `--panr2_sample_map path/to/sample_map.csv` to PanResistome. The map must contain `sample_id` and `Assembly Accession` columns. When FetchM2 writes `metadata_output/sample_map.csv`, PanResistome passes it to PanR2 automatically.
 
 ```text
 panr2_inputs/
@@ -57,6 +59,14 @@ panr2_inputs/
 ├── mobileelementfinder/
 ├── integronfinder/
 ├── mlst/
+├── defensefinder/
+├── mobsuite/
+├── prophage/
+├── kleborate/
+├── kaptive/
+├── ectyper/
+├── serotypefinder/
+├── sccmecfinder/
 ├── cross_database/
 ├── report/
 ├── qc/qc_master_report.csv

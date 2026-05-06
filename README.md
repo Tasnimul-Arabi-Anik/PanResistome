@@ -18,13 +18,16 @@ PanResistome integrates several state-of-the-art tools including:
 * [**MobileElementFinder**](https://bitbucket.org/genomicepidemiology/mobileelementfinder): for mobile genetic element annotation in comprehensive mode
 * [**IntegronFinder**](https://github.com/gem-pasteur/Integron_Finder): for integron annotation in comprehensive mode
 * [**MLST**](https://github.com/tseemann/mlst): for sequence-type context in comprehensive mode
+* [**MOB-suite**](https://github.com/phac-nml/mob-suite): optional plasmid reconstruction/typing before PanR2 analysis
+* [**geNomad**](https://github.com/apcamargo/genomad): optional prophage/viral-region annotation when a geNomad database is provided
+* **Organism-specific typing modules**: optional Kleborate/Kaptive/ECTyper table generation or ingestion for organism-focused comparative genomics
 * [**PanR2**](https://github.com/Tasnimul-Arabi-Anik/PanR2): for downstream statistical analysis, cross-database associations, reports, and interactive visualization
 
 ## Key Features
 
 * 🔄 **Fully automated** end-to-end pipeline from genome download to visualization
 * 🧬 **Panresistome analysis** using resistance gene profiling from ABRicate
-* 🧫 **Comprehensive feature mode** for NCBI AMR, VFDB, PlasmidFinder, MobileElementFinder, IntegronFinder, and MLST through PanR2
+* 🧫 **Comprehensive feature mode** for NCBI AMR, VFDB, PlasmidFinder, MobileElementFinder, IntegronFinder, MLST, optional MOB-suite, prophage/geNomad, and organism-specific typing tables through PanR2
 * 📊 **Visualization-ready outputs** including heatmaps, barplots, boxplots, and interactive HTML figures
 * 📈 **Statistical summaries** and correlation-based insights on resistance gene distribution
 * 🌍 **Geospatial & temporal comparison** of AMR gene prevalence
@@ -51,7 +54,7 @@ Each run also writes Conda environment version reports under `pipeline_versions/
 
 Sequence QC filtering is optional. By default, the pipeline reports QC metrics but keeps all assemblies for downstream analysis. Add `--qc_filter true` with one or more thresholds to exclude failed assemblies from ABRicate, PanR2, and later tools.
 
-CheckM2 requires its genome-quality database to be available in the run environment. If it is not configured globally, pass the database location with `--checkm2_db /path/to/checkm2_database`.
+CheckM2 is enabled by default. If `--checkm2_db` is not provided, PanResistome now attempts to download the CheckM2 database automatically under `<outdir>/databases/checkm2` unless `--checkm2_auto_download_db false` is set. This improves the one-command user path, but the database is large, so users on restricted networks can still pre-download it and pass `--checkm2_db /path/to/checkm2_database.dmnd`.
 
 For a lighter validation run on modest hardware, use `--stop_after_qc true`. This runs FetchM2 metadata processing, sequence QC, and CheckM2, then collects QC outputs without running GTDB-Tk, ABRicate, or PanR2.
 
@@ -63,6 +66,31 @@ For the broader database/tool workflow, add `--run_panr2_comprehensive true`. Th
 
 DefenseFinder remains available as `--panr2_run_defensefinder true`, but it is not part of the default comprehensive mode until its Conda dependency stack is stable across fresh installs. GTDB-Tk remains off by default because it requires a large external reference database.
 
+Optional heavy modules can be inserted before PanR2:
+
+```bash
+--run_mobsuite true
+--run_genomad true --genomad_db /path/to/genomad_db
+--run_kleborate true
+--run_ectyper true
+--run_kaptive true --kaptive_db /path/to/kaptive_db
+```
+
+The same feature families can also be supplied as precomputed tables without running the external tools inside PanResistome:
+
+```bash
+--mobsuite_dir /path/to/mobsuite_tables
+--defensefinder_dir /path/to/defensefinder_tables
+--prophage_dir /path/to/prophage_tables
+--kleborate_dir /path/to/kleborate_tables
+--kaptive_dir /path/to/kaptive_tables
+--ectyper_dir /path/to/ectyper_tables
+--serotypefinder_dir /path/to/serotypefinder_tables
+--sccmecfinder_dir /path/to/sccmecfinder_tables
+```
+
+This table-input path is the preferred stable route for organism-specific typing and CGE outputs until their database setup is reproducible across fresh machines. SerotypeFinder and SCCmecFinder are currently supported as PanR2-compatible table inputs; their CGE database-driven runners are intentionally kept outside the default environment.
+
 ---
 
 ## 🚀 Getting Started
@@ -71,6 +99,7 @@ DefenseFinder remains available as `--panr2_run_defensefinder true`, but it is n
 
 * [Nextflow](https://www.nextflow.io/)
 * [Conda](https://docs.conda.io/en/latest/)
+* [Mamba](https://mamba.readthedocs.io/) is strongly recommended for optional heavy-tool environments
 * Git
 
 ### 🔧 Installation
@@ -101,6 +130,8 @@ scripts/bootstrap.sh \
 ```
 
 The script prints ready-to-run validation and full pipeline commands using the checked paths.
+
+For the most practical fresh-install experience, use `-profile conda,mamba` when mamba is available. Plain `-profile conda` remains supported, but optional heavy environments such as MOB-suite, geNomad, Kleborate, Kaptive, and ECTyper can solve slowly with classic conda on some systems.
 
 ### 🧪 Offline CI Test
 
@@ -219,6 +250,8 @@ PanResistome/
 | `--max_gc`              | float | -       | Maximum GC percentage allowed to pass QC         |
 | `--max_ambiguous_bases` | int   | -       | Maximum ambiguous/gap bases allowed to pass QC   |
 | `--checkm2_db`          | path  | -       | Optional CheckM2 database path                   |
+| `--checkm2_auto_download_db` | bool | true | Download the CheckM2 database automatically when no database path is provided |
+| `--checkm2_db_dir`      | path  | `<outdir>/databases/checkm2` | CheckM2 database download/cache directory |
 | `--min_completeness`    | float | -       | Minimum CheckM2 completeness required to pass QC |
 | `--max_contamination`   | float | -       | Maximum CheckM2 contamination allowed to pass QC |
 | `--checkm2_lowmem`      | bool  | true    | Run CheckM2 in low-memory mode                   |
@@ -238,9 +271,26 @@ PanResistome/
 | `--panr2_setup_abricate_db` | bool | true | Run `panr setup-db` before comprehensive analysis |
 | `--panr2_abricate_dbs` | str | ncbi,vfdb,plasmidfinder | ABRicate databases used in comprehensive mode; add `isfinder` only if installed |
 | `--panr2_run_defensefinder` | bool | false | Add DefenseFinder when a working installation is available |
+| `--defensefinder_dir` | path | - | Existing DefenseFinder table directory to pass into PanR2 |
 | `--panr2_min_identity` | float | 90 | Minimum identity threshold for PanR2 feature calls |
 | `--panr2_plot_style` | str | publication | PanR2 plot preset: `publication`, `dashboard`, or `compact` |
 | `--panr2_label_max_length` | int | 40 | Maximum feature label length in crowded plots |
+| `--panr2_sample_map` | path | - | Optional `sample_id` to `Assembly Accession` map for external PanR2 table inputs; FetchM2 `sample_map.csv` is used automatically when present |
+| `--run_mobsuite` | bool | false | Run MOB-suite and pass plasmid reconstruction/typing tables into PanR2 |
+| `--mobsuite_dir` | path | - | Existing MOB-suite table directory to pass into PanR2 |
+| `--run_genomad` | bool | false | Run geNomad and pass prophage/viral-region tables into PanR2 |
+| `--prophage_dir` | path | - | Existing prophage/viral-region table directory to pass into PanR2 |
+| `--genomad_db` | path | - | geNomad database directory required for `--run_genomad true` |
+| `--run_organism_specific_typing` | bool | false | Run available organism-specific typing helpers |
+| `--run_kleborate` | bool | false | Run Kleborate when available |
+| `--kleborate_dir` | path | - | Existing Kleborate table directory to pass into PanR2 |
+| `--run_kaptive` | bool | false | Run Kaptive when `--kaptive_db` is provided |
+| `--kaptive_dir` | path | - | Existing Kaptive table directory to pass into PanR2 |
+| `--kaptive_db` | path | - | Kaptive database path |
+| `--run_ectyper` | bool | false | Run ECTyper when available |
+| `--ectyper_dir` | path | - | Existing ECTyper table directory to pass into PanR2 |
+| `--serotypefinder_dir` | path | - | Existing SerotypeFinder table directory to pass into PanR2 |
+| `--sccmecfinder_dir` | path | - | Existing SCCmecFinder table directory to pass into PanR2 |
 
 ### 🔧 Other Options
 
@@ -301,6 +351,13 @@ results/
     ├── mobileelementfinder/   # only when --run_panr2_comprehensive true
     ├── integronfinder/        # only when --run_panr2_comprehensive true
     ├── mlst/                  # only when --run_panr2_comprehensive true
+    ├── mobsuite/              # only when --run_mobsuite true
+    ├── prophage/              # only when --run_genomad true or prophage tables are supplied
+    ├── kleborate/             # only when organism typing is enabled/supplied
+    ├── kaptive/
+    ├── ectyper/
+    ├── serotypefinder/
+    ├── sccmecfinder/
     ├── cross_database/        # PanR2 cross-feature associations
     ├── temporal/              # PanR2 temporal trend summaries
     ├── report/                # PanR2 report, dashboard, citations

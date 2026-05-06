@@ -49,6 +49,8 @@ params.min_gc = null
 params.max_gc = null
 params.max_ambiguous_bases = null
 params.checkm2_db = null
+params.checkm2_auto_download_db = true
+params.checkm2_db_dir = null
 params.min_completeness = null
 params.max_contamination = null
 params.run_checkm2 = true
@@ -74,6 +76,23 @@ params.panr2_label_max_length = 40
 params.panr2_cross_database_max_features = 300
 params.panr2_force_tool_run = false
 params.panr2_run_defensefinder = false
+params.panr2_sample_map = null
+params.defensefinder_dir = null
+params.run_mobsuite = false
+params.mobsuite_dir = null
+params.run_genomad = false
+params.prophage_dir = null
+params.genomad_db = null
+params.run_organism_specific_typing = false
+params.run_kleborate = false
+params.kleborate_dir = null
+params.run_kaptive = false
+params.kaptive_dir = null
+params.kaptive_db = null
+params.run_ectyper = false
+params.ectyper_dir = null
+params.serotypefinder_dir = null
+params.sccmecfinder_dir = null
 
 
 def paramList(value) {
@@ -88,6 +107,14 @@ def paramList(value) {
 
 def shellQuote(value) {
     return "'" + value.toString().replace("'", "'\"'\"'") + "'"
+}
+
+def launchPath(value) {
+    if (!value) {
+        return ""
+    }
+    def text = value.toString()
+    return text.startsWith("/") ? text : "${launchDir}/${text}"
 }
 
 def joinedOption(name, value) {
@@ -176,6 +203,8 @@ def helpMessage() {
       --max_gc                 Maximum GC percentage allowed to pass QC
       --max_ambiguous_bases    Maximum ambiguous/gap bases allowed to pass QC
       --checkm2_db             Optional CheckM2 database path
+      --checkm2_auto_download_db Download CheckM2 database automatically when --checkm2_db is not provided [default: true]
+      --checkm2_db_dir         Directory for automatic CheckM2 database download [default: <outdir>/databases/checkm2]
       --min_completeness       Minimum CheckM2 completeness required to pass QC
       --max_contamination      Maximum CheckM2 contamination allowed to pass QC
       --checkm2_lowmem         Run CheckM2 in low-memory mode [default: true]
@@ -193,11 +222,28 @@ def helpMessage() {
       --export_panr2_inputs    Export standardized panr2_inputs handoff directory [default: true]
       --run_panr2_comprehensive Run PanR2 integrated runners for ABRicate ncbi/vfdb/plasmidfinder, MobileElementFinder, IntegronFinder, and MLST [default: false]
       --panr2_run_defensefinder Add DefenseFinder to comprehensive PanR2 mode when a working installation is available [default: false]
+      --defensefinder_dir      Existing DefenseFinder table directory to pass into PanR2
       --panr2_setup_abricate_db Run panr setup-db before comprehensive PanR2 analysis [default: true]
       --panr2_abricate_dbs     ABRicate databases for PanR2 comprehensive mode [default: ncbi,vfdb,plasmidfinder; add isfinder only if installed]
       --panr2_min_identity     Minimum identity for PanR2 integrated feature analysis [default: 90]
       --panr2_plot_style       PanR2 plot style: publication, dashboard, compact [default: publication]
       --panr2_label_max_length Maximum feature-label length in PanR2 plots [default: 40]
+      --panr2_sample_map       Optional sample_id to Assembly Accession map for external PanR2 table inputs
+      --run_mobsuite           Run MOB-suite plasmid reconstruction/typing and pass outputs to PanR2 [default: false]
+      --mobsuite_dir           Existing MOB-suite table directory to pass into PanR2
+      --run_genomad            Run geNomad viral/prophage annotation and pass outputs to PanR2 [default: false]
+      --prophage_dir           Existing prophage/viral-region table directory to pass into PanR2
+      --genomad_db             geNomad database directory, required when --run_genomad true
+      --run_organism_specific_typing Run organism-specific typing helpers where applicable [default: false]
+      --run_kleborate          Run Kleborate and pass outputs to PanR2 [default: false]
+      --kleborate_dir          Existing Kleborate table directory to pass into PanR2
+      --run_kaptive            Run Kaptive when --kaptive_db is provided [default: false]
+      --kaptive_dir            Existing Kaptive table directory to pass into PanR2
+      --kaptive_db             Kaptive database path
+      --run_ectyper            Run ECTyper and pass outputs to PanR2 [default: false]
+      --ectyper_dir            Existing ECTyper table directory to pass into PanR2
+      --serotypefinder_dir     Existing SerotypeFinder table directory to pass into PanR2
+      --sccmecfinder_dir       Existing SCCmecFinder table directory to pass into PanR2
       --local_samples          Optional directory of prebuilt sample folders for offline tests
       --run_checkm2            Enable CheckM2 QC [default: true]
 
@@ -381,6 +427,62 @@ process MASH_ENV_VERSIONS {
         echo "[mash_env]"
         mash --version || true
     } > mash_env_versions.txt
+    """
+}
+
+process MOBSUITE_ENV_VERSIONS {
+    conda 'envs/mobsuite.yaml'
+    publishDir "${params.outdir}/pipeline_versions", mode: 'copy'
+
+    output:
+    path "mobsuite_env_versions.txt", emit: mobsuite_versions
+
+    script:
+    """
+    {
+        echo "[mobsuite_env]"
+        echo "pipeline_version=${params.pipeline_version}"
+        date -u +"run_timestamp_utc=%Y-%m-%dT%H:%M:%SZ"
+        mob_recon --version || true
+    } > mobsuite_env_versions.txt
+    """
+}
+
+process GENOMAD_ENV_VERSIONS {
+    conda 'envs/genomad.yaml'
+    publishDir "${params.outdir}/pipeline_versions", mode: 'copy'
+
+    output:
+    path "genomad_env_versions.txt", emit: genomad_versions
+
+    script:
+    """
+    {
+        echo "[genomad_env]"
+        echo "pipeline_version=${params.pipeline_version}"
+        date -u +"run_timestamp_utc=%Y-%m-%dT%H:%M:%SZ"
+        genomad --version || true
+    } > genomad_env_versions.txt
+    """
+}
+
+process ORGANISM_TYPING_ENV_VERSIONS {
+    conda 'envs/organism_typing.yaml'
+    publishDir "${params.outdir}/pipeline_versions", mode: 'copy'
+
+    output:
+    path "organism_typing_env_versions.txt", emit: organism_typing_versions
+
+    script:
+    """
+    {
+        echo "[organism_typing_env]"
+        echo "pipeline_version=${params.pipeline_version}"
+        date -u +"run_timestamp_utc=%Y-%m-%dT%H:%M:%SZ"
+        kleborate --version || true
+        kaptive --version || true
+        ectyper --version || true
+    } > organism_typing_env_versions.txt
     """
 }
 
@@ -799,8 +901,27 @@ process CHECKM2_QC {
     script:
     def checkm2_db_arg = params.checkm2_db ? "--database_path ${params.checkm2_db}" : ""
     def checkm2_lowmem_arg = params.checkm2_lowmem ? "--lowmem" : ""
+    def checkm2DownloadDir = params.checkm2_db_dir ? params.checkm2_db_dir : (params.outdir.toString().startsWith("/") ? "${params.outdir}/databases/checkm2" : "${launchDir}/${params.outdir}/databases/checkm2")
     """
     mkdir -p ${sample_dir}/checkm2
+    checkm2_db_arg="${checkm2_db_arg}"
+
+    if [ -z "\${checkm2_db_arg}" ] && [ "${params.checkm2_auto_download_db}" = "true" ]; then
+        mkdir -p "${checkm2DownloadDir}"
+        existing_db=\$(find "${checkm2DownloadDir}" -name "*.dmnd" -type f -print -quit 2>/dev/null || true)
+        if [ -z "\${existing_db}" ]; then
+            echo "No CheckM2 database provided; downloading to ${checkm2DownloadDir}"
+            checkm2 database --download --path "${checkm2DownloadDir}" --no_write_json_db
+            existing_db=\$(find "${checkm2DownloadDir}" -name "*.dmnd" -type f -print -quit 2>/dev/null || true)
+        fi
+        if [ -n "\${existing_db}" ]; then
+            checkm2_db_arg="--database_path \${existing_db}"
+            echo "Using CheckM2 database: \${existing_db}"
+        else
+            echo "CheckM2 database download did not produce a .dmnd file under ${checkm2DownloadDir}" >&2
+            exit 1
+        fi
+    fi
 
     sequence_dir="${sample_dir}/sequence"
     if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
@@ -812,7 +933,7 @@ process CHECKM2_QC {
             --threads ${params.threads} \\
             --input \${sequence_dir} \\
             --output-directory ${sample_dir}/checkm2 \\
-            -x fna --force ${checkm2_lowmem_arg} ${checkm2_db_arg}
+            -x fna --force ${checkm2_lowmem_arg} \${checkm2_db_arg}
     else
         echo "Warning: No .fna files found in \${sequence_dir}/ for CheckM2" >&2
         printf "Name\\tCompleteness\\tContamination\\n" > ${sample_dir}/checkm2/quality_report.tsv
@@ -1405,6 +1526,130 @@ process MASH_PRESCREEN {
     """
 }
 
+process MOBSUITE_ANALYSIS {
+    conda 'envs/mobsuite.yaml'
+
+    input:
+    path sample_dir
+
+    output:
+    path "${sample_dir}", emit: mobsuite_results
+
+    script:
+    """
+    sequence_dir="${sample_dir}/sequence"
+    if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
+        sequence_dir="${sample_dir}/sequence_filtered"
+    fi
+
+    mkdir -p ${sample_dir}/mobsuite/raw ${sample_dir}/mobsuite/tables
+    if command -v mob_recon >/dev/null 2>&1 && [ -d "\${sequence_dir}" ]; then
+        for fasta in \$(find "\${sequence_dir}" -name "*.fna" | sort); do
+            prefix=\$(basename "\${fasta}" .fna)
+            mkdir -p "${sample_dir}/mobsuite/raw/\${prefix}"
+            mob_recon --infile "\${fasta}" --outdir "${sample_dir}/mobsuite/raw/\${prefix}" --num_threads ${params.threads} || true
+        done
+    else
+        echo "MOB-suite executable mob_recon was not available or no sequence directory was found." > ${sample_dir}/mobsuite/tables/mobsuite_warning.txt
+    fi
+    python ${baseDir}/scripts/collect_optional_tool_tables.py \\
+        --raw-dir ${sample_dir}/mobsuite/raw \\
+        --out ${sample_dir}/mobsuite/tables/mobsuite.tsv \\
+        --tool mobsuite
+    """
+}
+
+process GENOMAD_PROPHAGE {
+    conda 'envs/genomad.yaml'
+
+    input:
+    path sample_dir
+
+    output:
+    path "${sample_dir}", emit: genomad_results
+
+    script:
+    def genomadDbCheck = params.genomad_db ? "true" : "false"
+    """
+    sequence_dir="${sample_dir}/sequence"
+    if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
+        sequence_dir="${sample_dir}/sequence_filtered"
+    fi
+
+    mkdir -p ${sample_dir}/prophage/raw ${sample_dir}/prophage/tables
+    if [ "${genomadDbCheck}" != "true" ]; then
+        echo "geNomad database not provided; pass --genomad_db to run geNomad." > ${sample_dir}/prophage/tables/genomad_warning.txt
+    elif command -v genomad >/dev/null 2>&1 && [ -d "\${sequence_dir}" ]; then
+        for fasta in \$(find "\${sequence_dir}" -name "*.fna" | sort); do
+            prefix=\$(basename "\${fasta}" .fna)
+            mkdir -p "${sample_dir}/prophage/raw/\${prefix}"
+            genomad end-to-end "\${fasta}" "${sample_dir}/prophage/raw/\${prefix}" "${params.genomad_db}" --threads ${params.threads} || true
+        done
+    else
+        echo "geNomad executable was not available or no sequence directory was found." > ${sample_dir}/prophage/tables/genomad_warning.txt
+    fi
+    python ${baseDir}/scripts/collect_optional_tool_tables.py \\
+        --raw-dir ${sample_dir}/prophage/raw \\
+        --out ${sample_dir}/prophage/tables/prophage.tsv \\
+        --tool prophage
+    """
+}
+
+process ORGANISM_SPECIFIC_TYPING {
+    conda 'envs/organism_typing.yaml'
+
+    input:
+    path sample_dir
+
+    output:
+    path "${sample_dir}", emit: organism_typing_results
+
+    script:
+    def runKleborate = (params.run_organism_specific_typing || params.run_kleborate) ? "true" : "false"
+    def runKaptive = (params.run_organism_specific_typing || params.run_kaptive) ? "true" : "false"
+    def runEctyper = (params.run_organism_specific_typing || params.run_ectyper) ? "true" : "false"
+    def kaptiveDbCheck = params.kaptive_db ? "true" : "false"
+    """
+    sequence_dir="${sample_dir}/sequence"
+    if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
+        sequence_dir="${sample_dir}/sequence_filtered"
+    fi
+    fasta_files=\$(find "\${sequence_dir}" -name "*.fna" | sort 2>/dev/null || true)
+
+    if [ "${runKleborate}" = "true" ]; then
+        mkdir -p ${sample_dir}/kleborate/tables
+        if command -v kleborate >/dev/null 2>&1 && [ -n "\${fasta_files}" ]; then
+            kleborate -a \${fasta_files} -o ${sample_dir}/kleborate/tables/kleborate.tsv || true
+        else
+            echo "sample_id\\tstatus" > ${sample_dir}/kleborate/tables/kleborate.tsv
+        fi
+    fi
+
+    if [ "${runKaptive}" = "true" ]; then
+        mkdir -p ${sample_dir}/kaptive/raw ${sample_dir}/kaptive/tables
+        if [ "${kaptiveDbCheck}" = "true" ] && command -v kaptive >/dev/null 2>&1 && [ -n "\${fasta_files}" ]; then
+            for fasta in \${fasta_files}; do
+                prefix=\$(basename "\${fasta}" .fna)
+                kaptive assembly "${params.kaptive_db}" "\${fasta}" > ${sample_dir}/kaptive/raw/\${prefix}.tsv || true
+            done
+            python ${baseDir}/scripts/collect_optional_tool_tables.py --raw-dir ${sample_dir}/kaptive/raw --out ${sample_dir}/kaptive/tables/kaptive.tsv --tool kaptive
+        else
+            echo "sample_id\\tstatus" > ${sample_dir}/kaptive/tables/kaptive.tsv
+        fi
+    fi
+
+    if [ "${runEctyper}" = "true" ]; then
+        mkdir -p ${sample_dir}/ectyper/raw ${sample_dir}/ectyper/tables
+        if command -v ectyper >/dev/null 2>&1 && [ -n "\${fasta_files}" ]; then
+            ectyper -i \${fasta_files} -o ${sample_dir}/ectyper/raw --cores ${params.threads} || true
+            python ${baseDir}/scripts/collect_optional_tool_tables.py --raw-dir ${sample_dir}/ectyper/raw --out ${sample_dir}/ectyper/tables/ectyper.tsv --tool ectyper
+        else
+            echo "sample_id\\tstatus" > ${sample_dir}/ectyper/tables/ectyper.tsv
+        fi
+    fi
+    """
+}
+
 // Process 12: Combined QC decision engine and optional filtering
 process COMBINED_QC {
     conda 'envs/fetchm.yaml'
@@ -1547,7 +1792,34 @@ process PANR2_COMPREHENSIVE {
         optionalArgs << "--run-defensefinder"
     }
     def optionalArgText = optionalArgs.join(' ')
+    def externalFeatureArgs = []
+    if (params.defensefinder_dir) {
+        externalFeatureArgs << "--defensefinder-dir ${launchPath(params.defensefinder_dir)}"
+    }
+    if (params.mobsuite_dir) {
+        externalFeatureArgs << "--mobsuite-dir ${launchPath(params.mobsuite_dir)}"
+    }
+    if (params.prophage_dir) {
+        externalFeatureArgs << "--prophage-dir ${launchPath(params.prophage_dir)}"
+    }
+    if (params.kleborate_dir) {
+        externalFeatureArgs << "--kleborate-dir ${launchPath(params.kleborate_dir)}"
+    }
+    if (params.kaptive_dir) {
+        externalFeatureArgs << "--kaptive-dir ${launchPath(params.kaptive_dir)}"
+    }
+    if (params.ectyper_dir) {
+        externalFeatureArgs << "--ectyper-dir ${launchPath(params.ectyper_dir)}"
+    }
+    if (params.serotypefinder_dir) {
+        externalFeatureArgs << "--serotypefinder-dir ${launchPath(params.serotypefinder_dir)}"
+    }
+    if (params.sccmecfinder_dir) {
+        externalFeatureArgs << "--sccmecfinder-dir ${launchPath(params.sccmecfinder_dir)}"
+    }
+    def externalFeatureArgText = externalFeatureArgs.join(' ')
     def setupCmd = params.panr2_setup_abricate_db ? "panr setup-db --dbs ${params.panr2_abricate_dbs}" : "panr setup-db --dbs ${params.panr2_abricate_dbs} --check-only"
+    def configuredSampleMap = params.panr2_sample_map ? launchPath(params.panr2_sample_map) : ""
     """
     sequence_dir="${sample_dir}/sequence"
     if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
@@ -1567,6 +1839,28 @@ process PANR2_COMPREHENSIVE {
     echo "Preparing ABRicate databases for comprehensive PanR2 analysis: ${params.panr2_abricate_dbs}"
     ${setupCmd}
 
+    sample_map_arg=""
+    if [ -n "${configuredSampleMap}" ]; then
+        sample_map_arg="--sample-map ${configuredSampleMap}"
+    elif [ -f "${sample_dir}/metadata_output/sample_map.csv" ]; then
+        sample_map_arg="--sample-map ${sample_dir}/metadata_output/sample_map.csv"
+    fi
+
+    extra_feature_args="${externalFeatureArgText}"
+    for spec in \\
+        "mobsuite --mobsuite-dir ${sample_dir}/mobsuite/tables" \\
+        "kleborate --kleborate-dir ${sample_dir}/kleborate/tables" \\
+        "kaptive --kaptive-dir ${sample_dir}/kaptive/tables" \\
+        "ectyper --ectyper-dir ${sample_dir}/ectyper/tables" \\
+        "prophage --prophage-dir ${sample_dir}/prophage/tables"; do
+        name=\$(echo "\${spec}" | cut -d' ' -f1)
+        option=\$(echo "\${spec}" | cut -d' ' -f2)
+        directory=\$(echo "\${spec}" | cut -d' ' -f3)
+        if [ -d "\${directory}" ] && python ${baseDir}/scripts/has_feature_table_rows.py "\${directory}"; then
+            extra_feature_args="\${extra_feature_args} \${option} \${directory}"
+            echo "Passing \${name} tables to PanR2: \${directory}"
+        fi
+    done
     echo "Running comprehensive PanR2 for ${sample_name}"
     panr \\
         --ncbi-dir ${sample_dir}/metadata_output/ \\
@@ -1583,7 +1877,9 @@ process PANR2_COMPREHENSIVE {
         --cross-database-max-features ${params.panr2_cross_database_max_features} \\
         --mobileelementfinder-threads ${params.threads} \\
         --integronfinder-threads ${params.threads} \\
-        ${optionalArgText}
+        ${optionalArgText} \\
+        \${sample_map_arg} \\
+        \${extra_feature_args}
     """
 }
 
@@ -1639,6 +1935,18 @@ workflow {
             MASH_ENV_VERSIONS()
             version_reports = version_reports.mix(MASH_ENV_VERSIONS.out.mash_versions)
         }
+        if (params.run_mobsuite) {
+            MOBSUITE_ENV_VERSIONS()
+            version_reports = version_reports.mix(MOBSUITE_ENV_VERSIONS.out.mobsuite_versions)
+        }
+        if (params.run_genomad) {
+            GENOMAD_ENV_VERSIONS()
+            version_reports = version_reports.mix(GENOMAD_ENV_VERSIONS.out.genomad_versions)
+        }
+        if (params.run_organism_specific_typing || params.run_kleborate || params.run_kaptive || params.run_ectyper) {
+            ORGANISM_TYPING_ENV_VERSIONS()
+            version_reports = version_reports.mix(ORGANISM_TYPING_ENV_VERSIONS.out.organism_typing_versions)
+        }
         version_reports.view { version_file -> "Version report saved: ${version_file}" }
     }
     
@@ -1687,6 +1995,21 @@ workflow {
     if (params.run_mash) {
         MASH_PRESCREEN(qc_ready_ch)
         qc_ready_ch = MASH_PRESCREEN.out.mash_results
+    }
+
+    if (params.run_mobsuite) {
+        MOBSUITE_ANALYSIS(qc_ready_ch)
+        qc_ready_ch = MOBSUITE_ANALYSIS.out.mobsuite_results
+    }
+
+    if (params.run_genomad) {
+        GENOMAD_PROPHAGE(qc_ready_ch)
+        qc_ready_ch = GENOMAD_PROPHAGE.out.genomad_results
+    }
+
+    if (params.run_organism_specific_typing || params.run_kleborate || params.run_kaptive || params.run_ectyper) {
+        ORGANISM_SPECIFIC_TYPING(qc_ready_ch)
+        qc_ready_ch = ORGANISM_SPECIFIC_TYPING.out.organism_typing_results
     }
 
     COMBINED_QC(qc_ready_ch)

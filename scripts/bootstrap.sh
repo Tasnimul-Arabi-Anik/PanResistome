@@ -94,6 +94,13 @@ echo "== PanResistome preflight =="
 have git || fail "git is not installed or not on PATH."
 have nextflow || fail "nextflow is not installed or not on PATH."
 have conda || fail "conda/mamba compatible conda command is not installed or not on PATH."
+PROFILE="conda"
+if have mamba; then
+    PROFILE="conda,mamba"
+    echo "OK: mamba found; recommended Nextflow profile: $PROFILE"
+else
+    warn "mamba was not found. Plain conda is supported, but optional heavy-tool environments can solve slowly; install mamba/Miniforge for the recommended profile."
+fi
 
 if ! java -version >/dev/null 2>&1; then
     fail "Java is not installed or not on PATH; Nextflow requires Java."
@@ -101,7 +108,7 @@ fi
 
 echo "OK: required commands found"
 
-for env_file in envs/fetchm.yaml envs/checkm2.yaml envs/abricate.yaml envs/ani.yaml envs/quast.yaml envs/mash.yaml envs/panr2_comprehensive.yaml; do
+for env_file in envs/fetchm.yaml envs/checkm2.yaml envs/abricate.yaml envs/ani.yaml envs/quast.yaml envs/mash.yaml envs/panr2_comprehensive.yaml envs/mobsuite.yaml envs/genomad.yaml envs/organism_typing.yaml; do
     [[ -f "$env_file" ]] || fail "Missing environment file: $env_file"
 done
 
@@ -135,7 +142,7 @@ if [[ -n "$CHECKM2_DB" ]]; then
     CHECKM2_DB="$(abs_path "$CHECKM2_DB")"
     echo "OK: CheckM2 database: $CHECKM2_DB"
 else
-    warn "No CheckM2 database provided. Use --checkm2-db PATH or --download-checkm2-db DIR."
+    warn "No CheckM2 database provided. The pipeline now attempts automatic CheckM2 database download by default; use --checkm2_auto_download_db false to disable it."
 fi
 
 if [[ -n "$GTDBTK_DATA" ]]; then
@@ -152,29 +159,29 @@ echo "OK: Nextflow script syntax"
 
 if [[ "$RUN_ENV_CHECK" == true ]]; then
     echo "Resolving Conda environments through Nextflow"
-    nextflow run main.nf --help -profile conda --run_gtdbtk false --stop_after_qc true >/dev/null
-    echo "OK: Conda profile resolved"
+    nextflow run main.nf --help -profile "$PROFILE" --run_gtdbtk false --stop_after_qc true >/dev/null
+    echo "OK: $PROFILE profile resolved"
 fi
 
 echo
 echo "Preflight complete."
 echo
 echo "Recommended QC validation command:"
-printf "nextflow run main.nf --input test_small.tsv --outdir results_small -profile conda --stop_after_qc true --run_gtdbtk false --threads 8 --db %q" "$ABRICATE_DB"
+printf "nextflow run main.nf --input test_small.tsv --outdir results_small -profile %s --stop_after_qc true --run_gtdbtk false --threads 8 --db %q" "$PROFILE" "$ABRICATE_DB"
 if [[ -n "$CHECKM2_DB" ]]; then
     printf " --checkm2_db %q" "$CHECKM2_DB"
 fi
 echo
 echo
 echo "Recommended full command after QC validation:"
-printf "nextflow run main.nf --input test_small.tsv --outdir results_small -profile conda --run_gtdbtk false --qc_filter true --threads 8 --db %q" "$ABRICATE_DB"
+printf "nextflow run main.nf --input test_small.tsv --outdir results_small -profile %s --run_gtdbtk false --qc_filter true --threads 8 --db %q" "$PROFILE" "$ABRICATE_DB"
 if [[ -n "$CHECKM2_DB" ]]; then
     printf " --checkm2_db %q" "$CHECKM2_DB"
 fi
 echo
 echo
 echo "Optional comparative-genomics command:"
-printf "nextflow run main.nf --input test_small.tsv --outdir results_comparative -profile conda --run_gtdbtk false --run_quast true --run_ani true --run_mash true --qc_filter true --threads 8 --db %q" "$ABRICATE_DB"
+printf "nextflow run main.nf --input test_small.tsv --outdir results_comparative -profile %s --run_gtdbtk false --run_quast true --run_ani true --run_mash true --qc_filter true --threads 8 --db %q" "$PROFILE" "$ABRICATE_DB"
 if [[ -n "$CHECKM2_DB" ]]; then
     printf " --checkm2_db %q" "$CHECKM2_DB"
 fi
