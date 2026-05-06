@@ -15,6 +15,7 @@ PanResistome integrates several state-of-the-art tools including:
 * [**FastANI/skani**](https://github.com/ParBLiSS/FastANI): for pairwise ANI, species-consistency screening, and near-duplicate clustering
 * [**Mash**](https://github.com/marbl/Mash): for optional fast sketch-based distance pre-screening
 * [**ABRicate**](https://github.com/tseemann/abricate): for AMR, virulence, and plasmid database annotation through the PanR2 comprehensive mode
+* [**NCBI AMRFinderPlus**](https://github.com/ncbi/amr): optional first-class AMR gene/protein screening with PanR2-compatible feature export
 * [**MobileElementFinder**](https://bitbucket.org/genomicepidemiology/mobileelementfinder): for mobile genetic element annotation in comprehensive mode
 * [**IntegronFinder**](https://github.com/gem-pasteur/Integron_Finder): for integron annotation in comprehensive mode
 * [**MLST**](https://github.com/tseemann/mlst): for sequence-type context in comprehensive mode
@@ -62,13 +63,14 @@ GTDB-Tk is disabled by default because it is resource-intensive. If enabled, it 
 
 QUAST, FastANI/skani, and Mash are also optional. They are part of PanResistome because they require external tools and can be expensive on large genome sets. Their outputs are summarized into standardized tables and exported under `panr2_inputs/` for PanR2 to analyze without inheriting the heavy dependencies.
 
-For the broader database/tool workflow, add `--run_panr2_comprehensive true`. This makes PanResistome call PanR2's integrated runners from the pinned comprehensive Conda environment. The tested default comprehensive mode runs ABRicate `ncbi`, `vfdb`, and `plasmidfinder`, plus MobileElementFinder, IntegronFinder, and MLST. It also writes PanR2 database-specific folders, cross-database associations, temporal summaries, a top-level dashboard at `report/index.html`, citations, software versions, and a standardized `panr2_inputs/` handoff bundle.
+For the broader database/tool workflow, add `--run_panr2_comprehensive true` or choose an analysis profile with `--analysis_profile`. This makes PanResistome call PanR2's integrated runners from the pinned comprehensive Conda environment. The tested default comprehensive mode runs ABRicate `ncbi`, `vfdb`, and `plasmidfinder`, plus MobileElementFinder, IntegronFinder, and MLST. It also writes PanR2 database-specific folders, cross-database associations, temporal summaries, a top-level dashboard at `report/index.html`, citations, software versions, and a standardized `panr2_inputs/` handoff bundle.
 
 DefenseFinder remains available as `--panr2_run_defensefinder true`, but it is not part of the default comprehensive mode until its Conda dependency stack is stable across fresh installs. GTDB-Tk remains off by default because it requires a large external reference database.
 
 Optional heavy modules can be inserted before PanR2:
 
 ```bash
+--run_amrfinderplus true
 --run_mobsuite true
 --run_genomad true --genomad_db /path/to/genomad_db
 --run_kleborate true
@@ -80,6 +82,7 @@ The same feature families can also be supplied as precomputed tables without run
 
 ```bash
 --mobsuite_dir /path/to/mobsuite_tables
+--amrfinderplus_dir /path/to/amrfinderplus_tables
 --defensefinder_dir /path/to/defensefinder_tables
 --prophage_dir /path/to/prophage_tables
 --kleborate_dir /path/to/kleborate_tables
@@ -90,6 +93,48 @@ The same feature families can also be supplied as precomputed tables without run
 ```
 
 This table-input path is the preferred stable route for organism-specific typing and CGE outputs until their database setup is reproducible across fresh machines. SerotypeFinder and SCCmecFinder are currently supported as PanR2-compatible table inputs; their CGE database-driven runners are intentionally kept outside the default environment.
+
+### Recommended Analysis Profiles
+
+Use profiles for simple public-facing commands, and use individual flags when you need fine control.
+
+| Profile | What it enables | Intended use |
+| --- | --- | --- |
+| `qc_only` | FetchM2, sequence QC, CheckM2, optional QC modules, then stop | Fast metadata/QC validation |
+| `amr_basic` | PanR2 ABRicate `ncbi` only | Minimal AMR screening |
+| `amr_vp` | PanR2 ABRicate `ncbi,vfdb,plasmidfinder` | AMR + virulence + plasmid overview |
+| `amr_vp_mge` | `amr_vp` plus ISFinder, MobileElementFinder, and IntegronFinder | AMR with mobile-context analysis |
+| `comprehensive` | `amr_vp_mge` plus MLST | Current full default analysis layer |
+| `custom` | Only explicitly supplied flags | Development or advanced runs |
+
+Example:
+
+```bash
+nextflow run main.nf \
+  --input test_small.tsv \
+  --outdir results_comprehensive \
+  -profile conda,mamba \
+  --analysis_profile comprehensive \
+  --run_gtdbtk false \
+  --qc_filter true \
+  --threads 8
+```
+
+### Module Stability
+
+| Module | Status | Default | Tested route | Notes |
+| --- | --- | --- | --- | --- |
+| FetchM2 metadata/download | Stable | Yes | Local and remote-style runs | Default metadata engine |
+| Sequence QC | Stable | Yes | CI + validation runs | `seqkit` with Python fixture fallback |
+| CheckM2 | Stable | Yes | Remote-style run with auto DB | Large DB can be auto-downloaded or supplied |
+| GTDB-Tk | Stable but heavy | No | Partial | Requires external reference data |
+| QUAST | Stable optional | No | Remote-style run | Assembly structure QC |
+| FastANI/skani | Stable optional | No | Remote-style FastANI run | ANI, outliers, duplicates |
+| Mash | Stable optional | No | Remote-style run | Fast pre-screen only |
+| ABRicate NCBI/VFDB/PlasmidFinder | Stable in PanR2 comprehensive mode | No | Remote-style run | Main default annotation path |
+| AMRFinderPlus | New optional module | No | Contract/export tests | First-class runner/exporter; PanR2 generic feature-table ingestion is the next analysis-layer step |
+| MobileElementFinder/IntegronFinder/MLST | Active development | No | Remote-style run | Managed by PanR2 comprehensive environment |
+| MOB-suite/geNomad/typing tools | Experimental runners, stable table passthrough | No | Syntax/export path | Prefer precomputed tables for difficult DB setups |
 
 ---
 
@@ -266,12 +311,17 @@ PanResistome/
 | `--ani_species_threshold` | float | 95.0 | ANI warning threshold for species consistency    |
 | `--run_mash`            | bool  | false   | Enable Mash sketch/distance pre-screening        |
 | `--representative_only` | bool  | false   | Keep one representative per near-duplicate ANI cluster when filtering |
+| `--analysis_profile`    | str   | custom  | Preset mode: `custom`, `qc_only`, `amr_basic`, `amr_vp`, `amr_vp_mge`, or `comprehensive` |
 | `--export_panr2_inputs` | bool  | true    | Export standardized `panr2_inputs/` handoff directory |
 | `--run_panr2_comprehensive` | bool | false | Run PanR2 integrated ABRicate NCBI/VFDB/PlasmidFinder, MobileElementFinder, IntegronFinder, and MLST |
 | `--panr2_setup_abricate_db` | bool | true | Run `panr setup-db` before comprehensive analysis |
 | `--panr2_abricate_dbs` | str | ncbi,vfdb,plasmidfinder | ABRicate databases used in comprehensive mode; add `isfinder` only if installed |
 | `--panr2_run_defensefinder` | bool | false | Add DefenseFinder when a working installation is available |
 | `--defensefinder_dir` | path | - | Existing DefenseFinder table directory to pass into PanR2 |
+| `--run_amrfinderplus` | bool | false | Run NCBI AMRFinderPlus and export standardized PanR2 feature tables |
+| `--amrfinderplus_dir` | path | - | Existing AMRFinderPlus table directory to include in PanR2 contract exports |
+| `--amrfinderplus_organism` | str | - | Optional AMRFinderPlus `--organism` value |
+| `--amrfinderplus_update_db` | bool | false | Run `amrfinder -u` before AMRFinderPlus execution |
 | `--panr2_min_identity` | float | 90 | Minimum identity threshold for PanR2 feature calls |
 | `--panr2_plot_style` | str | publication | PanR2 plot preset: `publication`, `dashboard`, or `compact` |
 | `--panr2_label_max_length` | int | 40 | Maximum feature label length in crowded plots |
@@ -346,6 +396,7 @@ results/
     │       └── ani_outliers.csv
     ├── mash/                  # only when --run_mash true
     │   └── analysis/
+    ├── amrfinderplus/         # only when --run_amrfinderplus true or AMRFinderPlus tables are supplied
     ├── vfdb/                  # only when --run_panr2_comprehensive true
     ├── plasmidfinder/         # only when --run_panr2_comprehensive true
     ├── mobileelementfinder/   # only when --run_panr2_comprehensive true
@@ -370,6 +421,9 @@ results/
     │   └── excluded_for_panr2.csv
     ├── panr2_inputs/          # standardized handoff bundle for PanR2
     │   ├── metadata/
+    │   ├── features/
+    │   │   ├── all_features.tsv
+    │   │   └── <database>.features.tsv
     │   ├── metadata_analysis/
     │   ├── metadata_audit/
     │   ├── sequence/
@@ -378,11 +432,15 @@ results/
     │   ├── assembly_qc/
     │   ├── qc/
     │   └── manifest/
+    │       ├── schema_validation_report.csv
+    │       ├── schema_validation_summary.txt
+    │       └── unmatched_features.csv
     ├── sequence_filtered/     # pass-only FASTA files used when --qc_filter true
     └── sequence/            # Downloaded genome FASTA files        
 pipeline_versions/
 ├── fetchm_env_versions.txt   # Python, FetchM2/legacy FetchM, PanR2, seqkit versions
 ├── checkm2_env_versions.txt  # CheckM2 version
+├── amrfinderplus_env_versions.txt # AMRFinderPlus version/database context, only when --run_amrfinderplus true
 ├── gtdbtk_env_versions.txt   # GTDB-Tk version, only when --run_gtdbtk true
 ├── ani_env_versions.txt      # FastANI/skani versions, only when --run_ani true
 ├── quast_env_versions.txt    # QUAST version, only when --run_quast true
@@ -460,6 +518,7 @@ Recommended citation entries:
 
 * **Nextflow:** Di Tommaso *et al.* (2017). Nextflow enables reproducible computational workflows. *Nature Biotechnology*. [https://doi.org/10.1038/nbt.3820](https://doi.org/10.1038/nbt.3820)
 * **ABRicate:** Seemann T. ABRicate: Mass screening of contigs for antimicrobial and virulence genes. GitHub repository: [https://github.com/tseemann/abricate](https://github.com/tseemann/abricate)
+* **AMRFinderPlus/NCBI AMR:** Feldgarden *et al.* NCBI AMRFinderPlus and the Reference Gene Catalog. Use when `--run_amrfinderplus true` or AMRFinderPlus tables are supplied.
 * **FetchM2:** FetchM2 metadata standardization, audit, and sequence-download workflow. GitHub repository: [https://github.com/Tasnimul-Arabi-Anik/FetchM2](https://github.com/Tasnimul-Arabi-Anik/FetchM2)
 * **PanR2:** Anik TA. *PanR2: Panresistome Analysis Tool*. DOI: 10.1101/2025.04.08.647722
 

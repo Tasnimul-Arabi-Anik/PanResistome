@@ -79,6 +79,11 @@ params.panr2_force_tool_run = false
 params.panr2_run_defensefinder = false
 params.panr2_sample_map = null
 params.defensefinder_dir = null
+params.analysis_profile = 'custom'
+params.run_amrfinderplus = false
+params.amrfinderplus_dir = null
+params.amrfinderplus_organism = null
+params.amrfinderplus_update_db = false
 params.run_mobsuite = false
 params.mobsuite_dir = null
 params.run_genomad = false
@@ -145,6 +150,47 @@ def yearRangeOptions(value) {
         }
     }
     return options.join(' ')
+}
+
+def analysisProfile() {
+    return (params.analysis_profile ?: 'custom').toString().trim().toLowerCase()
+}
+
+def effectiveStopAfterQc() {
+    return params.stop_after_qc || analysisProfile() == 'qc_only'
+}
+
+def effectiveRunPanr2Comprehensive() {
+    return params.run_panr2_comprehensive || analysisProfile() in ['amr_basic', 'amr_vp', 'amr_vp_mge', 'comprehensive']
+}
+
+def effectivePanr2Dbs() {
+    def profile = analysisProfile()
+    if (params.panr2_abricate_dbs != 'ncbi,vfdb,plasmidfinder') {
+        return params.panr2_abricate_dbs
+    }
+    if (profile == 'amr_basic') {
+        return 'ncbi'
+    }
+    if (profile == 'amr_vp_mge' || profile == 'comprehensive') {
+        return 'ncbi,vfdb,plasmidfinder,isfinder'
+    }
+    return params.panr2_abricate_dbs
+}
+
+def effectiveRunMobileElementFinder() {
+    def profile = analysisProfile()
+    return (params.run_panr2_comprehensive && profile == 'custom') || profile in ['amr_vp_mge', 'comprehensive']
+}
+
+def effectiveRunIntegronFinder() {
+    def profile = analysisProfile()
+    return (params.run_panr2_comprehensive && profile == 'custom') || profile in ['amr_vp_mge', 'comprehensive']
+}
+
+def effectiveRunMlst() {
+    def profile = analysisProfile()
+    return (params.run_panr2_comprehensive && profile == 'custom') || profile == 'comprehensive'
 }
 
 
@@ -222,9 +268,14 @@ def helpMessage() {
       --run_mash               Enable Mash sketch/distance pre-screen [default: false]
       --representative_only    Keep one representative per near-duplicate ANI cluster for PanR2 when --qc_filter true [default: false]
       --export_panr2_inputs    Export standardized panr2_inputs handoff directory [default: true]
+      --analysis_profile       Optional mode: custom, qc_only, amr_basic, amr_vp, amr_vp_mge, comprehensive [default: custom]
       --run_panr2_comprehensive Run PanR2 integrated runners for ABRicate ncbi/vfdb/plasmidfinder, MobileElementFinder, IntegronFinder, and MLST [default: false]
       --panr2_run_defensefinder Add DefenseFinder to comprehensive PanR2 mode when a working installation is available [default: false]
       --defensefinder_dir      Existing DefenseFinder table directory to pass into PanR2
+      --run_amrfinderplus      Run NCBI AMRFinderPlus and export standardized PanR2 feature tables [default: false]
+      --amrfinderplus_dir      Existing AMRFinderPlus table directory to export under panr2_inputs/features
+      --amrfinderplus_organism Optional AMRFinderPlus --organism value for mutation-aware calls
+      --amrfinderplus_update_db Run amrfinder -u before AMRFinderPlus execution [default: false]
       --panr2_setup_abricate_db Run panr setup-db before comprehensive PanR2 analysis [default: true]
       --panr2_abricate_dbs     ABRicate databases for PanR2 comprehensive mode [default: ncbi,vfdb,plasmidfinder; add isfinder only if installed]
       --panr2_min_identity     Minimum identity for PanR2 integrated feature analysis [default: 90]
@@ -318,6 +369,25 @@ process ABRICATE_ENV_VERSIONS {
         abricate --version || true
         perl -e 'print "perl==" . \$^V . "\\n"'
     } > abricate_env_versions.txt
+    """
+}
+
+process AMRFINDERPLUS_ENV_VERSIONS {
+    conda 'envs/amrfinderplus.yaml'
+    publishDir "${params.outdir}/pipeline_versions", mode: 'copy'
+
+    output:
+    path "amrfinderplus_env_versions.txt", emit: amrfinderplus_versions
+
+    script:
+    """
+    {
+        echo "[amrfinderplus_env]"
+        echo "pipeline_version=${params.pipeline_version}"
+        date -u +"run_timestamp_utc=%Y-%m-%dT%H:%M:%SZ"
+        amrfinder --version || true
+        amrfinder -l || true
+    } > amrfinderplus_env_versions.txt
     """
 }
 
@@ -1665,6 +1735,42 @@ process ORGANISM_SPECIFIC_TYPING {
     """
 }
 
+process AMRFINDERPLUS_ANALYSIS {
+    conda 'envs/amrfinderplus.yaml'
+
+    input:
+    path sample_dir
+
+    output:
+    path "${sample_dir}", emit: amrfinderplus_results
+
+    script:
+    def organismArg = params.amrfinderplus_organism ? "--organism ${shellQuote(params.amrfinderplus_organism)}" : ""
+    """
+    sequence_dir="${sample_dir}/sequence"
+    if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
+        sequence_dir="${sample_dir}/sequence_filtered"
+    fi
+
+    mkdir -p ${sample_dir}/amrfinderplus/raw ${sample_dir}/amrfinderplus/tables
+    if command -v amrfinder >/dev/null 2>&1 && [ -d "\${sequence_dir}" ] && [ -n "\$(find "\${sequence_dir}" -name "*.fna" -print -quit)" ]; then
+        if [ "${params.amrfinderplus_update_db}" = "true" ]; then
+            amrfinder -u || true
+        fi
+        for fasta in \$(find "\${sequence_dir}" -name "*.fna" | sort); do
+            prefix=\$(basename "\${fasta}" .fna)
+            amrfinder -n "\${fasta}" --threads ${params.threads} ${organismArg} -o "${sample_dir}/amrfinderplus/raw/\${prefix}.tsv" || true
+        done
+    else
+        echo "AMRFinderPlus executable amrfinder was not available or no sequence directory was found." > ${sample_dir}/amrfinderplus/tables/amrfinderplus_warning.txt
+    fi
+    python ${baseDir}/scripts/collect_optional_tool_tables.py \\
+        --raw-dir ${sample_dir}/amrfinderplus/raw \\
+        --out ${sample_dir}/amrfinderplus/tables/amrfinderplus.tsv \\
+        --tool amrfinderplus
+    """
+}
+
 // Process 12: Combined QC decision engine and optional filtering
 process COMBINED_QC {
     conda 'envs/fetchm.yaml'
@@ -1742,8 +1848,13 @@ process EXPORT_PANR2_INPUTS {
 
     script:
     def versionReportsDir = params.outdir.toString().startsWith("/") ? "${params.outdir}/pipeline_versions" : "${launchDir}/${params.outdir}/pipeline_versions"
+    def externalAmrfinderDir = params.amrfinderplus_dir ? launchPath(params.amrfinderplus_dir) : ""
     """
     if [ "${params.export_panr2_inputs}" = "true" ]; then
+        if [ -n "${externalAmrfinderDir}" ] && [ -d "${externalAmrfinderDir}" ]; then
+            mkdir -p ${sample_dir}/amrfinderplus/tables
+            cp -r "${externalAmrfinderDir}"/* ${sample_dir}/amrfinderplus/tables/ || true
+        fi
         python ${baseDir}/scripts/export_panr2_inputs.py --sample-dir ${sample_dir} --versions-dir ${shellQuote(versionReportsDir)}
     fi
     """
@@ -1833,8 +1944,12 @@ process PANR2_COMPREHENSIVE {
         externalFeatureArgs << "--sccmecfinder-dir ${launchPath(params.sccmecfinder_dir)}"
     }
     def externalFeatureArgText = externalFeatureArgs.join(' ')
-    def setupCmd = params.panr2_setup_abricate_db ? "panr setup-db --dbs ${params.panr2_abricate_dbs}" : "panr setup-db --dbs ${params.panr2_abricate_dbs} --check-only"
+    def panr2Dbs = effectivePanr2Dbs()
+    def setupCmd = params.panr2_setup_abricate_db ? "panr setup-db --dbs ${panr2Dbs}" : "panr setup-db --dbs ${panr2Dbs} --check-only"
     def configuredSampleMap = params.panr2_sample_map ? launchPath(params.panr2_sample_map) : ""
+    def mobileElementFinderFlag = effectiveRunMobileElementFinder() ? "--run-mobileelementfinder" : ""
+    def integronFinderFlag = effectiveRunIntegronFinder() ? "--run-integronfinder" : ""
+    def mlstFlag = effectiveRunMlst() ? "--run-mlst" : ""
     """
     sequence_dir="${sample_dir}/sequence"
     if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
@@ -1851,7 +1966,7 @@ process PANR2_COMPREHENSIVE {
         exit 1
     fi
 
-    echo "Preparing ABRicate databases for comprehensive PanR2 analysis: ${params.panr2_abricate_dbs}"
+    echo "Preparing ABRicate databases for comprehensive PanR2 analysis: ${panr2Dbs}"
     ${setupCmd}
 
     sample_map_arg=""
@@ -1882,11 +1997,11 @@ process PANR2_COMPREHENSIVE {
         --sequence-dir "\${sequence_dir}" \\
         --output-dir ${sample_dir}/ \\
         --run-abricate \\
-        --run-mobileelementfinder \\
-        --run-integronfinder \\
-        --run-mlst \\
+        ${mobileElementFinderFlag} \\
+        ${integronFinderFlag} \\
+        ${mlstFlag} \\
         --format ${params.format} \\
-        --abricate-dbs ${params.panr2_abricate_dbs} \\
+        --abricate-dbs ${panr2Dbs} \\
         --min-identity ${params.panr2_min_identity} \\
         --plot-style ${params.panr2_plot_style} \\
         --cross-database-max-features ${params.panr2_cross_database_max_features} \\
@@ -1926,9 +2041,13 @@ workflow {
         ABRICATE_ENV_VERSIONS()
         version_reports = FETCHM_ENV_VERSIONS.out.fetchm_versions
             .mix(ABRICATE_ENV_VERSIONS.out.abricate_versions)
-        if (params.run_panr2_comprehensive) {
+        if (effectiveRunPanr2Comprehensive()) {
             PANR2_COMPREHENSIVE_ENV_VERSIONS()
             version_reports = version_reports.mix(PANR2_COMPREHENSIVE_ENV_VERSIONS.out.panr2_comprehensive_versions)
+        }
+        if (params.run_amrfinderplus) {
+            AMRFINDERPLUS_ENV_VERSIONS()
+            version_reports = version_reports.mix(AMRFINDERPLUS_ENV_VERSIONS.out.amrfinderplus_versions)
         }
         if (params.run_checkm2) {
             CHECKM2_ENV_VERSIONS()
@@ -2012,29 +2131,34 @@ workflow {
         qc_ready_ch = MASH_PRESCREEN.out.mash_results
     }
 
-    if (params.run_mobsuite) {
-        MOBSUITE_ANALYSIS(qc_ready_ch)
-        qc_ready_ch = MOBSUITE_ANALYSIS.out.mobsuite_results
-    }
-
-    if (params.run_genomad) {
-        GENOMAD_PROPHAGE(qc_ready_ch)
-        qc_ready_ch = GENOMAD_PROPHAGE.out.genomad_results
-    }
-
-    if (params.run_organism_specific_typing || params.run_kleborate || params.run_kaptive || params.run_ectyper) {
-        ORGANISM_SPECIFIC_TYPING(qc_ready_ch)
-        qc_ready_ch = ORGANISM_SPECIFIC_TYPING.out.organism_typing_results
-    }
-
     COMBINED_QC(qc_ready_ch)
     qc_ready_ch = COMBINED_QC.out.combined_qc_results
 
-    if (params.stop_after_qc) {
+    if (effectiveStopAfterQc()) {
         // Collect QC-only results to output directory
         COLLECT_RESULTS(qc_ready_ch)
     } else {
-        if (params.run_panr2_comprehensive) {
+        if (params.run_amrfinderplus) {
+            AMRFINDERPLUS_ANALYSIS(qc_ready_ch)
+            qc_ready_ch = AMRFINDERPLUS_ANALYSIS.out.amrfinderplus_results
+        }
+
+        if (params.run_mobsuite) {
+            MOBSUITE_ANALYSIS(qc_ready_ch)
+            qc_ready_ch = MOBSUITE_ANALYSIS.out.mobsuite_results
+        }
+
+        if (params.run_genomad) {
+            GENOMAD_PROPHAGE(qc_ready_ch)
+            qc_ready_ch = GENOMAD_PROPHAGE.out.genomad_results
+        }
+
+        if (params.run_organism_specific_typing || params.run_kleborate || params.run_kaptive || params.run_ectyper) {
+            ORGANISM_SPECIFIC_TYPING(qc_ready_ch)
+            qc_ready_ch = ORGANISM_SPECIFIC_TYPING.out.organism_typing_results
+        }
+
+        if (effectiveRunPanr2Comprehensive()) {
             PANR2_COMPREHENSIVE(qc_ready_ch)
             EXPORT_PANR2_INPUTS(PANR2_COMPREHENSIVE.out.panr2_comprehensive_results)
             COLLECT_RESULTS(EXPORT_PANR2_INPUTS.out.panr2_inputs_results)

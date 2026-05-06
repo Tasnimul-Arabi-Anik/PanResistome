@@ -10,7 +10,7 @@ Required columns:
 | --- | --- |
 | `sample_id` | Local sample name, filename stem, or user-provided sample identifier |
 | `assembly_accession` | Stable assembly accession or normalized genome ID used for merging |
-| `database` | Feature family or database name, for example `amr`, `vfdb`, `plasmidfinder`, `mobileelementfinder`, `integronfinder`, `mlst`, `defensefinder`, `mobsuite`, `prophage`, `kleborate`, `kaptive`, `ectyper`, `serotypefinder`, `sccmecfinder`, `ani`, or `assembly_qc` |
+| `database` | Feature family or database name, for example `amr`, `amrfinderplus`, `vfdb`, `plasmidfinder`, `mobileelementfinder`, `integronfinder`, `mlst`, `defensefinder`, `mobsuite`, `prophage`, `kleborate`, `kaptive`, `ectyper`, `serotypefinder`, `sccmecfinder`, `ani`, or `assembly_qc` |
 | `feature_id` | Gene, replicon, system, type, cluster, or feature identifier |
 | `feature_category` | Higher-level category where available |
 | `presence` | `1` for present, `0` for absent |
@@ -52,6 +52,11 @@ panr2_inputs/
 ├── sequence/failed_accessions.txt
 ├── amr/ncbi_summary.tab
 ├── amr/ncbi_results.tab
+├── features/
+│   ├── all_features.tsv
+│   ├── amr.features.tsv
+│   ├── amrfinderplus.features.tsv
+│   └── <database>.features.tsv
 ├── ani/analysis/panr2_ani_summary.csv
 ├── assembly_qc/analysis/panr2_quast_summary.csv
 ├── vfdb/
@@ -73,8 +78,13 @@ panr2_inputs/
 ├── qc/excluded_for_panr2.csv
 └── manifest/
     ├── software_versions.csv
-    └── panr2_feature_contract_columns.txt
+    ├── panr2_feature_contract_columns.txt
+    ├── schema_validation_report.csv
+    ├── schema_validation_summary.txt
+    └── unmatched_features.csv
 ```
+
+`panr2_inputs/features/*.features.tsv` is the strict contract layer. Raw tool folders are still copied for traceability, but downstream analysis should prefer the standardized feature tables when possible. `schema_validation_report.csv` checks required columns, and `unmatched_features.csv` lists feature rows whose assembly accession cannot be matched to metadata.
 
 ## Design Rule
 

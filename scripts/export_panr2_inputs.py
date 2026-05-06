@@ -5,12 +5,7 @@ import re
 import shutil
 from pathlib import Path
 
-
-CONTRACT_COLUMNS = [
-    "sample_id", "assembly_accession", "database", "feature_id", "feature_category",
-    "presence", "identity", "coverage", "contig", "start", "end", "tool",
-    "tool_version", "database_version",
-]
+from panr2_contract import CONTRACT_COLUMNS, export_contract
 
 
 def copy_if_exists(src, dst):
@@ -87,6 +82,7 @@ def main():
         "integronfinder",
         "iceberg",
         "mlst",
+        "amrfinderplus",
         "defensefinder",
         "prophage",
         "mobsuite",
@@ -138,6 +134,7 @@ def main():
 
     schema_path = out / "manifest" / "panr2_feature_contract_columns.txt"
     schema_path.write_text("\n".join(CONTRACT_COLUMNS) + "\n")
+    export_contract(sample_dir, out)
 
 
 if __name__ == "__main__":

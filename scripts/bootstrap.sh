@@ -108,7 +108,7 @@ fi
 
 echo "OK: required commands found"
 
-for env_file in envs/fetchm.yaml envs/checkm2.yaml envs/abricate.yaml envs/ani.yaml envs/quast.yaml envs/mash.yaml envs/panr2_comprehensive.yaml envs/mobsuite.yaml envs/genomad.yaml envs/organism_typing.yaml; do
+for env_file in envs/fetchm.yaml envs/checkm2.yaml envs/abricate.yaml envs/amrfinderplus.yaml envs/ani.yaml envs/quast.yaml envs/mash.yaml envs/panr2_comprehensive.yaml envs/mobsuite.yaml envs/genomad.yaml envs/organism_typing.yaml; do
     [[ -f "$env_file" ]] || fail "Missing environment file: $env_file"
 done
 
@@ -182,6 +182,13 @@ echo
 echo
 echo "Optional comparative-genomics command:"
 printf "nextflow run main.nf --input test_small.tsv --outdir results_comparative -profile %s --run_gtdbtk false --run_quast true --run_ani true --run_mash true --qc_filter true --threads 8 --db %q" "$PROFILE" "$ABRICATE_DB"
+if [[ -n "$CHECKM2_DB" ]]; then
+    printf " --checkm2_db %q" "$CHECKM2_DB"
+fi
+echo
+echo
+echo "Optional comprehensive feature-analysis command:"
+printf "nextflow run main.nf --input test_small.tsv --outdir results_comprehensive -profile %s --analysis_profile comprehensive --run_gtdbtk false --qc_filter true --threads 8 --db %q" "$PROFILE" "$ABRICATE_DB"
 if [[ -n "$CHECKM2_DB" ]]; then
     printf " --checkm2_db %q" "$CHECKM2_DB"
 fi

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Optional NCBI AMRFinderPlus runner (`--run_amrfinderplus`) and precomputed table input (`--amrfinderplus_dir`) with version capture and standardized PanR2 contract export.
+- Analysis profile presets through `--analysis_profile` for `qc_only`, `amr_basic`, `amr_vp`, `amr_vp_mge`, and `comprehensive` runs.
+- Strict `panr2_inputs/features/*.features.tsv` contract exports plus schema validation reports, unmatched-feature reports, and all-feature merged tables.
+- README module stability table clarifying stable, active-development, and experimental modules for public users.
+- `pytest.ini` limiting test discovery to repository tests so local runs do not collect Nextflow work-directory Conda package tests.
+
+### Changed
+- Optional downstream annotation modules now run after the combined QC decision step, so `--qc_filter true` can use `sequence_filtered/` before AMRFinderPlus, MOB-suite, geNomad, and organism-specific typing.
+
 ## 0.2.1 - 2026-05-06
 
 ### Added
