@@ -901,7 +901,7 @@ process CHECKM2_QC {
     script:
     def checkm2_db_arg = params.checkm2_db ? "--database_path ${params.checkm2_db}" : ""
     def checkm2_lowmem_arg = params.checkm2_lowmem ? "--lowmem" : ""
-    def checkm2DownloadDir = params.checkm2_db_dir ? params.checkm2_db_dir : (params.outdir.toString().startsWith("/") ? "${params.outdir}/databases/checkm2" : "${launchDir}/${params.outdir}/databases/checkm2")
+    def checkm2DownloadDir = params.checkm2_db_dir ? launchPath(params.checkm2_db_dir) : (params.outdir.toString().startsWith("/") ? "${params.outdir}/databases/checkm2" : "${launchDir}/${params.outdir}/databases/checkm2")
     """
     mkdir -p ${sample_dir}/checkm2
     checkm2_db_arg="${checkm2_db_arg}"
