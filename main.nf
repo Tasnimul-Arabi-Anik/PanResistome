@@ -51,6 +51,7 @@ params.max_ambiguous_bases = null
 params.checkm2_db = null
 params.checkm2_auto_download_db = true
 params.checkm2_db_dir = null
+params.checkm2_db_download_retries = 3
 params.min_completeness = null
 params.max_contamination = null
 params.run_checkm2 = true
@@ -205,6 +206,7 @@ def helpMessage() {
       --checkm2_db             Optional CheckM2 database path
       --checkm2_auto_download_db Download CheckM2 database automatically when --checkm2_db is not provided [default: true]
       --checkm2_db_dir         Directory for automatic CheckM2 database download [default: <outdir>/databases/checkm2]
+      --checkm2_db_download_retries Number of CheckM2 database download attempts [default: 3]
       --min_completeness       Minimum CheckM2 completeness required to pass QC
       --max_contamination      Maximum CheckM2 contamination allowed to pass QC
       --checkm2_lowmem         Run CheckM2 in low-memory mode [default: true]
@@ -911,7 +913,20 @@ process CHECKM2_QC {
         existing_db=\$(find "${checkm2DownloadDir}" -name "*.dmnd" -type f -print -quit 2>/dev/null || true)
         if [ -z "\${existing_db}" ]; then
             echo "No CheckM2 database provided; downloading to ${checkm2DownloadDir}"
-            checkm2 database --download --path "${checkm2DownloadDir}" --no_write_json_db
+            attempt=1
+            max_attempts="${params.checkm2_db_download_retries}"
+            while true; do
+                echo "CheckM2 database download attempt \${attempt}/\${max_attempts}"
+                if checkm2 database --download --path "${checkm2DownloadDir}" --no_write_json_db; then
+                    break
+                fi
+                if [ "\${attempt}" -ge "\${max_attempts}" ]; then
+                    echo "CheckM2 database download failed after \${max_attempts} attempts" >&2
+                    exit 1
+                fi
+                attempt=\$((attempt + 1))
+                sleep \$((attempt * 30))
+            done
             existing_db=\$(find "${checkm2DownloadDir}" -name "*.dmnd" -type f -print -quit 2>/dev/null || true)
         fi
         if [ -n "\${existing_db}" ]; then
