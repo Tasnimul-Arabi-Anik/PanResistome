@@ -1,6 +1,7 @@
 import sys
 import tempfile
 import unittest
+import subprocess
 from pathlib import Path
 
 import pandas as pd
@@ -135,6 +136,46 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertEqual(mlst_status, "PASS")
             self.assertTrue(Path(outputs["all_feature_matrix"]).exists())
             self.assertTrue(Path(outputs["feature_cooccurrence"]).exists())
+
+    def test_isfinder_blast_converter_writes_abricate_style_tables(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            blast = root / "sampleA.blast.tsv"
+            results = root / "sampleA_results.tab"
+            summary = root / "sampleA_summary.tab"
+            blast.write_text(
+                "contig1\tIS26\t99.5\t800\t1000\t820\t5\t804\t1\t800\t1e-100\t500\n"
+                "contig2\tISlow\t85.0\t500\t1000\t900\t10\t509\t1\t500\t1e-20\t100\n",
+                encoding="utf-8",
+            )
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "scripts" / "isfinder_blast_to_abricate.py"),
+                    "--blast",
+                    str(blast),
+                    "--sample-id",
+                    "sampleA",
+                    "--out-results",
+                    str(results),
+                    "--out-summary",
+                    str(summary),
+                    "--min-identity",
+                    "90",
+                    "--min-coverage",
+                    "80",
+                ],
+                check=True,
+            )
+
+            table = pd.read_csv(results, sep="\t")
+            self.assertEqual(len(table), 1)
+            self.assertEqual(table.loc[0, "GENE"], "IS26")
+            self.assertEqual(table.loc[0, "DATABASE"], "isfinder")
+            self.assertAlmostEqual(float(table.loc[0, "%COVERAGE"]), 97.56, places=2)
+            summary_text = summary.read_text(encoding="utf-8")
+            self.assertIn("IS26", summary_text)
 
 
 if __name__ == "__main__":

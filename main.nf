@@ -76,14 +76,21 @@ params.panr2_plot_style = 'publication'
 params.panr2_label_max_length = 40
 params.panr2_cross_database_max_features = 300
 params.panr2_force_tool_run = false
+params.panr2_run_mobileelementfinder = false
 params.panr2_run_defensefinder = false
 params.panr2_sample_map = null
 params.defensefinder_dir = null
+params.run_isfinder = false
+params.isfinder_db_fasta = null
+params.isfinder_dir = null
+params.isfinder_min_identity = 90
+params.isfinder_min_coverage = 80
+params.isfinder_database_version = null
 params.analysis_profile = 'custom'
 params.run_amrfinderplus = false
 params.amrfinderplus_dir = null
 params.amrfinderplus_organism = null
-params.amrfinderplus_update_db = false
+params.amrfinderplus_update_db = true
 params.run_mobsuite = false
 params.mobsuite_dir = null
 params.run_genomad = false
@@ -172,15 +179,11 @@ def effectivePanr2Dbs() {
     if (profile == 'amr_basic') {
         return 'ncbi'
     }
-    if (profile == 'amr_vp_mge' || profile == 'comprehensive') {
-        return 'ncbi,vfdb,plasmidfinder,isfinder'
-    }
     return params.panr2_abricate_dbs
 }
 
 def effectiveRunMobileElementFinder() {
-    def profile = analysisProfile()
-    return (params.run_panr2_comprehensive && profile == 'custom') || profile in ['amr_vp_mge', 'comprehensive']
+    return params.panr2_run_mobileelementfinder || params.panr2_force_tool_run
 }
 
 def effectiveRunIntegronFinder() {
@@ -191,6 +194,11 @@ def effectiveRunIntegronFinder() {
 def effectiveRunMlst() {
     def profile = analysisProfile()
     return (params.run_panr2_comprehensive && profile == 'custom') || profile == 'comprehensive'
+}
+
+def effectiveRunIsfinder() {
+    def profile = analysisProfile()
+    return params.run_isfinder || (params.isfinder_db_fasta && profile in ['amr_vp_mge', 'comprehensive'])
 }
 
 
@@ -275,13 +283,20 @@ def helpMessage() {
       --run_amrfinderplus      Run NCBI AMRFinderPlus and export standardized PanR2 feature tables [default: false]
       --amrfinderplus_dir      Existing AMRFinderPlus table directory to export under panr2_inputs/features
       --amrfinderplus_organism Optional AMRFinderPlus --organism value for mutation-aware calls
-      --amrfinderplus_update_db Run amrfinder -u before AMRFinderPlus execution [default: false]
+      --amrfinderplus_update_db Run amrfinder -u before AMRFinderPlus execution [default: true]
       --panr2_setup_abricate_db Run panr setup-db before comprehensive PanR2 analysis [default: true]
       --panr2_abricate_dbs     ABRicate databases for PanR2 comprehensive mode [default: ncbi,vfdb,plasmidfinder; add isfinder only if installed]
       --panr2_min_identity     Minimum identity for PanR2 integrated feature analysis [default: 90]
       --panr2_plot_style       PanR2 plot style: publication, dashboard, compact [default: publication]
       --panr2_label_max_length Maximum feature-label length in PanR2 plots [default: 40]
       --panr2_sample_map       Optional sample_id to Assembly Accession map for external PanR2 table inputs
+      --panr2_run_mobileelementfinder
+                              Run MobileElementFinder inside PanR2. Disabled by default because some valid assemblies trigger upstream JSON parser failures.
+      --run_isfinder           Run PanResistome ISfinder-compatible BLAST annotation [default: false]
+      --isfinder_db_fasta      Authorized ISfinder nucleotide FASTA used to build a local BLAST database
+      --isfinder_dir           Existing ISfinder-style result directory to pass into PanR2
+      --isfinder_min_identity  Minimum ISfinder BLAST identity percentage [default: 90]
+      --isfinder_min_coverage  Minimum ISfinder BLAST subject coverage percentage [default: 80]
       --run_mobsuite           Run MOB-suite plasmid reconstruction/typing and pass outputs to PanR2 [default: false]
       --mobsuite_dir           Existing MOB-suite table directory to pass into PanR2
       --run_genomad            Run geNomad viral/prophage annotation and pass outputs to PanR2 [default: false]
@@ -971,7 +986,8 @@ process CHECKM2_QC {
     path "${sample_dir}", emit: checkm2_results
 
     script:
-    def checkm2_db_arg = params.checkm2_db ? "--database_path ${params.checkm2_db}" : ""
+    def checkm2DbPath = params.checkm2_db ? launchPath(params.checkm2_db) : ""
+    def checkm2_db_arg = checkm2DbPath ? "--database_path ${checkm2DbPath}" : ""
     def checkm2_lowmem_arg = params.checkm2_lowmem ? "--lowmem" : ""
     def checkm2DownloadDir = params.checkm2_db_dir ? launchPath(params.checkm2_db_dir) : (params.outdir.toString().startsWith("/") ? "${params.outdir}/databases/checkm2" : "${launchDir}/${params.outdir}/databases/checkm2")
     """
@@ -1680,6 +1696,82 @@ process GENOMAD_PROPHAGE {
     """
 }
 
+process ISFINDER_BLAST {
+    conda 'envs/panr2_comprehensive.yaml'
+
+    input:
+    path sample_dir
+
+    output:
+    path "${sample_dir}", emit: isfinder_results
+
+    script:
+    def isfinderDbFasta = params.isfinder_db_fasta ? launchPath(params.isfinder_db_fasta) : ""
+    def dbVersion = params.isfinder_database_version ?: ""
+    """
+    sequence_dir="${sample_dir}/sequence"
+    if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
+        sequence_dir="${sample_dir}/sequence_filtered"
+    fi
+
+    mkdir -p ${sample_dir}/isfinder/raw ${sample_dir}/isfinder/tables ${sample_dir}/isfinder/db
+    status_file=${sample_dir}/isfinder/module_status.tsv
+    printf "module\\tenabled\\tstarted\\tcompleted\\tstatus\\tsamples_input\\tsamples_processed\\tsamples_failed\\traw_tables_created\\tfeature_rows_created\\tunique_features_created\\toutput_dir\\tmessage\\n" > "\${status_file}"
+    started=\$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    if [ -z "${isfinderDbFasta}" ] || [ ! -s "${isfinderDbFasta}" ]; then
+        printf "isfinder\\ttrue\\t%s\\t%s\\tFAIL\\t0\\t0\\t0\\t0\\t0\\t0\\t%s\\t%s\\n" "\${started}" "\$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "${sample_dir}/isfinder" "Missing --isfinder_db_fasta. ISfinder database download/redistribution requires written authorization; provide an authorized local FASTA." >> "\${status_file}"
+        echo "Missing --isfinder_db_fasta. ISfinder database download/redistribution requires written authorization; provide an authorized local FASTA." >&2
+        exit 1
+    fi
+
+    makeblastdb -in "${isfinderDbFasta}" -dbtype nucl -out ${sample_dir}/isfinder/db/isfinder >/dev/null
+
+    samples_input=0
+    samples_processed=0
+    samples_failed=0
+    raw_tables_created=0
+    for fasta in \$(find "\${sequence_dir}" -name "*.fna" | sort 2>/dev/null || true); do
+        samples_input=\$((samples_input + 1))
+        prefix=\$(basename "\${fasta}" .fna)
+        raw=${sample_dir}/isfinder/raw/\${prefix}.blast.tsv
+        results=${sample_dir}/isfinder/tables/\${prefix}_results.tab
+        summary=${sample_dir}/isfinder/tables/\${prefix}_summary.tab
+        if blastn \\
+            -query "\${fasta}" \\
+            -db ${sample_dir}/isfinder/db/isfinder \\
+            -out "\${raw}" \\
+            -outfmt "6 qseqid sseqid pident length qlen slen qstart qend sstart send evalue bitscore" \\
+            -num_threads ${params.threads}; then
+            samples_processed=\$((samples_processed + 1))
+            raw_tables_created=\$((raw_tables_created + 1))
+        else
+            samples_failed=\$((samples_failed + 1))
+            : > "\${raw}"
+        fi
+        python ${baseDir}/scripts/isfinder_blast_to_abricate.py \\
+            --blast "\${raw}" \\
+            --sample-id "\${prefix}" \\
+            --out-results "\${results}" \\
+            --out-summary "\${summary}" \\
+            --min-identity ${params.isfinder_min_identity} \\
+            --min-coverage ${params.isfinder_min_coverage} \\
+            --database-version ${shellQuote(dbVersion)}
+    done
+
+    feature_rows=\$(awk 'FNR > 1 {count++} END {print count + 0}' ${sample_dir}/isfinder/tables/*_results.tab 2>/dev/null || echo 0)
+    unique_features=\$(awk -F '\\t' 'FNR > 1 && \$5 != "" {seen[\$5]=1} END {print length(seen)}' ${sample_dir}/isfinder/tables/*_results.tab 2>/dev/null || echo 0)
+    status=PASS
+    message="ISfinder-compatible BLAST completed with authorized local database FASTA."
+    if [ "\${samples_input}" -eq 0 ]; then
+        status=WARNING_EMPTY
+        message="No FASTA files found for ISfinder-compatible BLAST."
+    fi
+    printf "isfinder\\ttrue\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n" \\
+        "\${started}" "\$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "\${status}" "\${samples_input}" "\${samples_processed}" "\${samples_failed}" "\${raw_tables_created}" "\${feature_rows}" "\${unique_features}" "${sample_dir}/isfinder" "\${message}" >> "\${status_file}"
+    """
+}
+
 process ORGANISM_SPECIFIC_TYPING {
     conda 'envs/organism_typing.yaml'
 
@@ -1753,16 +1845,38 @@ process AMRFINDERPLUS_ANALYSIS {
     fi
 
     mkdir -p ${sample_dir}/amrfinderplus/raw ${sample_dir}/amrfinderplus/tables
+    status_file="${sample_dir}/amrfinderplus/tables/amrfinderplus_sample_status.tsv"
+    printf "sample_id\\tfasta_path\\toutput_path\\tstatus\\texit_code\\tmessage\\n" > "\${status_file}"
     if command -v amrfinder >/dev/null 2>&1 && [ -d "\${sequence_dir}" ] && [ -n "\$(find "\${sequence_dir}" -name "*.fna" -print -quit)" ]; then
         if [ "${params.amrfinderplus_update_db}" = "true" ]; then
-            amrfinder -u || true
+            amrfinder -u
         fi
+        failed=0
+        processed=0
         for fasta in \$(find "\${sequence_dir}" -name "*.fna" | sort); do
             prefix=\$(basename "\${fasta}" .fna)
-            amrfinder -n "\${fasta}" --threads ${params.threads} ${organismArg} -o "${sample_dir}/amrfinderplus/raw/\${prefix}.tsv" || true
+            out="${sample_dir}/amrfinderplus/raw/\${prefix}.tsv"
+            log="${sample_dir}/amrfinderplus/raw/\${prefix}.log"
+            set +e
+            amrfinder -n "\${fasta}" --threads ${params.threads} ${organismArg} -o "\${out}" > "\${log}" 2>&1
+            exit_code=\$?
+            set -e
+            if [ "\${exit_code}" -eq 0 ]; then
+                printf "%s\\t%s\\t%s\\tPASS\\t%s\\t%s\\n" "\${prefix}" "\${fasta}" "\${out}" "\${exit_code}" "completed" >> "\${status_file}"
+                processed=\$((processed + 1))
+            else
+                printf "%s\\t%s\\t%s\\tFAIL\\t%s\\t%s\\n" "\${prefix}" "\${fasta}" "\${out}" "\${exit_code}" "see \${log}" >> "\${status_file}"
+                failed=\$((failed + 1))
+            fi
         done
+        if [ "\${processed}" -eq 0 ] && [ "\${failed}" -gt 0 ]; then
+            echo "AMRFinderPlus failed for all samples. Check ${sample_dir}/amrfinderplus/tables/amrfinderplus_sample_status.tsv and raw/*.log. If the database is missing, keep --amrfinderplus_update_db true or pre-install the AMRFinderPlus database." >&2
+            exit 1
+        fi
     else
         echo "AMRFinderPlus executable amrfinder was not available or no sequence directory was found." > ${sample_dir}/amrfinderplus/tables/amrfinderplus_warning.txt
+        printf "all\\t%s\\t\\tFAIL\\t127\\tAMRFinderPlus executable missing or sequence directory empty\\n" "\${sequence_dir}" >> "\${status_file}"
+        exit 1
     fi
     python ${baseDir}/scripts/collect_optional_tool_tables.py \\
         --raw-dir ${sample_dir}/amrfinderplus/raw \\
@@ -1922,6 +2036,9 @@ process PANR2_COMPREHENSIVE {
     if (params.defensefinder_dir) {
         externalFeatureArgs << "--defensefinder-dir ${launchPath(params.defensefinder_dir)}"
     }
+    if (params.isfinder_dir) {
+        externalFeatureArgs << "--isfinder-dir ${launchPath(params.isfinder_dir)}"
+    }
     if (params.mobsuite_dir) {
         externalFeatureArgs << "--mobsuite-dir ${launchPath(params.mobsuite_dir)}"
     }
@@ -1978,6 +2095,7 @@ process PANR2_COMPREHENSIVE {
 
     extra_feature_args="${externalFeatureArgText}"
     for spec in \\
+        "isfinder --isfinder-dir ${sample_dir}/isfinder/tables" \\
         "mobsuite --mobsuite-dir ${sample_dir}/mobsuite/tables" \\
         "kleborate --kleborate-dir ${sample_dir}/kleborate/tables" \\
         "kaptive --kaptive-dir ${sample_dir}/kaptive/tables" \\
@@ -2141,6 +2259,11 @@ workflow {
         if (params.run_amrfinderplus) {
             AMRFINDERPLUS_ANALYSIS(qc_ready_ch)
             qc_ready_ch = AMRFINDERPLUS_ANALYSIS.out.amrfinderplus_results
+        }
+
+        if (effectiveRunIsfinder()) {
+            ISFINDER_BLAST(qc_ready_ch)
+            qc_ready_ch = ISFINDER_BLAST.out.isfinder_results
         }
 
         if (params.run_mobsuite) {

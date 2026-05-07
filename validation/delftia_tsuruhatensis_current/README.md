@@ -23,7 +23,7 @@ nextflow run main.nf \
   --run_ani true \
   --run_mash true \
   --run_amrfinderplus true \
-  --threads 8
+  --threads 4
 ```
 
 The primary combined HTML output from a successful comprehensive run is:
@@ -31,3 +31,5 @@ The primary combined HTML output from a successful comprehensive run is:
 ```text
 validation_runs/delftia_current/<organism>/report/index.html
 ```
+
+Validated locally on 2026-05-08 with GTDB-Tk disabled, 4 threads, CheckM2 enabled with an existing local database path, AMRFinderPlus database auto-download enabled, and comprehensive PanR2 output generation. The run produced AMR, AMRFinderPlus, VFDB, PlasmidFinder, IntegronFinder, MLST, cross-database, temporal, QC, citation, software-version, and dashboard outputs.

@@ -9,6 +9,7 @@
 - Optional standardized PanR2 feature columns for feature names/descriptions, mechanism, drug class, source table/file, raw IDs, evidence type, confidence, and notes.
 - Feature completeness audit, module status summary, invalid/duplicate feature reports, metadata audit, metadata eligibility, feature eligibility, prevalence tables, database burden summaries, feature matrices, and cross-database context outputs with exact Fisher screening p-values and BH-FDR q-values in the PanR2 handoff bundle.
 - MLST results are now standardized into `panr2_inputs/features/mlst.features.tsv`, including sequence-type and allele-level feature rows.
+- Optional PanResistome ISfinder-compatible BLAST module (`--run_isfinder`, `--isfinder_db_fasta`) that builds a local BLAST database from an authorized ISfinder FASTA and exports PanR2-readable `isfinder/tables/*_results.tab` files.
 - Reproducible current NCBI Assembly validation input for `Delftia tsuruhatensis` under `validation/delftia_tsuruhatensis_current/`.
 - `scripts/generate_ncbi_assembly_input.py` for creating FetchM2/PanResistome-compatible validation inputs from NCBI Assembly E-utilities.
 - README module stability table clarifying stable, active-development, and experimental modules for public users.
@@ -16,6 +17,18 @@
 
 ### Changed
 - Optional downstream annotation modules now run after the combined QC decision step, so `--qc_filter true` can use `sequence_filtered/` before AMRFinderPlus, MOB-suite, geNomad, and organism-specific typing.
+- AMRFinderPlus database setup now runs by default before AMRFinderPlus execution, and the process records per-sample status instead of silently swallowing missing-database failures.
+- CheckM2 QC now declares the same CPU count as `--threads` and allows longer wall time for full 45-genome laptop validation runs.
+- MobileElementFinder is now opt-in through `--panr2_run_mobileelementfinder true`; real Delftia validation showed that the upstream `mefinder` BLAST JSON parser can fail on otherwise valid assemblies, so the public comprehensive default avoids a brittle hard failure.
+
+### Fixed
+- Relative `--checkm2_db` values are now resolved from the launch directory before CheckM2 runs in a Nextflow work directory.
+- Comprehensive PanR2 profiles no longer request the ABRicate `isfinder` database by default because standard ABRicate setup does not always provide it; users can still opt in with `--panr2_abricate_dbs ...isfinder` when that database is installed.
+- `--qc_filter true` now fails at the combined QC decision step with a clear report when zero FASTA files remain for downstream analysis, instead of failing later inside PanR2.
+
+### Validated
+- A 45-genome `Delftia tsuruhatensis` run completed with FetchM2, sequence QC, CheckM2, QUAST, ANI, Mash, combined QC, AMRFinderPlus database auto-download, AMRFinderPlus, comprehensive PanR2, and PanR2 handoff export, with GTDB-Tk disabled and 4 threads.
+- The validated PanR2 handoff contained AMR, AMRFinderPlus, VFDB, PlasmidFinder, IntegronFinder, and MLST feature tables in `panr2_inputs/features/all_features.tsv` with zero unmatched, invalid, or duplicate feature rows.
 
 ## 0.2.1 - 2026-05-06
 

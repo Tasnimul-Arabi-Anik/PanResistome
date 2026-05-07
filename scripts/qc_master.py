@@ -168,6 +168,7 @@ def main():
         filtered_dir.mkdir(parents=True, exist_ok=True)
         for old in filtered_dir.glob("*.fna"):
             old.unlink()
+        copied = 0
         for row in pass_rows:
             sequence_file = row.get("sequence_file")
             if not sequence_file:
@@ -175,6 +176,7 @@ def main():
             source = sequence_dir / sequence_file
             if source.exists():
                 shutil.copy2(source, filtered_dir / sequence_file)
+                copied += 1
         clean_path = metadata_dir / "ncbi_clean.csv"
         if clean_path.exists() and not (metadata_dir / "ncbi_clean_unfiltered.csv").exists():
             shutil.copy2(clean_path, metadata_dir / "ncbi_clean_unfiltered.csv")
@@ -183,6 +185,14 @@ def main():
                 writer = csv.DictWriter(handle, fieldnames=fieldnames)
                 writer.writeheader()
                 writer.writerows(pass_rows)
+        if copied == 0:
+            message = (
+                "QC filtering left zero FASTA files for downstream analysis. "
+                "Inspect qc/qc_master_report.csv and qc/excluded_for_panr2.csv, "
+                "or rerun with --qc_filter false after confirming failed downloads/QC thresholds."
+            )
+            (qc_dir / "qc_filter_empty_error.txt").write_text(message + "\n")
+            raise SystemExit(message)
 
 
 if __name__ == "__main__":

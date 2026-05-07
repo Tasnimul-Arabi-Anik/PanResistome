@@ -63,7 +63,9 @@ GTDB-Tk is disabled by default because it is resource-intensive. If enabled, it 
 
 QUAST, FastANI/skani, and Mash are also optional. They are part of PanResistome because they require external tools and can be expensive on large genome sets. Their outputs are summarized into standardized tables and exported under `panr2_inputs/` for PanR2 to analyze without inheriting the heavy dependencies.
 
-For the broader database/tool workflow, add `--run_panr2_comprehensive true` or choose an analysis profile with `--analysis_profile`. This makes PanResistome call PanR2's integrated runners from the pinned comprehensive Conda environment. The tested default comprehensive mode runs ABRicate `ncbi`, `vfdb`, and `plasmidfinder`, plus MobileElementFinder, IntegronFinder, and MLST. It also writes PanR2 database-specific folders, cross-database associations, temporal summaries, a top-level dashboard at `report/index.html`, citations, software versions, and a standardized `panr2_inputs/` handoff bundle.
+For the broader database/tool workflow, add `--run_panr2_comprehensive true` or choose an analysis profile with `--analysis_profile`. This makes PanResistome call PanR2's integrated runners from the pinned comprehensive Conda environment. The tested default comprehensive mode runs ABRicate `ncbi`, `vfdb`, and `plasmidfinder`, plus IntegronFinder and MLST. MobileElementFinder is available with `--panr2_run_mobileelementfinder true`, but is opt-in because its upstream JSON parser can fail on some valid assemblies. The workflow also writes PanR2 database-specific folders, cross-database associations, temporal summaries, a top-level dashboard at `report/index.html`, citations, software versions, and a standardized `panr2_inputs/` handoff bundle.
+
+ISfinder is handled separately from ABRicate. The ISfinder database terms do not permit automatic database download or redistribution without written authorization, so PanResistome provides an ISfinder-compatible BLAST runner that builds a local BLAST database from an authorized FASTA supplied with `--isfinder_db_fasta`. When enabled with `--run_isfinder true`, the module writes PanR2-readable tables under `isfinder/tables/` and PanR2 receives them through `--isfinder-dir`.
 
 DefenseFinder remains available as `--panr2_run_defensefinder true`, but it is not part of the default comprehensive mode until its Conda dependency stack is stable across fresh installs. GTDB-Tk remains off by default because it requires a large external reference database.
 
@@ -103,7 +105,7 @@ Use profiles for simple public-facing commands, and use individual flags when yo
 | `qc_only` | FetchM2, sequence QC, CheckM2, optional QC modules, then stop | Fast metadata/QC validation |
 | `amr_basic` | PanR2 ABRicate `ncbi` only | Minimal AMR screening |
 | `amr_vp` | PanR2 ABRicate `ncbi,vfdb,plasmidfinder` | AMR + virulence + plasmid overview |
-| `amr_vp_mge` | `amr_vp` plus ISFinder, MobileElementFinder, and IntegronFinder | AMR with mobile-context analysis |
+| `amr_vp_mge` | `amr_vp` plus ISFinder when an authorized FASTA is supplied, IntegronFinder, and optional MobileElementFinder | AMR with mobile-context analysis |
 | `comprehensive` | `amr_vp_mge` plus MLST | Current full default analysis layer |
 | `custom` | Only explicitly supplied flags | Development or advanced runs |
 
@@ -132,8 +134,9 @@ nextflow run main.nf \
 | FastANI/skani | Stable optional | No | Remote-style FastANI run | ANI, outliers, duplicates |
 | Mash | Stable optional | No | Remote-style run | Fast pre-screen only |
 | ABRicate NCBI/VFDB/PlasmidFinder | Stable in PanR2 comprehensive mode | No | Remote-style run | Main default annotation path |
-| AMRFinderPlus | New optional module | No | Contract/export tests | First-class runner/exporter; PanR2 generic feature-table ingestion is the next analysis-layer step |
-| MobileElementFinder/IntegronFinder/MLST | Active development | No | Remote-style run | Managed by PanR2 comprehensive environment |
+| AMRFinderPlus | Stable optional | No | Remote-style Delftia run | Auto-fetches the AMRFinderPlus database by default and exports PanR2 feature tables |
+| MobileElementFinder | Active development, opt-in | No | Real-data parser failure observed | Use `--panr2_run_mobileelementfinder true` when needed; upstream JSON parser can fail on some assemblies |
+| IntegronFinder/MLST | Active development | No | Remote-style run | Managed by PanR2 comprehensive environment |
 | MOB-suite/geNomad/typing tools | Experimental runners, stable table passthrough | No | Syntax/export path | Prefer precomputed tables for difficult DB setups |
 
 ---
@@ -340,12 +343,18 @@ PanResistome/
 | `--run_panr2_comprehensive` | bool | false | Run PanR2 integrated ABRicate NCBI/VFDB/PlasmidFinder, MobileElementFinder, IntegronFinder, and MLST |
 | `--panr2_setup_abricate_db` | bool | true | Run `panr setup-db` before comprehensive analysis |
 | `--panr2_abricate_dbs` | str | ncbi,vfdb,plasmidfinder | ABRicate databases used in comprehensive mode; add `isfinder` only if installed |
+| `--panr2_run_mobileelementfinder` | bool | false | Run MobileElementFinder inside PanR2; opt-in because the upstream parser can fail on some assemblies |
+| `--run_isfinder` | bool | false | Run PanResistome's ISfinder-compatible BLAST annotator and pass results to PanR2 |
+| `--isfinder_db_fasta` | path | - | Authorized local ISfinder nucleotide FASTA used to build the local BLAST database |
+| `--isfinder_dir` | path | - | Existing ISfinder-style result directory to pass into PanR2 |
+| `--isfinder_min_identity` | float | 90 | Minimum nucleotide identity for ISfinder-compatible BLAST calls |
+| `--isfinder_min_coverage` | float | 80 | Minimum reference coverage for ISfinder-compatible BLAST calls |
 | `--panr2_run_defensefinder` | bool | false | Add DefenseFinder when a working installation is available |
 | `--defensefinder_dir` | path | - | Existing DefenseFinder table directory to pass into PanR2 |
 | `--run_amrfinderplus` | bool | false | Run NCBI AMRFinderPlus and export standardized PanR2 feature tables |
 | `--amrfinderplus_dir` | path | - | Existing AMRFinderPlus table directory to include in PanR2 contract exports |
 | `--amrfinderplus_organism` | str | - | Optional AMRFinderPlus `--organism` value |
-| `--amrfinderplus_update_db` | bool | false | Run `amrfinder -u` before AMRFinderPlus execution |
+| `--amrfinderplus_update_db` | bool | true | Run `amrfinder -u` before AMRFinderPlus execution so fresh installs fetch the AMRFinderPlus database |
 | `--panr2_min_identity` | float | 90 | Minimum identity threshold for PanR2 feature calls |
 | `--panr2_plot_style` | str | publication | PanR2 plot preset: `publication`, `dashboard`, or `compact` |
 | `--panr2_label_max_length` | int | 40 | Maximum feature label length in crowded plots |
@@ -544,6 +553,7 @@ Recommended citation entries:
 * **ABRicate:** Seemann T. ABRicate: Mass screening of contigs for antimicrobial and virulence genes. GitHub repository: [https://github.com/tseemann/abricate](https://github.com/tseemann/abricate)
 * **AMRFinderPlus/NCBI AMR:** Feldgarden *et al.* NCBI AMRFinderPlus and the Reference Gene Catalog. Use when `--run_amrfinderplus true` or AMRFinderPlus tables are supplied.
 * **FetchM2:** FetchM2 metadata standardization, audit, and sequence-download workflow. GitHub repository: [https://github.com/Tasnimul-Arabi-Anik/FetchM2](https://github.com/Tasnimul-Arabi-Anik/FetchM2)
+* **ISfinder:** Cite ISfinder when `--run_isfinder true` or ISfinder-style tables are supplied. PanResistome does not redistribute or automatically download ISfinder; provide an authorized local FASTA with `--isfinder_db_fasta`.
 * **PanR2:** Anik TA. *PanR2: Panresistome Analysis Tool*. DOI: 10.1101/2025.04.08.647722
 
 ---
