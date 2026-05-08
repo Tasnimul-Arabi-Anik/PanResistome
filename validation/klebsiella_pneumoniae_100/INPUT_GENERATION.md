@@ -27,7 +27,8 @@ nextflow run main.nf \
   --run_mash true \
   --run_amrfinderplus true \
   --panr2_native_feature_runners true \
-  --threads 4 \
+  --panr2_native_feature_runner_mode parallel \
+  --threads 16 \
   --fetchm2_download_workers 2
 ```
 

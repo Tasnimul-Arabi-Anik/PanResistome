@@ -33,3 +33,12 @@ def test_mlst_status_count_detects_st_and_alleles(tmp_path):
     )
 
     assert native.count_mlst_feature_rows(raw) == (6, 4)
+
+
+def test_worker_count_bounds_threads_to_tasks():
+    native = load_native_feature_module()
+
+    assert native.worker_count(16, 3) == 3
+    assert native.worker_count(4, 20) == 4
+    assert native.worker_count(0, 20) == 1
+    assert native.worker_count(16, 0) == 1

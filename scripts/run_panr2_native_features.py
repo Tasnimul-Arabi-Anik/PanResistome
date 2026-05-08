@@ -6,6 +6,9 @@ from __future__ import annotations
 import argparse
 import csv
 import re
+import shutil
+import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -35,6 +38,12 @@ def as_bool(value: str | bool) -> bool:
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def worker_count(threads: int, tasks: int) -> int:
+    if tasks <= 0:
+        return 1
+    return max(1, min(max(int(threads or 1), 1), tasks))
 
 
 def count_feature_rows(path: Path) -> tuple[int, int]:
@@ -144,12 +153,259 @@ def write_status(path: Path, rows: list[dict[str, str]]) -> None:
         writer.writerows(rows)
 
 
+def _run_command(command: list[str], stdout_path: Path | None = None) -> str:
+    if stdout_path:
+        stdout_path.parent.mkdir(parents=True, exist_ok=True)
+        with stdout_path.open("w", encoding="utf-8") as handle:
+            completed = subprocess.run(command, stdout=handle, stderr=subprocess.PIPE, text=True, check=False)
+    else:
+        completed = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or getattr(completed, "stdout", "").strip()
+        raise RuntimeError(f"Command failed ({completed.returncode}): {' '.join(command)}\n{detail}")
+    return completed.stdout if not stdout_path else ""
+
+
+def _capture_command(command: list[str]) -> str:
+    try:
+        completed = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+        output = (completed.stdout or completed.stderr or "").strip()
+        return output if completed.returncode == 0 else f"unavailable: {output}"
+    except Exception as exc:
+        return f"unavailable: {exc}"
+
+
+def run_abricate_parallel(sequence_dir: Path, sample_dir: Path, databases: list[str], threads: int, force: bool = False) -> dict:
+    from panr2.runners import _parse_abricate_list, find_sequence_files, write_tool_manifest
+
+    executable = shutil.which("abricate")
+    if not executable:
+        raise FileNotFoundError("ABRicate executable not found: abricate")
+    sequence_files = find_sequence_files(str(sequence_dir))
+    if not sequence_files:
+        raise FileNotFoundError(f"No FASTA files found in {sequence_dir}")
+    list_output = _capture_command([executable, "--list"])
+    available = _parse_abricate_list(list_output)
+    if not available:
+        raise ValueError("ABRicate did not report any available databases. Run `panr setup-db` or `abricate --setupdb`.")
+    missing = [db for db in databases if db not in available]
+    if missing:
+        raise ValueError(f"ABRicate database(s) not available: {', '.join(missing)}")
+
+    base_dir = sample_dir / "tool_results" / "abricate"
+    base_dir.mkdir(parents=True, exist_ok=True)
+    version = _capture_command([executable, "--version"]).splitlines()[0]
+
+    def sequence_label(sequence_file: str) -> str:
+        label = Path(sequence_file).name
+        for suffix in [".gz", ".fasta", ".fna", ".fa", ".fas"]:
+            if label.lower().endswith(suffix):
+                label = label[: -len(suffix)]
+        return re.sub(r"[^A-Za-z0-9_.-]+", "_", label) or "sample"
+
+    def combine_result_tables(input_paths: list[Path], output_path: Path) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        wrote_header = False
+        with output_path.open("w", encoding="utf-8") as output_handle:
+            for input_path in input_paths:
+                if not input_path.exists():
+                    continue
+                with input_path.open(encoding="utf-8", errors="ignore") as input_handle:
+                    for line in input_handle:
+                        if not line.strip():
+                            continue
+                        is_header = line.startswith("#FILE\t") or line.startswith("FILE\t")
+                        if is_header:
+                            if not wrote_header:
+                                output_handle.write(line)
+                                wrote_header = True
+                            continue
+                        output_handle.write(line)
+
+    def run_sample_database(db: str, sequence_file: str) -> tuple[str, str, Path]:
+        db_dir = base_dir / db
+        raw_dir = db_dir / "per_sample"
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        raw_path = raw_dir / f"{sequence_label(sequence_file)}.tab"
+        if force or not raw_path.exists():
+            _run_command([executable, "--db", db, sequence_file], stdout_path=raw_path)
+        return db, sequence_file, raw_path
+
+    workers = worker_count(threads, len(sequence_files))
+    per_db_paths: dict[str, list[Path]] = {db: [] for db in databases}
+    for db in databases:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {executor.submit(run_sample_database, db, sequence_file): sequence_file for sequence_file in sequence_files}
+            for future in as_completed(futures):
+                _db, _sequence_file, raw_path = future.result()
+                per_db_paths[db].append(raw_path)
+
+    def finalize_database(db: str) -> tuple[str, Path]:
+        db_dir = base_dir / db
+        db_dir.mkdir(parents=True, exist_ok=True)
+        results_path = db_dir / f"{db}_results.tab"
+        summary_path = db_dir / f"{db}_summary.tab"
+        ordered_paths = [
+            db_dir / "per_sample" / f"{sequence_label(sequence_file)}.tab"
+            for sequence_file in sequence_files
+        ]
+        if force or not results_path.exists():
+            combine_result_tables(ordered_paths, results_path)
+        if force or not summary_path.exists():
+            _run_command([executable, "--summary", "--identity", str(results_path)], stdout_path=summary_path)
+        return db, db_dir
+
+    output_dirs: dict[str, str] = {}
+    for db in databases:
+        db, db_dir = finalize_database(db)
+        output_dirs[db] = str(db_dir)
+
+    manifest = {
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "sequence_dir": str(sequence_dir),
+        "sequence_count": len(sequence_files),
+        "tools": [{
+            "name": "abricate",
+            "executable": executable,
+            "version": version,
+            "runs": [],
+        }],
+    }
+    for db in databases:
+        db_dir = Path(output_dirs[db])
+        db_info = available.get(db, {})
+        manifest["tools"][0]["runs"].append({
+            "database": db,
+            "database_sequences": db_info.get("SEQUENCES", ""),
+            "database_date": db_info.get("DATE", ""),
+            "database_type": db_info.get("DBTYPE", ""),
+            "results": str(db_dir / f"{db}_results.tab"),
+            "summary": str(db_dir / f"{db}_summary.tab"),
+            "status": "completed",
+        })
+    manifest_paths = write_tool_manifest(str(sample_dir), manifest)
+    return {
+        "database_dirs": output_dirs,
+        "manifest": manifest_paths,
+        "raw_tables": [str(path) for paths in per_db_paths.values() for path in paths],
+        "parallel_workers": workers,
+    }
+
+
+def run_integronfinder_parallel(sequence_dir: Path, sample_dir: Path, threads: int, force: bool = False) -> dict:
+    from panr2.runners import _find_integronfinder_table, convert_integronfinder_outputs, find_sequence_files, write_tool_manifest
+
+    executable = shutil.which("integron_finder")
+    if not executable:
+        raise FileNotFoundError("IntegronFinder executable not found: integron_finder")
+    sequence_files = find_sequence_files(str(sequence_dir))
+    if not sequence_files:
+        raise FileNotFoundError(f"No FASTA files found in {sequence_dir}")
+    raw_dir = sample_dir / "tool_results" / "integronfinder" / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    version = _capture_command([executable, "--version"]).splitlines()[0]
+
+    def run_sequence(sequence_file: str) -> str | None:
+        prefix = Path(sequence_file).name
+        for suffix in [".gz", ".fasta", ".fna", ".fa", ".fas"]:
+            if prefix.lower().endswith(suffix):
+                prefix = prefix[: -len(suffix)]
+        sample_out_dir = raw_dir / prefix
+        sample_out_dir.mkdir(parents=True, exist_ok=True)
+        expected_table = _find_integronfinder_table(str(sample_out_dir), prefix)
+        if force or not expected_table:
+            _run_command([executable, sequence_file, "--outdir", str(sample_out_dir), "--cpu", "1"])
+            expected_table = _find_integronfinder_table(str(sample_out_dir), prefix)
+        return expected_table
+
+    raw_table_paths: list[str] = []
+    with ThreadPoolExecutor(max_workers=worker_count(threads, len(sequence_files))) as executor:
+        futures = {executor.submit(run_sequence, sequence_file): sequence_file for sequence_file in sequence_files}
+        for future in as_completed(futures):
+            table = future.result()
+            if table:
+                raw_table_paths.append(table)
+    raw_table_paths = sorted(set(raw_table_paths))
+    converted = convert_integronfinder_outputs(sequence_files, raw_table_paths, str(sample_dir))
+    manifest = {
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "sequence_dir": str(sequence_dir),
+        "sequence_count": len(sequence_files),
+        "tools": [{
+            "name": "integronfinder",
+            "executable": executable,
+            "version": version,
+            "runs": [{
+                "database": "integronfinder",
+                "database_sequences": "",
+                "database_date": "",
+                "results": converted["results"],
+                "summary": converted["summary"],
+                "status": "completed",
+            }],
+        }],
+    }
+    manifest_paths = write_tool_manifest(str(sample_dir), manifest)
+    return {"feature_dir": converted["feature_dir"], "manifest": manifest_paths, "raw_tables": raw_table_paths}
+
+
+def run_mlst_parallel(sequence_dir: Path, sample_dir: Path, threads: int, force: bool = False) -> dict:
+    from panr2.runners import find_sequence_files, write_tool_manifest
+
+    executable = shutil.which("mlst")
+    if not executable:
+        raise FileNotFoundError("MLST executable not found: mlst")
+    sequence_files = find_sequence_files(str(sequence_dir))
+    if not sequence_files:
+        raise FileNotFoundError(f"No FASTA files found in {sequence_dir}")
+    raw_dir = sample_dir / "tool_results" / "mlst" / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    raw_path = raw_dir / "mlst.tsv"
+
+    def run_sequence(sequence_file: str) -> str:
+        return _run_command([executable, sequence_file])
+
+    if force or not raw_path.exists():
+        outputs: dict[str, str] = {}
+        with ThreadPoolExecutor(max_workers=worker_count(threads, len(sequence_files))) as executor:
+            futures = {executor.submit(run_sequence, sequence_file): sequence_file for sequence_file in sequence_files}
+            for future in as_completed(futures):
+                outputs[futures[future]] = future.result()
+        raw_path.write_text("".join(outputs.get(sequence_file, "") for sequence_file in sequence_files), encoding="utf-8")
+
+    version = "available"
+    version_output = _capture_command([executable, "--version"])
+    if version_output:
+        version = version_output.splitlines()[0]
+    manifest = {
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "sequence_dir": str(sequence_dir),
+        "sequence_count": len(sequence_files),
+        "tools": [{
+            "name": "mlst",
+            "executable": executable,
+            "version": version,
+            "runs": [{
+                "database": "pubmlst",
+                "database_sequences": "",
+                "database_date": "",
+                "results": str(raw_path),
+                "summary": str(raw_path),
+                "status": "completed",
+            }],
+        }],
+    }
+    manifest_paths = write_tool_manifest(str(sample_dir), manifest)
+    return {"mlst_dir": str(raw_dir), "raw_table": str(raw_path), "manifest": manifest_paths}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sample-dir", required=True, type=Path)
     parser.add_argument("--sequence-dir", required=True, type=Path)
     parser.add_argument("--abricate-dbs", required=True)
     parser.add_argument("--threads", type=int, default=1)
+    parser.add_argument("--mode", choices=["serial", "parallel"], default="serial")
     parser.add_argument("--force", type=as_bool, default=False)
     parser.add_argument("--run-integronfinder", type=as_bool, default=False)
     parser.add_argument("--run-mlst", type=as_bool, default=False)
@@ -189,13 +445,21 @@ def main() -> int:
     started = utc_now()
     databases = [db.strip() for db in args.abricate_dbs.split(",") if db.strip()]
     try:
-        result = run_abricate_databases(
-            str(sequence_dir),
-            str(sample_dir),
-            databases,
-            summary_metric="identity",
-            force=args.force,
-        )
+        if args.mode == "parallel":
+            result = run_abricate_parallel(sequence_dir, sample_dir, databases, args.threads, force=args.force)
+            abricate_message = (
+                f"ABRicate completed for databases: {','.join(databases)} "
+                f"(per-database sample-parallel workers={result.get('parallel_workers', worker_count(args.threads, sample_count))})"
+            )
+        else:
+            result = run_abricate_databases(
+                str(sequence_dir),
+                str(sample_dir),
+                databases,
+                summary_metric="identity",
+                force=args.force,
+            )
+            abricate_message = f"ABRicate completed for databases: {','.join(databases)}"
         feature_rows = 0
         unique_features = 0
         for db_dir in result.get("database_dirs", {}).values():
@@ -209,11 +473,11 @@ def main() -> int:
                 started,
                 "PASS",
                 sample_dir / "tool_results" / "abricate",
-                f"ABRicate completed for databases: {','.join(databases)}",
+                abricate_message,
                 sample_count,
                 sample_count,
                 0,
-                len(databases),
+                len(result.get("raw_tables", [])) or len(databases),
                 feature_rows,
                 unique_features,
             )
@@ -226,12 +490,20 @@ def main() -> int:
     if args.run_integronfinder:
         started = utc_now()
         try:
-            result = run_integronfinder(
-                str(sequence_dir),
-                str(sample_dir),
-                cpu=max(args.threads, 1),
-                force=args.force,
-            )
+            if args.mode == "parallel":
+                result = run_integronfinder_parallel(sequence_dir, sample_dir, args.threads, force=args.force)
+                integron_message = (
+                    "IntegronFinder completed in per-assembly parallel mode and was converted to "
+                    f"PanR2-compatible tables (parallel workers={worker_count(args.threads, sample_count)})."
+                )
+            else:
+                result = run_integronfinder(
+                    str(sequence_dir),
+                    str(sample_dir),
+                    cpu=max(args.threads, 1),
+                    force=args.force,
+                )
+                integron_message = "IntegronFinder completed and was converted to PanR2-compatible tables."
             feature_rows, unique_features = count_feature_rows(Path(result["feature_dir"]) / "integronfinder_results.tab")
             rows.append(
                 status_row(
@@ -240,7 +512,7 @@ def main() -> int:
                     started,
                     "PASS",
                     Path(result["feature_dir"]),
-                    "IntegronFinder completed and was converted to PanR2-compatible tables.",
+                    integron_message,
                     sample_count,
                     sample_count,
                     0,
@@ -259,7 +531,12 @@ def main() -> int:
     if args.run_mlst:
         started = utc_now()
         try:
-            result = run_mlst(str(sequence_dir), str(sample_dir), force=args.force)
+            if args.mode == "parallel":
+                result = run_mlst_parallel(sequence_dir, sample_dir, args.threads, force=args.force)
+                mlst_message = f"MLST completed in per-assembly parallel mode (parallel workers={worker_count(args.threads, sample_count)})."
+            else:
+                result = run_mlst(str(sequence_dir), str(sample_dir), force=args.force)
+                mlst_message = "MLST completed and is available for PanR2 analysis."
             raw_path = Path(result["raw_table"])
             feature_rows, unique_features = count_mlst_feature_rows(raw_path)
             rows.append(
@@ -269,7 +546,7 @@ def main() -> int:
                     started,
                     "PASS",
                     Path(result["mlst_dir"]),
-                    "MLST completed and is available for PanR2 analysis.",
+                    mlst_message,
                     sample_count,
                     sample_count,
                     0,

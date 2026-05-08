@@ -43,7 +43,8 @@ nextflow run main.nf \
   --run_mash true \
   --run_amrfinderplus true \
   --panr2_native_feature_runners true \
-  --threads 4 \
+  --panr2_native_feature_runner_mode parallel \
+  --threads 16 \
   --fetchm2_download_workers 2
 ```
 
@@ -88,4 +89,4 @@ validation_runs/klebsiella_100/validation_summary.md
 - Feature contract validation has zero unmatched, invalid, or duplicate rows unless documented.
 - Same-contig/proximity outputs are present, even if they contain zero rows for the selected dataset.
 
-For v0.3.0 development, run this validation after the standard native runners are split into finer-grained parallel Nextflow processes. The 45-genome `Delftia tsuruhatensis` native-runner validation should be re-run first to confirm the parallel path preserves the same feature-contract outputs.
+For v0.3.0 development, run this validation after the 45-genome `Delftia tsuruhatensis` validation passes with `--panr2_native_feature_runner_mode parallel --threads 16` and preserves the same feature-contract outputs.

@@ -376,6 +376,7 @@ PanResistome/
 | `--panr2_setup_abricate_db` | bool | true | Run `panr setup-db` before comprehensive analysis |
 | `--panr2_abricate_dbs` | str | ncbi,vfdb,plasmidfinder | ABRicate databases used in comprehensive mode; add `isfinder` only if installed |
 | `--panr2_native_feature_runners` | bool | true | Run ABRicate/IntegronFinder/MLST under PanResistome before PanR2, then pass precomputed result directories |
+| `--panr2_native_feature_runner_mode` | str | serial | Native feature-runner backend: `serial` or `parallel`; parallel runs each ABRicate database with per-genome workers, then runs per-assembly IntegronFinder/MLST concurrently within the native-runner process |
 | `--panr2_run_mobileelementfinder` | bool | false | Run MobileElementFinder in the PanR2 feature-runner layer; opt-in because the upstream parser can fail on some assemblies |
 | `--run_isfinder` | bool | false | Run PanResistome's ISfinder-compatible BLAST annotator and pass results to PanR2 |
 | `--isfinder_db_fasta` | path | - | Authorized local ISfinder nucleotide FASTA used to build the local BLAST database |

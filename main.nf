@@ -77,6 +77,7 @@ params.panr2_label_max_length = 40
 params.panr2_cross_database_max_features = 300
 params.panr2_force_tool_run = false
 params.panr2_native_feature_runners = true
+params.panr2_native_feature_runner_mode = 'serial'
 params.panr2_run_mobileelementfinder = false
 params.panr2_run_defensefinder = false
 params.panr2_sample_map = null
@@ -184,7 +185,7 @@ def effectivePanr2Dbs() {
 }
 
 def effectiveRunMobileElementFinder() {
-    return params.panr2_run_mobileelementfinder || params.panr2_force_tool_run
+    return params.panr2_run_mobileelementfinder
 }
 
 def effectiveRunIntegronFinder() {
@@ -292,6 +293,8 @@ def helpMessage() {
       --panr2_label_max_length Maximum feature-label length in PanR2 plots [default: 40]
       --panr2_native_feature_runners
                               Run ABRicate, IntegronFinder, MLST, and optional MobileElementFinder under PanResistome, then pass precomputed directories to PanR2 [default: true]
+      --panr2_native_feature_runner_mode
+                              Native feature-runner backend: serial or parallel. Keep serial as validated fallback; use parallel for ABRicate DBs plus per-assembly IntegronFinder/MLST [default: serial]
       --panr2_sample_map       Optional sample_id to Assembly Accession map for external PanR2 table inputs
       --panr2_run_mobileelementfinder
                               Run MobileElementFinder in the PanR2 feature-runner layer. Disabled by default because some valid assemblies trigger upstream parser failures.
@@ -2086,6 +2089,7 @@ process PANR2_FEATURE_RUNNERS {
         --sequence-dir "\${sequence_dir}" \\
         --abricate-dbs ${panr2Dbs} \\
         --threads ${params.threads} \\
+        --mode ${params.panr2_native_feature_runner_mode} \\
         --force ${params.panr2_force_tool_run} \\
         --run-integronfinder ${effectiveRunIntegronFinder()} \\
         --run-mlst ${effectiveRunMlst()} \\

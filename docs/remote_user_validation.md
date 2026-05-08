@@ -184,6 +184,14 @@ DefenseFinder: available in PanR2 but not default until its environment is consi
 
 The standard comprehensive command is reliable but not yet fully optimized for wall time. PanResistome now owns the standard feature-runner stage through `--panr2_native_feature_runners true` and passes precomputed ABRicate, IntegronFinder, and MLST directories into PanR2. Large fragmented assemblies can still make IntegronFinder the longest substage; future performance work should split per-assembly execution into finer-grained Nextflow channels while keeping PanR2 focused on standardized analysis/reporting.
 
+An experimental parallel backend is available for validation:
+
+```bash
+--panr2_native_feature_runner_mode parallel --threads 16
+```
+
+Parallel mode keeps the same output directories but runs one ABRicate database at a time with per-genome workers, then runs per-assembly IntegronFinder/MLST calls concurrently inside the native-runner stage. Keep `serial` as the stable fallback until the parallel Delftia and Klebsiella validations are documented.
+
 The 2026-05-08 native feature-runner validation is documented in:
 
 ```text

@@ -4,6 +4,8 @@
 
 ### Added
 - PanResistome-native PanR2 feature-runner stage controlled by `--panr2_native_feature_runners` for ABRicate, IntegronFinder, MLST, and opt-in MobileElementFinder execution before PanR2 reporting.
+- Experimental native feature-runner backend selection with `--panr2_native_feature_runner_mode serial|parallel`; parallel mode runs ABRicate one database at a time with per-genome workers, then runs IntegronFinder/MLST per assembly concurrently within the PanResistome native-runner stage.
+- Controlled 45-genome Delftia parallel-backend validation documented in `validation/delftia_tsuruhatensis_current/NATIVE_PARALLEL_COMPARISON.md`; the run completed 9/9 processes with 16 threads, produced 201 standardized feature rows, preserved the same core feature calls as the serial native-runner validation, and kept zero unmatched, invalid, or duplicate feature rows.
 - `scripts/run_panr2_native_features.py` to run standard PanR2-compatible annotation helpers under PanResistome ownership and write module status rows.
 - Same-contig and coordinate-proximity cross-database outputs: `amr_mge_same_contig.tsv`, `amr_plasmid_same_contig.tsv`, `amr_integron_same_contig.tsv`, and `feature_proximity.tsv`.
 - Metadata interpretation outputs for `feature_metadata_associations.tsv`, `database_burden_metadata_associations.tsv`, `category_burden_by_sample.tsv`, and `category_metadata_associations.tsv`.
