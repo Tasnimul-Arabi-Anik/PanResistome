@@ -22,6 +22,7 @@
 - AMRFinderPlus database setup now runs by default before AMRFinderPlus execution, and the process records per-sample status instead of silently swallowing missing-database failures.
 - CheckM2 QC now declares the same CPU count as `--threads` and allows longer wall time for full 45-genome laptop validation runs.
 - MobileElementFinder is now opt-in through `--panr2_run_mobileelementfinder true`; real Delftia validation showed that the upstream `mefinder` BLAST JSON parser can fail on otherwise valid assemblies, so the public comprehensive default avoids a brittle hard failure.
+- The FetchM2/QC Conda environment no longer installs PanR2 from GitHub; PanR2 is kept in the dedicated PanR2 comprehensive environment and the legacy `PANR` process now uses that environment.
 
 ### Fixed
 - Relative `--checkm2_db` values are now resolved from the launch directory before CheckM2 runs in a Nextflow work directory.

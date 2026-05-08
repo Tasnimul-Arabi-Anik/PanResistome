@@ -336,7 +336,7 @@ if (!file(params.db).exists()) {
     exit 1
 }
 
-// Process 1: Capture versions from the FetchM2/PanR2/seqkit environment
+// Process 1: Capture versions from the FetchM2/seqkit environment
 process FETCHM_ENV_VERSIONS {
     conda 'envs/fetchm.yaml'
     publishDir "${params.outdir}/pipeline_versions", mode: 'copy'
@@ -357,7 +357,7 @@ process FETCHM_ENV_VERSIONS {
         python - <<'PY'
 from importlib.metadata import PackageNotFoundError, version
 
-for package in ("fetchm2", "fetchM", "PanR2"):
+for package in ("fetchm2", "fetchM"):
     try:
         print(f"{package}=={version(package)}")
     except PackageNotFoundError:
@@ -1976,7 +1976,7 @@ process EXPORT_PANR2_INPUTS {
 
 // Process 15: Run panR2
 process PANR {
-    conda 'envs/fetchm.yaml'
+    conda 'envs/panr2_comprehensive.yaml'
     
     input:
     path sample_dir

@@ -501,7 +501,7 @@ results/
     ├── sequence_filtered/     # pass-only FASTA files used when --qc_filter true
     └── sequence/            # Downloaded genome FASTA files        
 pipeline_versions/
-├── fetchm_env_versions.txt   # Python, FetchM2/legacy FetchM, PanR2, seqkit versions
+├── fetchm_env_versions.txt   # Python, FetchM2/legacy FetchM, seqkit versions
 ├── checkm2_env_versions.txt  # CheckM2 version
 ├── amrfinderplus_env_versions.txt # AMRFinderPlus version/database context, only when --run_amrfinderplus true
 ├── gtdbtk_env_versions.txt   # GTDB-Tk version, only when --run_gtdbtk true
