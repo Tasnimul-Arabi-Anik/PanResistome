@@ -10,11 +10,23 @@ Use the NCBI Assembly E-utilities helper to create a FetchM2/PanResistome-compat
 python scripts/generate_ncbi_assembly_input.py \
   --organism "Klebsiella pneumoniae" \
   --limit 100 \
+  --candidate-records 500 \
+  --diverse-bioproject \
   --prefer-refseq \
-  --out validation/klebsiella_pneumoniae_100/ncbi_dataset.tsv
+  --out validation/klebsiella_pneumoniae_100
 ```
 
 Record the generation date, query, and row count before committing any validation input.
+
+Current input generated on 2026-05-08:
+
+```text
+records: 100
+candidate records requested: 500
+unique BioProjects: 90
+assembly levels: 92 Complete Genome, 8 Chromosome
+accession prefixes: 86 GCF, 14 GCA
+```
 
 ## Recommended Validation Command
 

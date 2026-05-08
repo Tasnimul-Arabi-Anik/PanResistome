@@ -10,6 +10,7 @@
 - Lightweight PanR2 handoff HTML pages for top findings, metadata quality and bias, database burden by metadata, cross-database interpretation, and database setup/feature-contract status.
 - `docs/roadmap_v0.3.0.md` and `validation/klebsiella_pneumoniae_100/README.md` to define the scale and interpretation validation target.
 - Native feature-runner validation evidence under `validation/delftia_tsuruhatensis_current/NATIVE_FEATURE_RUNNER_VALIDATION_RESULTS.md`.
+- BioProject-diverse 100-record `Klebsiella pneumoniae` validation input under `validation/klebsiella_pneumoniae_100/`.
 
 ### Changed
 - Comprehensive mode now passes precomputed ABRicate, IntegronFinder, and MLST directories to PanR2 by default instead of asking PanR2 to execute those standard runners internally.
@@ -17,7 +18,8 @@
 
 ### Fixed
 - PanR2 feature-contract export now parses headerless native `mlst` output, suppresses placeholder calls such as `ST_-`, and writes a header-only `mlst.features.tsv` when MLST ran successfully but no valid ST/allele features were detected.
-- `scripts/generate_ncbi_assembly_input.py` now accepts the documented `--limit`, `--out`, and `--prefer-refseq` options and writes organism-specific validation README text instead of Delftia-specific boilerplate.
+- `scripts/generate_ncbi_assembly_input.py` now accepts the documented `--limit`, `--out`, and `--prefer-refseq` options, writes organism-specific validation documentation instead of Delftia-specific boilerplate, and preserves an existing curated `README.md` by writing `INPUT_GENERATION.md`.
+- `scripts/generate_ncbi_assembly_input.py` can now fetch a larger candidate pool and select validation inputs round-robin across BioProjects with `--diverse-bioproject`, reducing single-study dominance in second-organism validation inputs.
 
 ### Validated
 - A 45-genome `Delftia tsuruhatensis` native feature-runner run completed all 20 Nextflow processes with GTDB-Tk disabled, CheckM2/QUAST/ANI/Mash enabled, AMRFinderPlus enabled, `--panr2_native_feature_runners true`, and 4 threads.

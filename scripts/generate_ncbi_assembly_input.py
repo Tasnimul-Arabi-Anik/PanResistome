@@ -10,6 +10,7 @@ import re
 import time
 import urllib.parse
 import urllib.request
+from collections import OrderedDict
 from datetime import date
 from pathlib import Path
 
@@ -133,11 +134,55 @@ def record_to_row(record: dict) -> dict[str, str]:
     }
 
 
+def record_quality_key(row: dict[str, str]) -> tuple[int, int, str]:
+    accession = row.get("Assembly Accession", "")
+    assembly_level = row.get("Assembly Level", "").lower()
+    return (
+        0 if accession.startswith("GCF_") else 1,
+        0 if assembly_level == "complete genome" else 1,
+        accession,
+    )
+
+
+def select_bioproject_diverse(records: list[dict[str, str]], limit: int) -> list[dict[str, str]]:
+    if not limit or len(records) <= limit:
+        return records
+    by_project: OrderedDict[str, list[dict[str, str]]] = OrderedDict()
+    for row in sorted(records, key=record_quality_key):
+        project = row.get("Assembly BioProject Accession", "").strip() or f"no_bioproject:{row.get('Assembly Accession', '')}"
+        by_project.setdefault(project, []).append(row)
+    selected: list[dict[str, str]] = []
+    while len(selected) < limit:
+        added = False
+        for project in list(by_project):
+            rows = by_project[project]
+            if not rows:
+                continue
+            selected.append(rows.pop(0))
+            added = True
+            if len(selected) >= limit:
+                break
+        if not added:
+            break
+    return selected
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Create an NCBI Assembly TSV input for PanResistome/FetchM2.")
     parser.add_argument("--organism", default="Delftia tsuruhatensis", help="NCBI organism query.")
     parser.add_argument("--outdir", "--out", required=True, type=Path, help="Validation input directory.")
     parser.add_argument("--max-records", "--limit", type=int, default=0, help="Maximum records to write. 0 means all records returned by NCBI.")
+    parser.add_argument(
+        "--candidate-records",
+        type=int,
+        default=0,
+        help="Number of NCBI Assembly candidates to fetch before optional selection. Defaults to 5x --max-records when --diverse-bioproject is used.",
+    )
+    parser.add_argument(
+        "--diverse-bioproject",
+        action="store_true",
+        help="Select records by round-robin across BioProjects to reduce single-study dominance in validation inputs.",
+    )
     parser.add_argument(
         "--prefer-refseq",
         action="store_true",
@@ -148,20 +193,33 @@ def main() -> None:
 
     args.outdir.mkdir(parents=True, exist_ok=True)
     query = f'"{args.organism}"[Organism]'
+    retmax = args.max_records or 10000
+    if args.diverse_bioproject and args.max_records:
+        retmax = max(args.candidate_records or args.max_records * 5, args.max_records)
+    elif args.candidate_records:
+        retmax = max(args.candidate_records, args.max_records)
     search = fetch_json(
         ncbi_url(
             "esearch.fcgi",
-            {"db": "assembly", "term": query, "retmax": str(args.max_records or 10000), "retmode": "json"},
+            {"db": "assembly", "term": query, "retmax": str(retmax), "retmode": "json"},
         )
     )
     ids = search.get("esearchresult", {}).get("idlist", [])
-    if args.max_records:
+    if args.max_records and not args.diverse_bioproject:
         ids = ids[: args.max_records]
     if not ids:
         raise SystemExit(f"No NCBI Assembly records found for {args.organism!r}")
 
     records = []
-    raw_summaries = {"organism": args.organism, "query": query, "generated_on": date.today().isoformat(), "records": []}
+    raw_summaries = {
+        "organism": args.organism,
+        "query": query,
+        "generated_on": date.today().isoformat(),
+        "candidate_records_requested": retmax,
+        "max_records_written": args.max_records,
+        "diverse_bioproject": bool(args.diverse_bioproject),
+        "records": [],
+    }
     for offset in range(0, len(ids), 100):
         batch = ids[offset : offset + 100]
         time.sleep(args.sleep)
@@ -178,7 +236,11 @@ def main() -> None:
                 raw_summaries["records"].append(record)
                 records.append(record_to_row(record))
 
-    records = sorted(records, key=lambda row: (not row["Assembly Accession"].startswith("GCF_"), row["Assembly Accession"]))
+    records = sorted(records, key=record_quality_key)
+    if args.diverse_bioproject and args.max_records:
+        records = select_bioproject_diverse(records, args.max_records)
+    elif args.max_records:
+        records = records[: args.max_records]
     tsv_path = args.outdir / "ncbi_dataset.tsv"
     with tsv_path.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=NCBI_COLUMNS, delimiter="\t", extrasaction="ignore")
@@ -189,8 +251,9 @@ def main() -> None:
     raw_path.write_text(json.dumps(raw_summaries, indent=2, sort_keys=True), encoding="utf-8")
 
     readme_path = args.outdir / "README.md"
+    generation_doc_path = args.outdir / "INPUT_GENERATION.md" if readme_path.exists() else readme_path
     safe_name = re.sub(r"[^A-Za-z0-9]+", "_", args.organism.strip()).strip("_").lower() or "organism"
-    readme_path.write_text(
+    generation_doc_path.write_text(
         "\n".join(
             [
                 f"# {args.organism} Validation Input",
@@ -199,6 +262,8 @@ def main() -> None:
                 "",
                 f"NCBI E-utilities query: `{query}`",
                 f"Assembly records written: `{len(records)}`",
+                f"Candidate records requested: `{retmax}`",
+                f"BioProject-diverse selection: `{bool(args.diverse_bioproject)}`",
                 "RefSeq/GCF accessions sorted first: `true`",
                 "",
                 "Files:",
@@ -235,6 +300,7 @@ def main() -> None:
         encoding="utf-8",
     )
     print(f"Wrote {len(records)} records to {tsv_path}")
+    print(f"Wrote input-generation documentation to {generation_doc_path}")
 
 
 if __name__ == "__main__":
