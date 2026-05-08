@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+No unreleased changes yet.
+
+## 0.2.2 - 2026-05-08
+
 ### Added
 - Optional NCBI AMRFinderPlus runner (`--run_amrfinderplus`) and precomputed table input (`--amrfinderplus_dir`) with version capture and standardized PanR2 contract export.
 - Analysis profile presets through `--analysis_profile` for `qc_only`, `amr_basic`, `amr_vp`, `amr_vp_mge`, and `comprehensive` runs.
