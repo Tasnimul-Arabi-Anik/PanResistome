@@ -213,6 +213,13 @@ A comprehensive run writes the main combined HTML dashboard here:
 validation_runs/delftia_current/<organism>/report/index.html
 ```
 
+The validation results and lightweight output summary are documented here:
+
+```text
+validation/delftia_tsuruhatensis_current/VALIDATION_RESULTS.md
+docs/example_outputs/delftia_summary/README.md
+```
+
 The full run directory can be large, so the preferred GitHub pattern is to keep the reproducible input and command in git, then publish a trimmed `report/` or GitHub Pages snapshot after manual validation rather than committing genomes, raw databases, and all intermediate outputs.
 
 ## Input
