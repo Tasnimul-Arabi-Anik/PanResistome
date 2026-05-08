@@ -119,6 +119,7 @@ panr2_inputs/
 ├── qc/excluded_for_panr2.csv
 └── manifest/
     ├── software_versions.csv
+    ├── database_setup_status.tsv
     ├── panr2_feature_contract_columns.txt
     ├── panr2_feature_contract_all_columns.txt
     ├── schema_validation_report.csv
@@ -130,7 +131,7 @@ panr2_inputs/
     └── unmatched_features.csv
 ```
 
-`panr2_inputs/features/*.features.tsv` is the strict contract layer. Raw tool folders are still copied for traceability, but downstream analysis should prefer the standardized feature tables when possible. `schema_validation_report.csv` checks required columns, and `unmatched_features.csv` lists feature rows whose assembly accession cannot be matched to metadata.
+`panr2_inputs/features/*.features.tsv` is the strict contract layer. Raw tool folders are still copied for traceability, but downstream analysis should prefer the standardized feature tables when possible. `schema_validation_report.csv` checks required columns, and `unmatched_features.csv` lists feature rows whose assembly accession cannot be matched to metadata. `database_setup_status.tsv` records the required database/tool checks for the selected profile, including CheckM2, AMRFinderPlus, ABRicate `ncbi/vfdb/plasmidfinder`, optional ISfinder FASTA, GTDB-Tk, geNomad, Kaptive, MobileElementFinder, IntegronFinder, and MLST status where relevant.
 
 ## Design Rule
 

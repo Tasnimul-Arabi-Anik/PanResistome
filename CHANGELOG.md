@@ -8,11 +8,13 @@
 - Strict `panr2_inputs/features/*.features.tsv` contract exports plus schema validation reports, unmatched-feature reports, and all-feature merged tables.
 - Optional standardized PanR2 feature columns for feature names/descriptions, mechanism, drug class, source table/file, raw IDs, evidence type, confidence, and notes.
 - Feature completeness audit, module status summary, invalid/duplicate feature reports, metadata audit, metadata eligibility, feature eligibility, prevalence tables, database burden summaries, feature matrices, and cross-database context outputs with exact Fisher screening p-values and BH-FDR q-values in the PanR2 handoff bundle.
+- Database/tool setup audit at `panr2_inputs/manifest/database_setup_status.tsv`, with strict required-database failure behavior for comprehensive PanR2 runs.
 - MLST results are now standardized into `panr2_inputs/features/mlst.features.tsv`, including sequence-type and allele-level feature rows.
 - Optional PanResistome ISfinder-compatible BLAST module (`--run_isfinder`, `--isfinder_db_fasta`) that builds a local BLAST database from an authorized ISfinder FASTA and exports PanR2-readable `isfinder/tables/*_results.tab` files.
 - Reproducible current NCBI Assembly validation input for `Delftia tsuruhatensis` under `validation/delftia_tsuruhatensis_current/`.
 - `scripts/generate_ncbi_assembly_input.py` for creating FetchM2/PanResistome-compatible validation inputs from NCBI Assembly E-utilities.
 - README module stability table clarifying stable, active-development, and experimental modules for public users.
+- `docs/remote_user_validation.md` documenting the fresh-clone standard comprehensive validation path and release-passing criteria.
 - `pytest.ini` limiting test discovery to repository tests so local runs do not collect Nextflow work-directory Conda package tests.
 
 ### Changed

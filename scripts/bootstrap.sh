@@ -187,9 +187,10 @@ if [[ -n "$CHECKM2_DB" ]]; then
 fi
 echo
 echo
-echo "Optional comprehensive feature-analysis command:"
-printf "nextflow run main.nf --input test_small.tsv --outdir results_comprehensive -profile %s --analysis_profile comprehensive --run_gtdbtk false --qc_filter true --threads 8 --db %q" "$PROFILE" "$ABRICATE_DB"
+echo "Recommended standard comprehensive validation command:"
+printf "nextflow run main.nf --input validation/delftia_tsuruhatensis_current/ncbi_dataset.tsv --outdir validation_runs/delftia_fresh -profile %s --analysis_profile comprehensive --qc_filter true --run_gtdbtk false --run_quast true --run_ani true --run_mash true --run_amrfinderplus true --threads 4 --fetchm2_download_workers 2 --db %q" "$PROFILE" "$ABRICATE_DB"
 if [[ -n "$CHECKM2_DB" ]]; then
     printf " --checkm2_db %q" "$CHECKM2_DB"
 fi
 echo
+echo "See docs/remote_user_validation.md for expected outputs and release-passing criteria."

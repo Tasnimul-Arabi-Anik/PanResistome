@@ -33,3 +33,9 @@ validation_runs/delftia_current/<organism>/report/index.html
 ```
 
 Validated locally on 2026-05-08 with GTDB-Tk disabled, 4 threads, CheckM2 enabled with an existing local database path, AMRFinderPlus database auto-download enabled, and comprehensive PanR2 output generation. The run produced AMR, AMRFinderPlus, VFDB, PlasmidFinder, IntegronFinder, MLST, cross-database, temporal, QC, citation, software-version, and dashboard outputs.
+
+The release-blocking fresh-clone validation path is documented in:
+
+```text
+docs/remote_user_validation.md
+```

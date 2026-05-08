@@ -2,6 +2,7 @@ import sys
 import tempfile
 import unittest
 import subprocess
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -176,6 +177,121 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertAlmostEqual(float(table.loc[0, "%COVERAGE"]), 97.56, places=2)
             summary_text = summary.read_text(encoding="utf-8")
             self.assertIn("IS26", summary_text)
+
+    def test_database_setup_status_passes_required_abricate_databases(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            sample_dir = root / "Klebsiella_oxytoca"
+            (sample_dir / "metadata_output").mkdir(parents=True)
+            (sample_dir / "sequence").mkdir()
+            (sample_dir / "metadata_output" / "ncbi_clean.csv").write_text(
+                "Assembly Accession,Organism Name\nGCF_000000001.1,Klebsiella oxytoca\n",
+                encoding="utf-8",
+            )
+            (sample_dir / "sequence" / "GCF_000000001.1_genomic.fna").write_text(
+                ">contig1\nATGC\n",
+                encoding="utf-8",
+            )
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            (fake_bin / "abricate").write_text(
+                "#!/bin/sh\n"
+                "if [ \"$1\" = \"--list\" ]; then\n"
+                "  printf 'DATABASE\\tSEQUENCES\\n'\n"
+                "  printf 'ncbi\\t10\\n'\n"
+                "  printf 'vfdb\\t10\\n'\n"
+                "  printf 'plasmidfinder\\t10\\n'\n"
+                "else\n"
+                "  printf 'abricate 1.0.1\\n'\n"
+                "fi\n",
+                encoding="utf-8",
+            )
+            (fake_bin / "panr").write_text("#!/bin/sh\nprintf 'panr 0.1.3\\n'\n", encoding="utf-8")
+            for executable in fake_bin.iterdir():
+                executable.chmod(0o755)
+            out = root / "database_setup_status.tsv"
+            env = os.environ.copy()
+            env["PATH"] = f"{fake_bin}:{env.get('PATH', '')}"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "scripts" / "database_setup_status.py"),
+                    "--sample-dir",
+                    str(sample_dir),
+                    "--out",
+                    str(out),
+                    "--panr2-dbs",
+                    "ncbi,vfdb,plasmidfinder",
+                    "--run-panr2-comprehensive",
+                    "true",
+                    "--strict",
+                ],
+                check=True,
+                env=env,
+            )
+
+            status = pd.read_csv(out, sep="\t")
+            db_rows = status[status["database_or_tool"].str.startswith("abricate_db:")]
+            self.assertEqual(set(db_rows["status"]), {"PASS"})
+            isfinder = status.loc[status["database_or_tool"] == "isfinder_authorized_fasta", "status"].iloc[0]
+            self.assertEqual(isfinder, "SKIPPED")
+
+    def test_database_setup_status_fails_missing_required_abricate_database(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            sample_dir = root / "Klebsiella_oxytoca"
+            (sample_dir / "metadata_output").mkdir(parents=True)
+            (sample_dir / "sequence").mkdir()
+            (sample_dir / "metadata_output" / "ncbi_clean.csv").write_text(
+                "Assembly Accession,Organism Name\nGCF_000000001.1,Klebsiella oxytoca\n",
+                encoding="utf-8",
+            )
+            (sample_dir / "sequence" / "GCF_000000001.1_genomic.fna").write_text(
+                ">contig1\nATGC\n",
+                encoding="utf-8",
+            )
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            (fake_bin / "abricate").write_text(
+                "#!/bin/sh\n"
+                "if [ \"$1\" = \"--list\" ]; then\n"
+                "  printf 'DATABASE\\tSEQUENCES\\n'\n"
+                "  printf 'ncbi\\t10\\n'\n"
+                "else\n"
+                "  printf 'abricate 1.0.1\\n'\n"
+                "fi\n",
+                encoding="utf-8",
+            )
+            (fake_bin / "panr").write_text("#!/bin/sh\nprintf 'panr 0.1.3\\n'\n", encoding="utf-8")
+            for executable in fake_bin.iterdir():
+                executable.chmod(0o755)
+            out = root / "database_setup_status.tsv"
+            env = os.environ.copy()
+            env["PATH"] = f"{fake_bin}:{env.get('PATH', '')}"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "scripts" / "database_setup_status.py"),
+                    "--sample-dir",
+                    str(sample_dir),
+                    "--out",
+                    str(out),
+                    "--panr2-dbs",
+                    "ncbi,vfdb",
+                    "--run-panr2-comprehensive",
+                    "true",
+                    "--strict",
+                ],
+                check=False,
+                env=env,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            status = pd.read_csv(out, sep="\t")
+            vfdb_status = status.loc[status["database_or_tool"] == "abricate_db:vfdb", "status"].iloc[0]
+            self.assertEqual(vfdb_status, "FAIL")
 
 
 if __name__ == "__main__":

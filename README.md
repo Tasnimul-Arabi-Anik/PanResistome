@@ -16,7 +16,7 @@ PanResistome integrates several state-of-the-art tools including:
 * [**Mash**](https://github.com/marbl/Mash): for optional fast sketch-based distance pre-screening
 * [**ABRicate**](https://github.com/tseemann/abricate): for AMR, virulence, and plasmid database annotation through the PanR2 comprehensive mode
 * [**NCBI AMRFinderPlus**](https://github.com/ncbi/amr): optional first-class AMR gene/protein screening with PanR2-compatible feature export
-* [**MobileElementFinder**](https://bitbucket.org/genomicepidemiology/mobileelementfinder): for mobile genetic element annotation in comprehensive mode
+* [**MobileElementFinder**](https://bitbucket.org/genomicepidemiology/mobileelementfinder): optional mobile genetic element annotation when explicitly enabled
 * [**IntegronFinder**](https://github.com/gem-pasteur/Integron_Finder): for integron annotation in comprehensive mode
 * [**MLST**](https://github.com/tseemann/mlst): for sequence-type context in comprehensive mode
 * [**MOB-suite**](https://github.com/phac-nml/mob-suite): optional plasmid reconstruction/typing before PanR2 analysis
@@ -28,7 +28,7 @@ PanResistome integrates several state-of-the-art tools including:
 
 * 🔄 **Fully automated** end-to-end pipeline from genome download to visualization
 * 🧬 **Panresistome analysis** using resistance gene profiling from ABRicate
-* 🧫 **Comprehensive feature mode** for NCBI AMR, VFDB, PlasmidFinder, MobileElementFinder, IntegronFinder, MLST, optional MOB-suite, prophage/geNomad, and organism-specific typing tables through PanR2
+* 🧫 **Comprehensive feature mode** for NCBI AMR, VFDB, PlasmidFinder, IntegronFinder, MLST, optional MobileElementFinder, optional MOB-suite, prophage/geNomad, and organism-specific typing tables through PanR2
 * 📊 **Visualization-ready outputs** including heatmaps, barplots, boxplots, and interactive HTML figures
 * 📈 **Statistical summaries** and correlation-based insights on resistance gene distribution
 * 🌍 **Geospatial & temporal comparison** of AMR gene prevalence
@@ -63,7 +63,7 @@ GTDB-Tk is disabled by default because it is resource-intensive. If enabled, it 
 
 QUAST, FastANI/skani, and Mash are also optional. They are part of PanResistome because they require external tools and can be expensive on large genome sets. Their outputs are summarized into standardized tables and exported under `panr2_inputs/` for PanR2 to analyze without inheriting the heavy dependencies.
 
-For the broader database/tool workflow, add `--run_panr2_comprehensive true` or choose an analysis profile with `--analysis_profile`. This makes PanResistome call PanR2's integrated runners from the pinned comprehensive Conda environment. The tested default comprehensive mode runs ABRicate `ncbi`, `vfdb`, and `plasmidfinder`, plus IntegronFinder and MLST. MobileElementFinder is available with `--panr2_run_mobileelementfinder true`, but is opt-in because its upstream JSON parser can fail on some valid assemblies. The workflow also writes PanR2 database-specific folders, cross-database associations, temporal summaries, a top-level dashboard at `report/index.html`, citations, software versions, and a standardized `panr2_inputs/` handoff bundle.
+For the broader database/tool workflow, choose an analysis profile with `--analysis_profile comprehensive`. This makes PanResistome call PanR2's integrated runners from the pinned comprehensive Conda environment. The tested default comprehensive mode runs ABRicate `ncbi`, `vfdb`, and `plasmidfinder`, plus IntegronFinder and MLST. MobileElementFinder is available with `--panr2_run_mobileelementfinder true`, but is opt-in because its upstream JSON parser can fail on some valid assemblies. The workflow also writes PanR2 database-specific folders, cross-database associations, temporal summaries, a top-level dashboard at `report/index.html`, citations, software versions, a database/tool setup report at `panr2_inputs/manifest/database_setup_status.tsv`, and a standardized `panr2_inputs/` handoff bundle.
 
 ISfinder is handled separately from ABRicate. The ISfinder database terms do not permit automatic database download or redistribution without written authorization, so PanResistome provides an ISfinder-compatible BLAST runner that builds a local BLAST database from an authorized FASTA supplied with `--isfinder_db_fasta`. When enabled with `--run_isfinder true`, the module writes PanR2-readable tables under `isfinder/tables/` and PanR2 receives them through `--isfinder-dir`.
 
@@ -122,6 +122,28 @@ nextflow run main.nf \
   --threads 8
 ```
 
+Recommended public comprehensive command for a fresh user:
+
+```bash
+nextflow run main.nf \
+  --input validation/delftia_tsuruhatensis_current/ncbi_dataset.tsv \
+  --outdir validation_runs/delftia_fresh \
+  -profile conda,mamba \
+  --analysis_profile comprehensive \
+  --qc_filter true \
+  --run_gtdbtk false \
+  --run_quast true \
+  --run_ani true \
+  --run_mash true \
+  --run_amrfinderplus true \
+  --threads 4 \
+  --fetchm2_download_workers 2
+```
+
+This command intentionally does not require a local CheckM2 database path, manual AMRFinderPlus database setup, manual ABRicate database setup, GTDB-Tk, MobileElementFinder, or ISfinder. The run should write the main dashboard to `<outdir>/<organism>/report/index.html` and the setup audit to `<outdir>/<organism>/panr2_inputs/manifest/database_setup_status.tsv`.
+
+For a fuller release checklist, see `docs/remote_user_validation.md`.
+
 ### Module Stability
 
 | Module | Status | Default | Tested route | Notes |
@@ -138,6 +160,7 @@ nextflow run main.nf \
 | MobileElementFinder | Active development, opt-in | No | Real-data parser failure observed | Use `--panr2_run_mobileelementfinder true` when needed; upstream JSON parser can fail on some assemblies |
 | IntegronFinder/MLST | Active development | No | Remote-style run | Managed by PanR2 comprehensive environment |
 | MOB-suite/geNomad/typing tools | Experimental runners, stable table passthrough | No | Syntax/export path | Prefer precomputed tables for difficult DB setups |
+| Database/tool preflight audit | Stable | Comprehensive profile | Unit test + comprehensive path | Writes `panr2_inputs/manifest/database_setup_status.tsv` and fails required missing databases/tools |
 
 ---
 
@@ -347,7 +370,7 @@ PanResistome/
 | `--representative_only` | bool  | false   | Keep one representative per near-duplicate ANI cluster when filtering |
 | `--analysis_profile`    | str   | custom  | Preset mode: `custom`, `qc_only`, `amr_basic`, `amr_vp`, `amr_vp_mge`, or `comprehensive` |
 | `--export_panr2_inputs` | bool  | true    | Export standardized `panr2_inputs/` handoff directory |
-| `--run_panr2_comprehensive` | bool | false | Run PanR2 integrated ABRicate NCBI/VFDB/PlasmidFinder, MobileElementFinder, IntegronFinder, and MLST |
+| `--run_panr2_comprehensive` | bool | false | Run PanR2 integrated ABRicate NCBI/VFDB/PlasmidFinder, IntegronFinder, and MLST; MobileElementFinder remains opt-in |
 | `--panr2_setup_abricate_db` | bool | true | Run `panr setup-db` before comprehensive analysis |
 | `--panr2_abricate_dbs` | str | ncbi,vfdb,plasmidfinder | ABRicate databases used in comprehensive mode; add `isfinder` only if installed |
 | `--panr2_run_mobileelementfinder` | bool | false | Run MobileElementFinder inside PanR2; opt-in because the upstream parser can fail on some assemblies |

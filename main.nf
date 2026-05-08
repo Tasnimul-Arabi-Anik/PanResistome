@@ -277,7 +277,7 @@ def helpMessage() {
       --representative_only    Keep one representative per near-duplicate ANI cluster for PanR2 when --qc_filter true [default: false]
       --export_panr2_inputs    Export standardized panr2_inputs handoff directory [default: true]
       --analysis_profile       Optional mode: custom, qc_only, amr_basic, amr_vp, amr_vp_mge, comprehensive [default: custom]
-      --run_panr2_comprehensive Run PanR2 integrated runners for ABRicate ncbi/vfdb/plasmidfinder, MobileElementFinder, IntegronFinder, and MLST [default: false]
+      --run_panr2_comprehensive Run PanR2 integrated runners for ABRicate ncbi/vfdb/plasmidfinder, IntegronFinder, and MLST; MobileElementFinder remains opt-in [default: false]
       --panr2_run_defensefinder Add DefenseFinder to comprehensive PanR2 mode when a working installation is available [default: false]
       --defensefinder_dir      Existing DefenseFinder table directory to pass into PanR2
       --run_amrfinderplus      Run NCBI AMRFinderPlus and export standardized PanR2 feature tables [default: false]
@@ -2067,6 +2067,12 @@ process PANR2_COMPREHENSIVE {
     def mobileElementFinderFlag = effectiveRunMobileElementFinder() ? "--run-mobileelementfinder" : ""
     def integronFinderFlag = effectiveRunIntegronFinder() ? "--run-integronfinder" : ""
     def mlstFlag = effectiveRunMlst() ? "--run-mlst" : ""
+    def checkm2DbPath = params.checkm2_db ? launchPath(params.checkm2_db) : ""
+    def checkm2DownloadDir = params.checkm2_db_dir ? launchPath(params.checkm2_db_dir) : (params.outdir.toString().startsWith("/") ? "${params.outdir}/databases/checkm2" : "${launchDir}/${params.outdir}/databases/checkm2")
+    def gtdbtkDataPath = params.gtdbtk_data_path ? launchPath(params.gtdbtk_data_path) : ""
+    def isfinderDbFasta = params.isfinder_db_fasta ? launchPath(params.isfinder_db_fasta) : ""
+    def genomadDbPath = params.genomad_db ? launchPath(params.genomad_db) : ""
+    def kaptiveDbPath = params.kaptive_db ? launchPath(params.kaptive_db) : ""
     """
     sequence_dir="${sample_dir}/sequence"
     if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
@@ -2085,6 +2091,37 @@ process PANR2_COMPREHENSIVE {
 
     echo "Preparing ABRicate databases for comprehensive PanR2 analysis: ${panr2Dbs}"
     ${setupCmd}
+
+    python ${baseDir}/scripts/database_setup_status.py \\
+        --sample-dir ${sample_dir} \\
+        --out ${sample_dir}/panr2_inputs/manifest/database_setup_status.tsv \\
+        --analysis-profile ${analysisProfile()} \\
+        --panr2-dbs ${panr2Dbs} \\
+        --qc-filter ${params.qc_filter} \\
+        --run-checkm2 ${params.run_checkm2} \\
+        --checkm2-db ${shellQuote(checkm2DbPath)} \\
+        --checkm2-db-dir ${shellQuote(checkm2DownloadDir)} \\
+        --checkm2-auto-download-db ${params.checkm2_auto_download_db} \\
+        --run-gtdbtk ${params.run_gtdbtk} \\
+        --gtdbtk-data-path ${shellQuote(gtdbtkDataPath)} \\
+        --run-quast ${params.run_quast} \\
+        --run-ani ${params.run_ani} \\
+        --run-mash ${params.run_mash} \\
+        --run-panr2-comprehensive ${effectiveRunPanr2Comprehensive()} \\
+        --run-integronfinder ${effectiveRunIntegronFinder()} \\
+        --run-mlst ${effectiveRunMlst()} \\
+        --run-mobileelementfinder ${effectiveRunMobileElementFinder()} \\
+        --run-defensefinder ${params.panr2_run_defensefinder} \\
+        --run-isfinder ${effectiveRunIsfinder()} \\
+        --isfinder-db-fasta ${shellQuote(isfinderDbFasta)} \\
+        --run-amrfinderplus ${params.run_amrfinderplus} \\
+        --amrfinderplus-update-db ${params.amrfinderplus_update_db} \\
+        --run-mobsuite ${params.run_mobsuite} \\
+        --run-genomad ${params.run_genomad} \\
+        --genomad-db ${shellQuote(genomadDbPath)} \\
+        --run-kaptive ${params.run_kaptive} \\
+        --kaptive-db ${shellQuote(kaptiveDbPath)} \\
+        --strict
 
     sample_map_arg=""
     if [ -n "${configuredSampleMap}" ]; then
