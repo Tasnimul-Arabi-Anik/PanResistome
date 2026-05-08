@@ -180,7 +180,7 @@ DefenseFinder: available in PanR2 but not default until its environment is consi
 
 ## Runtime Caveat
 
-The standard comprehensive command is reliable but not yet optimized for wall time. PanR2 currently runs some integrated tools, especially IntegronFinder, serially inside one PanR2 process. In the fresh-clone Delftia run, fragmented assemblies produced many per-contig IntegronFinder files and made this the longest PanR2 substage. Future performance work should move these per-sample runners into parallel Nextflow processes and let PanR2 analyze the standardized exported tables.
+The standard comprehensive command is reliable but not yet fully optimized for wall time. PanResistome now owns the standard feature-runner stage through `--panr2_native_feature_runners true` and passes precomputed ABRicate, IntegronFinder, and MLST directories into PanR2. Large fragmented assemblies can still make IntegronFinder the longest substage; future performance work should split per-assembly execution into finer-grained Nextflow channels while keeping PanR2 focused on standardized analysis/reporting.
 
 ## Documentation After A Passing Run
 

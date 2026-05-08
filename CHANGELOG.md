@@ -2,7 +2,16 @@
 
 ## Unreleased
 
-No unreleased changes yet.
+### Added
+- PanResistome-native PanR2 feature-runner stage controlled by `--panr2_native_feature_runners` for ABRicate, IntegronFinder, MLST, and opt-in MobileElementFinder execution before PanR2 reporting.
+- `scripts/run_panr2_native_features.py` to run standard PanR2-compatible annotation helpers under PanResistome ownership and write module status rows.
+- Same-contig and coordinate-proximity cross-database outputs: `amr_mge_same_contig.tsv`, `amr_plasmid_same_contig.tsv`, `amr_integron_same_contig.tsv`, and `feature_proximity.tsv`.
+- Metadata interpretation outputs for `feature_metadata_associations.tsv`, `database_burden_metadata_associations.tsv`, `category_burden_by_sample.tsv`, and `category_metadata_associations.tsv`.
+- Lightweight PanR2 handoff HTML pages for top findings, metadata quality and bias, database burden by metadata, cross-database interpretation, and database setup/feature-contract status.
+- `docs/roadmap_v0.3.0.md` and `validation/klebsiella_pneumoniae_100/README.md` to define the scale and interpretation validation target.
+
+### Changed
+- Comprehensive mode now passes precomputed ABRicate, IntegronFinder, and MLST directories to PanR2 by default instead of asking PanR2 to execute those standard runners internally.
 
 ## 0.2.2 - 2026-05-08
 

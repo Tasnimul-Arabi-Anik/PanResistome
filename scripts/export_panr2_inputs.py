@@ -95,6 +95,7 @@ def main():
         "cross_database",
         "temporal",
         "report",
+        "panr2_native_feature_runners",
     ]:
         copytree_if_exists(sample_dir / database_dir, out / database_dir)
     copytree_if_exists(sample_dir / "tool_results", out / "tool_results")

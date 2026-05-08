@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import csv
+import html
 import itertools
 import math
 import re
@@ -991,6 +992,7 @@ def write_feature_eligibility_and_prevalence(rows: list[dict[str, str]], metadat
     normalized = normalize_metadata_rows(metadata_rows)
     metadata_by_accession = {row["assembly_accession"]: row for row in normalized if row.get("assembly_accession")}
     prevalence_outputs = {}
+    feature_metadata_association_rows = []
     for metadata_column in METADATA_ALIASES:
         group_values = [row.get(metadata_column, "") for row in normalized if row.get(metadata_column, "")]
         if len(set(group_values)) < 2:
@@ -1002,10 +1004,13 @@ def write_feature_eligibility_and_prevalence(rows: list[dict[str, str]], metadat
             for group in groups
         }
         for (database, feature_id), present_samples in sorted(presence.items()):
+            group_prevalence = []
             for group, members in group_samples.items():
                 if not members:
                     continue
                 present = len(present_samples & members)
+                prevalence = present / len(members)
+                group_prevalence.append((group, len(members), present, prevalence))
                 rows_out.append({
                     "metadata_column": metadata_column,
                     "metadata_value": group,
@@ -1014,7 +1019,33 @@ def write_feature_eligibility_and_prevalence(rows: list[dict[str, str]], metadat
                     "feature_category": category_by_feature.get((database, feature_id), ""),
                     "n_group": str(len(members)),
                     "present_count": str(present),
-                    "prevalence": f"{present / len(members):.4f}",
+                    "prevalence": f"{prevalence:.4f}",
+                })
+            eligible_group_prevalence = [item for item in group_prevalence if item[1] >= 3]
+            if len(eligible_group_prevalence) >= 2:
+                top_group = max(eligible_group_prevalence, key=lambda item: item[3])
+                low_group = min(eligible_group_prevalence, key=lambda item: item[3])
+                feature_metadata_association_rows.append({
+                    "database": database,
+                    "feature_id": feature_id,
+                    "feature_category": category_by_feature.get((database, feature_id), ""),
+                    "metadata_column": metadata_column,
+                    "metadata_type": "categorical_or_alias",
+                    "test_used": "prevalence_range_screen",
+                    "n_total": str(sum(item[1] for item in eligible_group_prevalence)),
+                    "n_present": str(sum(item[2] for item in eligible_group_prevalence)),
+                    "n_absent": str(sum(item[1] - item[2] for item in eligible_group_prevalence)),
+                    "groups_tested": str(len(eligible_group_prevalence)),
+                    "effect_size": f"{top_group[3] - low_group[3]:.4f}",
+                    "odds_ratio": "",
+                    "p_value": "",
+                    "q_value": "",
+                    "top_enriched_group": top_group[0],
+                    "top_enriched_group_prevalence": f"{top_group[3]:.4f}",
+                    "lowest_group": low_group[0],
+                    "lowest_group_prevalence": f"{low_group[3]:.4f}",
+                    "status": "screening_summary",
+                    "warning": "small_group" if min(item[1] for item in eligible_group_prevalence) < 5 else "",
                 })
         if rows_out:
             path = prevalence_dir / f"all_databases__by__{metadata_column}.tsv"
@@ -1023,10 +1054,41 @@ def write_feature_eligibility_and_prevalence(rows: list[dict[str, str]], metadat
                 rows_out,
                 ["metadata_column", "metadata_value", "database", "feature_id", "feature_category", "n_group", "present_count", "prevalence"],
             )
+    feature_metadata_association_rows = sorted(
+        feature_metadata_association_rows,
+        key=lambda row: (-float(row["effect_size"]), row["metadata_column"], row["database"], row["feature_id"]),
+    )
+    feature_metadata_association_path = write_rows(
+        analysis_dir / "feature_metadata_associations.tsv",
+        feature_metadata_association_rows,
+        [
+            "database",
+            "feature_id",
+            "feature_category",
+            "metadata_column",
+            "metadata_type",
+            "test_used",
+            "n_total",
+            "n_present",
+            "n_absent",
+            "groups_tested",
+            "effect_size",
+            "odds_ratio",
+            "p_value",
+            "q_value",
+            "top_enriched_group",
+            "top_enriched_group_prevalence",
+            "lowest_group",
+            "lowest_group_prevalence",
+            "status",
+            "warning",
+        ],
+    )
 
     burden_rows = []
     features_by_sample_database: dict[tuple[str, str], set[str]] = defaultdict(set)
     categories_by_sample_database: dict[tuple[str, str], set[str]] = defaultdict(set)
+    features_by_sample_database_category: dict[tuple[str, str, str], set[str]] = defaultdict(set)
     for row in rows:
         sample = row.get("assembly_accession", "") or row.get("sample_id", "")
         database = row.get("database", "")
@@ -1036,6 +1098,7 @@ def write_feature_eligibility_and_prevalence(rows: list[dict[str, str]], metadat
             features_by_sample_database[(sample, database)].add(feature_id)
             if category:
                 categories_by_sample_database[(sample, database)].add(category)
+                features_by_sample_database_category[(sample, database, category)].add(feature_id)
     databases = sorted({row.get("database", "") for row in rows if row.get("database")})
     for sample in samples:
         metadata = metadata_by_accession.get(sample, {})
@@ -1053,7 +1116,151 @@ def write_feature_eligibility_and_prevalence(rows: list[dict[str, str]], metadat
     burden_fields = ["assembly_accession", "database", "unique_feature_count", "category_count", *METADATA_ALIASES.keys()]
     burden_path = write_rows(analysis_dir / "database_burden_by_sample.tsv", burden_rows, burden_fields)
 
+    burden_association_rows = []
+    for metadata_column in METADATA_ALIASES:
+        for database in databases:
+            grouped: dict[str, list[int]] = defaultdict(list)
+            for row in burden_rows:
+                if row["database"] != database or not row.get(metadata_column):
+                    continue
+                grouped[row[metadata_column]].append(int(row["unique_feature_count"]))
+            eligible = [(group, values) for group, values in grouped.items() if len(values) >= 3]
+            if len(eligible) < 2:
+                continue
+            means = [(group, len(values), sum(values) / len(values)) for group, values in eligible]
+            top = max(means, key=lambda item: item[2])
+            low = min(means, key=lambda item: item[2])
+            burden_association_rows.append({
+                "database": database,
+                "metadata_column": metadata_column,
+                "test_used": "mean_burden_range_screen",
+                "groups_tested": str(len(means)),
+                "top_group": top[0],
+                "top_group_n": str(top[1]),
+                "top_group_mean_unique_features": f"{top[2]:.4f}",
+                "lowest_group": low[0],
+                "lowest_group_n": str(low[1]),
+                "lowest_group_mean_unique_features": f"{low[2]:.4f}",
+                "effect_size": f"{top[2] - low[2]:.4f}",
+                "warning": "small_group" if min(item[1] for item in means) < 5 else "",
+            })
+    burden_association_rows = sorted(
+        burden_association_rows,
+        key=lambda row: (-float(row["effect_size"]), row["metadata_column"], row["database"]),
+    )
+    burden_association_path = write_rows(
+        analysis_dir / "database_burden_metadata_associations.tsv",
+        burden_association_rows,
+        [
+            "database",
+            "metadata_column",
+            "test_used",
+            "groups_tested",
+            "top_group",
+            "top_group_n",
+            "top_group_mean_unique_features",
+            "lowest_group",
+            "lowest_group_n",
+            "lowest_group_mean_unique_features",
+            "effect_size",
+            "warning",
+        ],
+    )
+
+    category_burden_rows = []
+    for sample in samples:
+        metadata = metadata_by_accession.get(sample, {})
+        for sample_key, database, category in sorted(features_by_sample_database_category):
+            if sample_key != sample:
+                continue
+            out = {
+                "assembly_accession": sample,
+                "database": database,
+                "feature_category": category,
+                "unique_feature_count": str(len(features_by_sample_database_category[(sample, database, category)])),
+            }
+            for metadata_column in METADATA_ALIASES:
+                out[metadata_column] = metadata.get(metadata_column, "")
+            category_burden_rows.append(out)
+    category_burden_fields = ["assembly_accession", "database", "feature_category", "unique_feature_count", *METADATA_ALIASES.keys()]
+    category_burden_path = write_rows(analysis_dir / "category_burden_by_sample.tsv", category_burden_rows, category_burden_fields)
+
+    category_association_rows = []
+    for metadata_column in METADATA_ALIASES:
+        grouped_values: dict[tuple[str, str, str], list[int]] = defaultdict(list)
+        for row in category_burden_rows:
+            group = row.get(metadata_column, "")
+            if not group:
+                continue
+            grouped_values[(row["database"], row["feature_category"], group)].append(int(row["unique_feature_count"]))
+        by_category: dict[tuple[str, str], dict[str, list[int]]] = defaultdict(dict)
+        for (database, category, group), values in grouped_values.items():
+            by_category[(database, category)][group] = values
+        for (database, category), group_map in by_category.items():
+            eligible = [(group, values) for group, values in group_map.items() if len(values) >= 3]
+            if len(eligible) < 2:
+                continue
+            means = [(group, len(values), sum(values) / len(values)) for group, values in eligible]
+            top = max(means, key=lambda item: item[2])
+            low = min(means, key=lambda item: item[2])
+            category_association_rows.append({
+                "database": database,
+                "feature_category": category,
+                "metadata_column": metadata_column,
+                "test_used": "mean_category_burden_range_screen",
+                "groups_tested": str(len(means)),
+                "top_group": top[0],
+                "top_group_mean_unique_features": f"{top[2]:.4f}",
+                "lowest_group": low[0],
+                "lowest_group_mean_unique_features": f"{low[2]:.4f}",
+                "effect_size": f"{top[2] - low[2]:.4f}",
+                "warning": "small_group" if min(item[1] for item in means) < 5 else "",
+            })
+    category_association_rows = sorted(
+        category_association_rows,
+        key=lambda row: (-float(row["effect_size"]), row["metadata_column"], row["database"], row["feature_category"]),
+    )
+    category_association_path = write_rows(
+        analysis_dir / "category_metadata_associations.tsv",
+        category_association_rows,
+        [
+            "database",
+            "feature_category",
+            "metadata_column",
+            "test_used",
+            "groups_tested",
+            "top_group",
+            "top_group_mean_unique_features",
+            "lowest_group",
+            "lowest_group_mean_unique_features",
+            "effect_size",
+            "warning",
+        ],
+    )
+
     top_findings = []
+    for row in feature_metadata_association_rows:
+        if float(row["effect_size"]) >= 0.5:
+            top_findings.append({
+                "finding_type": "feature_metadata_association",
+                "database": row["database"],
+                "feature_id": row["feature_id"],
+                "metadata_column": row["metadata_column"],
+                "metadata_value": row["top_enriched_group"],
+                "effect_size": row["effect_size"],
+                "message": f"{row['database']} feature {row['feature_id']} was enriched in {row['metadata_column']}={row['top_enriched_group']} compared with {row['lowest_group']} (prevalence difference {row['effect_size']}).",
+            })
+    for row in burden_association_rows:
+        if float(row["effect_size"]) > 0:
+            top_findings.append({
+                "finding_type": "database_burden_metadata_association",
+                "database": row["database"],
+                "feature_id": "database_burden",
+                "metadata_column": row["metadata_column"],
+                "metadata_value": row["top_group"],
+                "effect_size": row["effect_size"],
+                "message": f"{row['database']} feature burden was highest in {row['metadata_column']}={row['top_group']} compared with {row['lowest_group']} (mean difference {row['effect_size']}).",
+            })
     for key, path in prevalence_outputs.items():
         for row in read_table(Path(path)):
             if int(row.get("n_group", "0") or 0) >= 3 and float(row.get("prevalence", "0") or 0) >= 0.8:
@@ -1081,7 +1288,11 @@ def write_feature_eligibility_and_prevalence(rows: list[dict[str, str]], metadat
 
     return {
         "feature_eligibility": feature_eligibility_path,
+        "feature_metadata_associations": feature_metadata_association_path,
         "database_burden_by_sample": burden_path,
+        "database_burden_metadata_associations": burden_association_path,
+        "category_burden_by_sample": category_burden_path,
+        "category_metadata_associations": category_association_path,
         "top_findings": top_findings_path,
         "top_findings_md": str(top_findings_md),
         **prevalence_outputs,
@@ -1143,6 +1354,110 @@ def add_bh_qvalues(rows: list[dict[str, str]], p_column: str = "p_value", q_colu
         qvalues[index] = min(running_min, 1.0)
     for index, q_value in qvalues.items():
         rows[index][q_column] = f"{q_value:.6g}"
+
+
+AMR_CONTEXT_DATABASES = {"amr", "amrfinderplus"}
+MGE_CONTEXT_DATABASES = {"isfinder", "mobileelementfinder", "integronfinder"}
+PLASMID_CONTEXT_DATABASES = {"plasmidfinder", "mobsuite"}
+INTEGRON_CONTEXT_DATABASES = {"integronfinder"}
+
+
+def _feature_interval(row: dict[str, str]) -> tuple[int, int] | None:
+    start = _as_int(row.get("start", ""))
+    end = _as_int(row.get("end", ""))
+    if start is None or end is None:
+        return None
+    if start > end:
+        start, end = end, start
+    return start, end
+
+
+def _feature_distance(row_a: dict[str, str], row_b: dict[str, str]) -> tuple[str, str]:
+    interval_a = _feature_interval(row_a)
+    interval_b = _feature_interval(row_b)
+    if interval_a is None or interval_b is None:
+        return "", "level_2_same_contig_coordinates_missing"
+    a_start, a_end = interval_a
+    b_start, b_end = interval_b
+    if max(a_start, b_start) <= min(a_end, b_end):
+        return "0", "level_4_same_contig_overlapping"
+    distance = min(abs(b_start - a_end), abs(a_start - b_end))
+    if distance <= 10000:
+        return str(distance), "level_3_same_contig_within_10kb"
+    return str(distance), "level_2_same_contig"
+
+
+def _context_feature_rows(rows: list[dict[str, str]], databases: set[str]) -> list[dict[str, str]]:
+    return [
+        row
+        for row in rows
+        if row.get("presence", "1") == "1"
+        and row.get("database") in databases
+        and row.get("assembly_accession")
+        and row.get("contig")
+        and row.get("feature_id")
+    ]
+
+
+def _same_contig_pairs(
+    rows: list[dict[str, str]],
+    left_databases: set[str],
+    right_databases: set[str],
+    context: str,
+) -> list[dict[str, str]]:
+    left_rows = _context_feature_rows(rows, left_databases)
+    right_rows = _context_feature_rows(rows, right_databases)
+    by_key: dict[tuple[str, str], tuple[list[dict[str, str]], list[dict[str, str]]]] = defaultdict(lambda: ([], []))
+    for row in left_rows:
+        by_key[(row["assembly_accession"], row["contig"])][0].append(row)
+    for row in right_rows:
+        by_key[(row["assembly_accession"], row["contig"])][1].append(row)
+
+    pair_rows = []
+    seen: set[tuple[str, str, str, str, str, str, str]] = set()
+    for (assembly, contig), (left, right) in sorted(by_key.items()):
+        for row_a in left:
+            for row_b in right:
+                if row_a is row_b:
+                    continue
+                if (
+                    row_a.get("database") == row_b.get("database")
+                    and row_a.get("feature_id") == row_b.get("feature_id")
+                    and row_a.get("start") == row_b.get("start")
+                    and row_a.get("end") == row_b.get("end")
+                ):
+                    continue
+                distance, level = _feature_distance(row_a, row_b)
+                key = (
+                    assembly,
+                    contig,
+                    row_a.get("database", ""),
+                    row_a.get("feature_id", ""),
+                    row_b.get("database", ""),
+                    row_b.get("feature_id", ""),
+                    distance,
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                pair_rows.append({
+                    "assembly_accession": assembly,
+                    "contig": contig,
+                    "context": context,
+                    "feature_a_database": row_a.get("database", ""),
+                    "feature_a_id": row_a.get("feature_id", ""),
+                    "feature_a_category": row_a.get("feature_category", ""),
+                    "feature_a_start": row_a.get("start", ""),
+                    "feature_a_end": row_a.get("end", ""),
+                    "feature_b_database": row_b.get("database", ""),
+                    "feature_b_id": row_b.get("feature_id", ""),
+                    "feature_b_category": row_b.get("feature_category", ""),
+                    "feature_b_start": row_b.get("start", ""),
+                    "feature_b_end": row_b.get("end", ""),
+                    "distance_bp": distance,
+                    "interpretation_level": level,
+                })
+    return pair_rows
 
 
 def write_cross_database_outputs(rows: list[dict[str, str]], metadata_rows: list[dict[str, str]], out_dir: Path, max_features: int = 300) -> dict[str, str]:
@@ -1233,6 +1548,49 @@ def write_cross_database_outputs(rows: list[dict[str, str]], metadata_rows: list
         ["database_a", "database_b", "n_total", "n_both_present", "n_a_only", "n_b_only", "n_neither", "jaccard"],
     )
 
+    proximity_fields = [
+        "assembly_accession",
+        "contig",
+        "context",
+        "feature_a_database",
+        "feature_a_id",
+        "feature_a_category",
+        "feature_a_start",
+        "feature_a_end",
+        "feature_b_database",
+        "feature_b_id",
+        "feature_b_category",
+        "feature_b_start",
+        "feature_b_end",
+        "distance_bp",
+        "interpretation_level",
+    ]
+    amr_mge_same_contig_rows = _same_contig_pairs(rows, AMR_CONTEXT_DATABASES, MGE_CONTEXT_DATABASES, "amr_mge")
+    amr_plasmid_same_contig_rows = _same_contig_pairs(rows, AMR_CONTEXT_DATABASES, PLASMID_CONTEXT_DATABASES, "amr_plasmid")
+    amr_integron_same_contig_rows = _same_contig_pairs(rows, AMR_CONTEXT_DATABASES, INTEGRON_CONTEXT_DATABASES, "amr_integron")
+    feature_proximity_rows = sorted(
+        amr_mge_same_contig_rows + amr_plasmid_same_contig_rows + amr_integron_same_contig_rows,
+        key=lambda row: (
+            row["assembly_accession"],
+            row["contig"],
+            row["context"],
+            row["feature_a_database"],
+            row["feature_a_id"],
+            row["feature_b_database"],
+            row["feature_b_id"],
+            _as_int(row["distance_bp"]) if row["distance_bp"] else 10**18,
+        ),
+    )
+    amr_mge_same_contig_path = write_rows(cross_dir / "amr_mge_same_contig.tsv", amr_mge_same_contig_rows, proximity_fields)
+    amr_plasmid_same_contig_path = write_rows(cross_dir / "amr_plasmid_same_contig.tsv", amr_plasmid_same_contig_rows, proximity_fields)
+    amr_integron_same_contig_path = write_rows(cross_dir / "amr_integron_same_contig.tsv", amr_integron_same_contig_rows, proximity_fields)
+    feature_proximity_path = write_rows(cross_dir / "feature_proximity.tsv", feature_proximity_rows, proximity_fields)
+    samples_with_same_contig = {
+        row["assembly_accession"]
+        for row in feature_proximity_rows
+        if row.get("assembly_accession")
+    }
+
     by_sample_database: dict[tuple[str, str], set[str]] = defaultdict(set)
     for row in rows:
         sample = row.get("assembly_accession", "") or row.get("sample_id", "")
@@ -1255,7 +1613,7 @@ def write_cross_database_outputs(rows: list[dict[str, str]], metadata_rows: list
             "amr_count": str(len(amr)),
             "plasmid_count": str(len(plasmid)),
             "mge_count": str(len(mge)),
-            "same_contig_evidence": "not_evaluated",
+            "same_contig_evidence": "yes" if sample in samples_with_same_contig else "no",
         })
     amr_mge_path = write_rows(
         cross_dir / "amr_mge_context.tsv",
@@ -1288,6 +1646,10 @@ def write_cross_database_outputs(rows: list[dict[str, str]], metadata_rows: list
         "database_cooccurrence_summary": database_summary_path,
         "amr_mge_context": amr_mge_path,
         "amr_plasmid_context": amr_plasmid_path,
+        "amr_mge_same_contig": amr_mge_same_contig_path,
+        "amr_plasmid_same_contig": amr_plasmid_same_contig_path,
+        "amr_integron_same_contig": amr_integron_same_contig_path,
+        "feature_proximity": feature_proximity_path,
         "amrfinder_abricate_concordance": concordance_path,
     }
 
@@ -1309,10 +1671,20 @@ def write_feature_completeness_audit(sample_dir: Path, out_dir: Path) -> dict[st
         sample_counts[database] = len({row.get("assembly_accession", "") or row.get("sample_id", "") for row in table_rows})
         unique_counts[database] = len({row.get("feature_id", "") for row in table_rows if row.get("feature_id")})
     for database in databases:
-        module_dir = sample_dir / database
+        module_dirs = [sample_dir / database]
         if database == "amr":
-            module_dir = sample_dir / "abricate"
-        raw_output_found = module_dir.exists() and any(path.is_file() for path in module_dir.rglob("*"))
+            module_dirs.extend([sample_dir / "abricate", sample_dir / "tool_results" / "abricate" / "ncbi"])
+        elif database in {"vfdb", "plasmidfinder", "isfinder"}:
+            module_dirs.append(sample_dir / "tool_results" / "abricate" / database)
+        elif database in {"integronfinder", "mobileelementfinder", "mlst"}:
+            module_dirs.append(sample_dir / "tool_results" / database)
+        raw_dirs = [
+            module_dir
+            for module_dir in module_dirs
+            if module_dir.exists() and any(path.is_file() for path in module_dir.rglob("*"))
+        ]
+        raw_output_found = bool(raw_dirs)
+        module_dir = raw_dirs[0] if raw_dirs else module_dirs[0]
         feature_table = features_dir / f"{database}.features.tsv"
         feature_table_found = feature_table.exists()
         feature_rows = feature_counts.get(database, 0)
@@ -1358,26 +1730,47 @@ def write_feature_completeness_audit(sample_dir: Path, out_dir: Path) -> dict[st
             "message",
         ],
     )
+    native_status_rows = []
+    for status_file in sorted(sample_dir.rglob("module_status.tsv")):
+        if out_dir in status_file.parents:
+            continue
+        for row in read_table(status_file):
+            native_status_rows.append({
+                "module": row.get("module", status_file.parent.name),
+                "enabled": row.get("enabled", ""),
+                "started": row.get("started", ""),
+                "completed": row.get("completed", ""),
+                "status": row.get("status", ""),
+                "samples_input": row.get("samples_input", ""),
+                "samples_processed": row.get("samples_processed", ""),
+                "samples_failed": row.get("samples_failed", ""),
+                "raw_tables_created": row.get("raw_tables_created", ""),
+                "feature_rows_created": row.get("feature_rows_created", ""),
+                "unique_features_created": row.get("unique_features_created", ""),
+                "output_dir": row.get("output_dir", str(status_file.parent)),
+                "message": row.get("message", ""),
+            })
+    audit_status_rows = [
+        {
+            "module": row["database"],
+            "enabled": row["module_enabled"],
+            "started": row["raw_output_found"],
+            "completed": row["feature_table_found"],
+            "status": row["status"],
+            "samples_input": row["samples_processed"],
+            "samples_processed": row["samples_processed"],
+            "samples_failed": "",
+            "raw_tables_created": row["raw_output_found"],
+            "feature_rows_created": row["feature_rows"],
+            "unique_features_created": row["unique_features"],
+            "output_dir": str(sample_dir / row["database"]),
+            "message": row["message"],
+        }
+        for row in rows
+    ]
     module_status_path = write_rows(
         manifest_dir / "module_status_summary.tsv",
-        [
-            {
-                "module": row["database"],
-                "enabled": row["module_enabled"],
-                "started": row["raw_output_found"],
-                "completed": row["feature_table_found"],
-                "status": row["status"],
-                "samples_input": row["samples_processed"],
-                "samples_processed": row["samples_processed"],
-                "samples_failed": "",
-                "raw_tables_created": row["raw_output_found"],
-                "feature_rows_created": row["feature_rows"],
-                "unique_features_created": row["unique_features"],
-                "output_dir": str(sample_dir / row["database"]),
-                "message": row["message"],
-            }
-            for row in rows
-        ],
+        native_status_rows + audit_status_rows,
         [
             "module",
             "enabled",
@@ -1397,6 +1790,163 @@ def write_feature_completeness_audit(sample_dir: Path, out_dir: Path) -> dict[st
     return {"feature_completeness_audit": audit_path, "module_status_summary": module_status_path}
 
 
+def _relative_link(target: Path, base: Path) -> str:
+    try:
+        return target.relative_to(base).as_posix()
+    except ValueError:
+        return target.as_posix()
+
+
+def _html_table(rows: list[dict[str, str]], fields: list[str], max_rows: int = 25) -> str:
+    if not rows:
+        return "<p>No rows available.</p>"
+    header = "".join(f"<th>{html.escape(field)}</th>" for field in fields)
+    body_rows = []
+    for row in rows[:max_rows]:
+        body_rows.append(
+            "<tr>"
+            + "".join(f"<td>{html.escape(str(row.get(field, '') or ''))}</td>" for field in fields)
+            + "</tr>"
+        )
+    return f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(body_rows)}</tbody></table>"
+
+
+def write_interpretation_reports(out_dir: Path) -> dict[str, str]:
+    report_dir = out_dir / "report"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    analysis_dir = out_dir / "metadata_feature_analysis"
+    cross_dir = out_dir / "cross_database"
+    manifest_dir = out_dir / "manifest"
+
+    styles = """
+body { font-family: Arial, sans-serif; margin: 2rem; color: #1f2933; }
+h1, h2 { color: #102a43; }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9rem; }
+th, td { border: 1px solid #d9e2ec; padding: 0.45rem; text-align: left; vertical-align: top; }
+th { background: #f0f4f8; }
+.warning { background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; }
+.card { border: 1px solid #d9e2ec; padding: 0.75rem; border-radius: 6px; }
+"""
+
+    def page(title: str, body: str) -> str:
+        return (
+            "<!doctype html><html><head><meta charset='utf-8'>"
+            f"<title>{html.escape(title)}</title><style>{styles}</style></head><body>"
+            f"<h1>{html.escape(title)}</h1>{body}</body></html>\n"
+        )
+
+    top_findings_rows = read_table(analysis_dir / "top_findings.tsv")
+    top_findings_path = report_dir / "top_findings.html"
+    top_findings_body = """
+<div class="warning">These are screening summaries. They indicate metadata-feature patterns in this dataset and do not prove causality, transmission, plasmid localization, or physical linkage.</div>
+<p>Inspect metadata completeness, group sizes, and BioProject/study balance before interpreting any association.</p>
+"""
+    top_findings_body += _html_table(
+        top_findings_rows,
+        ["finding_type", "database", "feature_id", "metadata_column", "metadata_value", "effect_size", "message"],
+        max_rows=50,
+    )
+    top_findings_path.write_text(page("Top Metadata-Feature Findings", top_findings_body), encoding="utf-8")
+
+    metadata_path = report_dir / "metadata_quality_and_bias.html"
+    metadata_rows = read_table(analysis_dir / "metadata_column_eligibility.tsv")
+    audit_rows = read_table(analysis_dir / "fetchm2_metadata_audit.tsv")
+    metadata_body = """
+<p>This page summarizes which FetchM2 metadata columns are usable for comparative analysis and which are sparse, dominated by one value, or likely identifiers.</p>
+"""
+    metadata_body += "<h2>Metadata Column Eligibility</h2>"
+    metadata_body += _html_table(
+        metadata_rows,
+        ["metadata_column", "data_type", "non_missing_count", "missing_fraction", "unique_values", "largest_group_fraction", "eligible", "reason"],
+        max_rows=80,
+    )
+    metadata_body += "<h2>FetchM2 Metadata Audit</h2>"
+    metadata_body += _html_table(
+        audit_rows,
+        ["column", "standardized_name", "data_type", "non_missing_count", "missing_fraction", "unique_values", "top_value", "top_value_fraction", "recommended_for_analysis", "reason"],
+        max_rows=80,
+    )
+    metadata_path.write_text(page("Metadata Quality And Bias", metadata_body), encoding="utf-8")
+
+    burden_path = report_dir / "database_burden_by_metadata.html"
+    burden_rows = read_table(analysis_dir / "database_burden_by_sample.tsv")
+    burden_body = """
+<p>Database burden is the number of unique features observed per sample for each database. Use this with metadata columns to identify groups worth deeper analysis.</p>
+"""
+    burden_body += _html_table(
+        burden_rows,
+        ["assembly_accession", "database", "unique_feature_count", "category_count", "country", "host", "sample_type", "isolation_source", "environment_medium", "collection_year"],
+        max_rows=80,
+    )
+    burden_path.write_text(page("Database Burden By Metadata", burden_body), encoding="utf-8")
+
+    cross_path = report_dir / "cross_database_interpretation.html"
+    proximity_rows = read_table(cross_dir / "feature_proximity.tsv")
+    cooccurrence_rows = read_table(cross_dir / "database_cooccurrence_summary.tsv")
+    cross_body = """
+<div class="warning">Genome-level co-occurrence means features were detected in the same sample/genome. Same-contig and proximity rows provide stronger context, but still do not prove transfer, expression, phenotype, or plasmid localization.</div>
+<div class="grid">
+"""
+    for label, path in [
+        ("Feature co-occurrence", cross_dir / "feature_cooccurrence.tsv"),
+        ("Database co-occurrence", cross_dir / "database_cooccurrence_summary.tsv"),
+        ("AMR-MGE same-contig evidence", cross_dir / "amr_mge_same_contig.tsv"),
+        ("AMR-plasmid same-contig evidence", cross_dir / "amr_plasmid_same_contig.tsv"),
+        ("AMR-integron same-contig evidence", cross_dir / "amr_integron_same_contig.tsv"),
+        ("All feature proximity evidence", cross_dir / "feature_proximity.tsv"),
+    ]:
+        cross_body += f"<div class='card'><strong>{html.escape(label)}</strong><br><a href='../{html.escape(_relative_link(path, out_dir))}'>{html.escape(_relative_link(path, out_dir))}</a></div>"
+    cross_body += "</div><h2>Database Co-occurrence</h2>"
+    cross_body += _html_table(cooccurrence_rows, ["database_a", "database_b", "n_total", "n_both_present", "jaccard"], max_rows=50)
+    cross_body += "<h2>Same-Contig And Proximity Evidence</h2>"
+    cross_body += _html_table(
+        proximity_rows,
+        ["assembly_accession", "contig", "context", "feature_a_database", "feature_a_id", "feature_b_database", "feature_b_id", "distance_bp", "interpretation_level"],
+        max_rows=80,
+    )
+    cross_path.write_text(page("Cross-Database Interpretation", cross_body), encoding="utf-8")
+
+    setup_path = report_dir / "database_setup_and_contract.html"
+    setup_rows = read_table(manifest_dir / "database_setup_status.tsv")
+    audit_rows = read_table(manifest_dir / "feature_completeness_audit.tsv")
+    setup_body = "<h2>Database And Tool Setup</h2>"
+    setup_body += _html_table(
+        setup_rows,
+        ["database_or_tool", "required_for_profile", "checked", "status", "setup_action", "version_or_path", "message"],
+        max_rows=80,
+    )
+    setup_body += "<h2>Feature Completeness Audit</h2>"
+    setup_body += _html_table(
+        audit_rows,
+        ["database", "expected_from_profile", "module_enabled", "feature_table_found", "feature_rows", "unique_features", "samples_with_features", "status", "message"],
+        max_rows=80,
+    )
+    setup_path.write_text(page("Database Setup And Feature Contract", setup_body), encoding="utf-8")
+
+    index_path = report_dir / "panr2_handoff_index.html"
+    index_body = "<p>PanResistome-generated PanR2 handoff interpretation pages.</p><ul>"
+    for label, path in [
+        ("Top findings", top_findings_path),
+        ("Metadata quality and bias", metadata_path),
+        ("Database burden by metadata", burden_path),
+        ("Cross-database interpretation", cross_path),
+        ("Database setup and feature contract", setup_path),
+    ]:
+        index_body += f"<li><a href='{html.escape(path.name)}'>{html.escape(label)}</a></li>"
+    index_body += "</ul>"
+    index_path.write_text(page("PanR2 Handoff Report Index", index_body), encoding="utf-8")
+
+    return {
+        "handoff_report_index": str(index_path),
+        "top_findings_html": str(top_findings_path),
+        "metadata_quality_html": str(metadata_path),
+        "database_burden_html": str(burden_path),
+        "cross_database_interpretation_html": str(cross_path),
+        "database_setup_contract_html": str(setup_path),
+    }
+
+
 def export_contract(sample_dir: Path, out_dir: Path) -> dict[str, str]:
     written = write_feature_tables(sample_dir, out_dir)
     validation = validate_feature_tables(sample_dir, out_dir)
@@ -1407,4 +1957,5 @@ def export_contract(sample_dir: Path, out_dir: Path) -> dict[str, str]:
     matrix_outputs = write_feature_matrices(all_features, metadata_rows, out_dir)
     cross_outputs = write_cross_database_outputs(all_features, metadata_rows, out_dir)
     audit_outputs = write_feature_completeness_audit(sample_dir, out_dir)
-    return {**written, **validation, **metadata_outputs, **feature_outputs, **matrix_outputs, **cross_outputs, **audit_outputs}
+    report_outputs = write_interpretation_reports(out_dir)
+    return {**written, **validation, **metadata_outputs, **feature_outputs, **matrix_outputs, **cross_outputs, **audit_outputs, **report_outputs}

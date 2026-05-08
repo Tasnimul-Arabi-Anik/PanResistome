@@ -184,6 +184,49 @@ class FetchM2AdapterTests(unittest.TestCase):
             summary_text = summary.read_text(encoding="utf-8")
             self.assertIn("IS26", summary_text)
 
+    def test_cross_database_proximity_outputs_same_contig_evidence(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_dir = Path(tmpdir) / "Klebsiella_oxytoca"
+            metadata_dir = sample_dir / "metadata_output"
+            metadata_dir.mkdir(parents=True)
+            pd.DataFrame(
+                [
+                    {
+                        "Assembly Accession": "GCF_000000001.1",
+                        "Organism Name": "Klebsiella oxytoca",
+                        "Country": "Bangladesh",
+                        "Isolation_Source_SD": "blood",
+                    }
+                ]
+            ).to_csv(metadata_dir / "ncbi_clean.csv", index=False)
+
+            result_header = "#FILE\tSEQUENCE\tSTART\tEND\tGENE\t%COVERAGE\t%IDENTITY\tDATABASE\tACCESSION\tPRODUCT\tRESISTANCE\n"
+            for directory, filename, database, gene, start, end in [
+                ("abricate", "ncbi_results.tab", "ncbi", "blaTEM-1", 100, 500),
+                ("isfinder/tables", "isfinder_results.tab", "isfinder", "IS26", 700, 1200),
+                ("plasmidfinder", "plasmidfinder_results.tab", "plasmidfinder", "IncFIB", 1400, 1800),
+                ("integronfinder", "integronfinder_results.tab", "integronfinder", "complete_integron_intI1", 450, 900),
+            ]:
+                out_dir = sample_dir / directory
+                out_dir.mkdir(parents=True)
+                (out_dir / filename).write_text(
+                    result_header
+                    + f"GCF_000000001.1.fna\tcontigA\t{start}\t{end}\t{gene}\t100\t99\t{database}\tACC\tproduct\tcategory\n",
+                    encoding="utf-8",
+                )
+
+            outputs = export_contract(sample_dir, sample_dir / "panr2_inputs")
+            proximity = pd.read_csv(outputs["feature_proximity"], sep="\t")
+            self.assertFalse(proximity.empty)
+            self.assertIn("level_3_same_contig_within_10kb", set(proximity["interpretation_level"]))
+            self.assertIn("level_4_same_contig_overlapping", set(proximity["interpretation_level"]))
+            amr_mge = pd.read_csv(outputs["amr_mge_same_contig"], sep="\t")
+            self.assertTrue({"isfinder", "integronfinder"}.issubset(set(amr_mge["feature_b_database"])))
+            context = pd.read_csv(outputs["amr_mge_context"], sep="\t")
+            self.assertEqual(context.loc[0, "same_contig_evidence"], "yes")
+            self.assertTrue(Path(outputs["cross_database_interpretation_html"]).exists())
+            self.assertTrue(Path(outputs["top_findings_html"]).exists())
+
     def test_database_setup_status_passes_required_abricate_databases(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

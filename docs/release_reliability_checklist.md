@@ -87,4 +87,4 @@ nextflow run main.nf \
 - GTDB-Tk is intentionally excluded from the public comprehensive validation because its reference database is large.
 - ISfinder is not auto-downloaded or redistributed. Use `--run_isfinder true --isfinder_db_fasta <authorized.fasta>` when the user has an authorized local database.
 - MobileElementFinder remains opt-in because upstream output parsing has failed on otherwise valid assemblies during real validation.
-- PanR2 integrated runners currently execute some tools sequentially. Large, fragmented assemblies can make IntegronFinder slow; future optimization should move more per-sample execution into parallel Nextflow processes and hand standardized tables to PanR2.
+- Standard ABRicate, IntegronFinder, MLST, and opt-in MobileElementFinder execution is now owned by the PanResistome native feature-runner stage when `--panr2_native_feature_runners true`. Large fragmented assemblies can still make IntegronFinder slow inside that stage; future optimization should split per-assembly execution into finer-grained Nextflow channels.

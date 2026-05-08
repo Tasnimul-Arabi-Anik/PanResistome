@@ -76,6 +76,7 @@ params.panr2_plot_style = 'publication'
 params.panr2_label_max_length = 40
 params.panr2_cross_database_max_features = 300
 params.panr2_force_tool_run = false
+params.panr2_native_feature_runners = true
 params.panr2_run_mobileelementfinder = false
 params.panr2_run_defensefinder = false
 params.panr2_sample_map = null
@@ -277,7 +278,7 @@ def helpMessage() {
       --representative_only    Keep one representative per near-duplicate ANI cluster for PanR2 when --qc_filter true [default: false]
       --export_panr2_inputs    Export standardized panr2_inputs handoff directory [default: true]
       --analysis_profile       Optional mode: custom, qc_only, amr_basic, amr_vp, amr_vp_mge, comprehensive [default: custom]
-      --run_panr2_comprehensive Run PanR2 integrated runners for ABRicate ncbi/vfdb/plasmidfinder, IntegronFinder, and MLST; MobileElementFinder remains opt-in [default: false]
+      --run_panr2_comprehensive Run comprehensive PanR2 analysis; PanResistome runs standard feature runners first when --panr2_native_feature_runners true [default: false]
       --panr2_run_defensefinder Add DefenseFinder to comprehensive PanR2 mode when a working installation is available [default: false]
       --defensefinder_dir      Existing DefenseFinder table directory to pass into PanR2
       --run_amrfinderplus      Run NCBI AMRFinderPlus and export standardized PanR2 feature tables [default: false]
@@ -289,9 +290,11 @@ def helpMessage() {
       --panr2_min_identity     Minimum identity for PanR2 integrated feature analysis [default: 90]
       --panr2_plot_style       PanR2 plot style: publication, dashboard, compact [default: publication]
       --panr2_label_max_length Maximum feature-label length in PanR2 plots [default: 40]
+      --panr2_native_feature_runners
+                              Run ABRicate, IntegronFinder, MLST, and optional MobileElementFinder under PanResistome, then pass precomputed directories to PanR2 [default: true]
       --panr2_sample_map       Optional sample_id to Assembly Accession map for external PanR2 table inputs
       --panr2_run_mobileelementfinder
-                              Run MobileElementFinder inside PanR2. Disabled by default because some valid assemblies trigger upstream JSON parser failures.
+                              Run MobileElementFinder in the PanR2 feature-runner layer. Disabled by default because some valid assemblies trigger upstream parser failures.
       --run_isfinder           Run PanResistome ISfinder-compatible BLAST annotation [default: false]
       --isfinder_db_fasta      Authorized ISfinder nucleotide FASTA used to build a local BLAST database
       --isfinder_dir           Existing ISfinder-style result directory to pass into PanR2
@@ -2010,6 +2013,86 @@ process PANR {
     """
 }
 
+process PANR2_FEATURE_RUNNERS {
+    conda 'envs/panr2_comprehensive.yaml'
+
+    input:
+    path sample_dir
+
+    output:
+    path "${sample_dir}", emit: panr2_feature_runner_results
+
+    script:
+    def panr2Dbs = effectivePanr2Dbs()
+    def setupCmd = params.panr2_setup_abricate_db ? "panr setup-db --dbs ${panr2Dbs}" : "panr setup-db --dbs ${panr2Dbs} --check-only"
+    def checkm2DbPath = params.checkm2_db ? launchPath(params.checkm2_db) : ""
+    def checkm2DownloadDir = params.checkm2_db_dir ? launchPath(params.checkm2_db_dir) : (params.outdir.toString().startsWith("/") ? "${params.outdir}/databases/checkm2" : "${launchDir}/${params.outdir}/databases/checkm2")
+    def gtdbtkDataPath = params.gtdbtk_data_path ? launchPath(params.gtdbtk_data_path) : ""
+    def isfinderDbFasta = params.isfinder_db_fasta ? launchPath(params.isfinder_db_fasta) : ""
+    def genomadDbPath = params.genomad_db ? launchPath(params.genomad_db) : ""
+    def kaptiveDbPath = params.kaptive_db ? launchPath(params.kaptive_db) : ""
+    """
+    sequence_dir="${sample_dir}/sequence"
+    if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
+        sequence_dir="${sample_dir}/sequence_filtered"
+    fi
+
+    mkdir -p ${sample_dir}/panr_output ${sample_dir}/panr2_inputs/manifest
+    if [ ! -d "${sample_dir}/metadata_output" ]; then
+        echo "Processing failed: missing ${sample_dir}/metadata_output" > ${sample_dir}/panr_output/error.log
+        exit 1
+    fi
+    if [ ! -d "\${sequence_dir}" ] || [ -z "\$(find "\${sequence_dir}" -name "*.fna" -print -quit)" ]; then
+        echo "Processing failed: no .fna files found in \${sequence_dir}" > ${sample_dir}/panr_output/error.log
+        exit 1
+    fi
+
+    echo "Preparing ABRicate databases for PanResistome-native PanR2 feature runners: ${panr2Dbs}"
+    ${setupCmd}
+
+    python ${baseDir}/scripts/database_setup_status.py \\
+        --sample-dir ${sample_dir} \\
+        --out ${sample_dir}/panr2_inputs/manifest/database_setup_status.tsv \\
+        --analysis-profile ${analysisProfile()} \\
+        --panr2-dbs ${panr2Dbs} \\
+        --qc-filter ${params.qc_filter} \\
+        --run-checkm2 ${params.run_checkm2} \\
+        --checkm2-db ${shellQuote(checkm2DbPath)} \\
+        --checkm2-db-dir ${shellQuote(checkm2DownloadDir)} \\
+        --checkm2-auto-download-db ${params.checkm2_auto_download_db} \\
+        --run-gtdbtk ${params.run_gtdbtk} \\
+        --gtdbtk-data-path ${shellQuote(gtdbtkDataPath)} \\
+        --run-quast ${params.run_quast} \\
+        --run-ani ${params.run_ani} \\
+        --run-mash ${params.run_mash} \\
+        --run-panr2-comprehensive ${effectiveRunPanr2Comprehensive()} \\
+        --run-integronfinder ${effectiveRunIntegronFinder()} \\
+        --run-mlst ${effectiveRunMlst()} \\
+        --run-mobileelementfinder ${effectiveRunMobileElementFinder()} \\
+        --run-defensefinder ${params.panr2_run_defensefinder} \\
+        --run-isfinder ${effectiveRunIsfinder()} \\
+        --isfinder-db-fasta ${shellQuote(isfinderDbFasta)} \\
+        --run-amrfinderplus ${params.run_amrfinderplus} \\
+        --amrfinderplus-update-db ${params.amrfinderplus_update_db} \\
+        --run-mobsuite ${params.run_mobsuite} \\
+        --run-genomad ${params.run_genomad} \\
+        --genomad-db ${shellQuote(genomadDbPath)} \\
+        --run-kaptive ${params.run_kaptive} \\
+        --kaptive-db ${shellQuote(kaptiveDbPath)} \\
+        --strict
+
+    python ${baseDir}/scripts/run_panr2_native_features.py \\
+        --sample-dir ${sample_dir} \\
+        --sequence-dir "\${sequence_dir}" \\
+        --abricate-dbs ${panr2Dbs} \\
+        --threads ${params.threads} \\
+        --force ${params.panr2_force_tool_run} \\
+        --run-integronfinder ${effectiveRunIntegronFinder()} \\
+        --run-mlst ${effectiveRunMlst()} \\
+        --run-mobileelementfinder ${effectiveRunMobileElementFinder()}
+    """
+}
+
 process PANR2_COMPREHENSIVE {
     conda 'envs/panr2_comprehensive.yaml'
 
@@ -2064,9 +2147,10 @@ process PANR2_COMPREHENSIVE {
     def panr2Dbs = effectivePanr2Dbs()
     def setupCmd = params.panr2_setup_abricate_db ? "panr setup-db --dbs ${panr2Dbs}" : "panr setup-db --dbs ${panr2Dbs} --check-only"
     def configuredSampleMap = params.panr2_sample_map ? launchPath(params.panr2_sample_map) : ""
-    def mobileElementFinderFlag = effectiveRunMobileElementFinder() ? "--run-mobileelementfinder" : ""
-    def integronFinderFlag = effectiveRunIntegronFinder() ? "--run-integronfinder" : ""
-    def mlstFlag = effectiveRunMlst() ? "--run-mlst" : ""
+    def abricateRunFlag = params.panr2_native_feature_runners ? "" : "--run-abricate"
+    def mobileElementFinderFlag = (!params.panr2_native_feature_runners && effectiveRunMobileElementFinder()) ? "--run-mobileelementfinder" : ""
+    def integronFinderFlag = (!params.panr2_native_feature_runners && effectiveRunIntegronFinder()) ? "--run-integronfinder" : ""
+    def mlstFlag = (!params.panr2_native_feature_runners && effectiveRunMlst()) ? "--run-mlst" : ""
     def checkm2DbPath = params.checkm2_db ? launchPath(params.checkm2_db) : ""
     def checkm2DownloadDir = params.checkm2_db_dir ? launchPath(params.checkm2_db_dir) : (params.outdir.toString().startsWith("/") ? "${params.outdir}/databases/checkm2" : "${launchDir}/${params.outdir}/databases/checkm2")
     def gtdbtkDataPath = params.gtdbtk_data_path ? launchPath(params.gtdbtk_data_path) : ""
@@ -2089,39 +2173,41 @@ process PANR2_COMPREHENSIVE {
         exit 1
     fi
 
-    echo "Preparing ABRicate databases for comprehensive PanR2 analysis: ${panr2Dbs}"
-    ${setupCmd}
+    if [ "${params.panr2_native_feature_runners}" != "true" ]; then
+        echo "Preparing ABRicate databases for comprehensive PanR2 integrated analysis: ${panr2Dbs}"
+        ${setupCmd}
 
-    python ${baseDir}/scripts/database_setup_status.py \\
-        --sample-dir ${sample_dir} \\
-        --out ${sample_dir}/panr2_inputs/manifest/database_setup_status.tsv \\
-        --analysis-profile ${analysisProfile()} \\
-        --panr2-dbs ${panr2Dbs} \\
-        --qc-filter ${params.qc_filter} \\
-        --run-checkm2 ${params.run_checkm2} \\
-        --checkm2-db ${shellQuote(checkm2DbPath)} \\
-        --checkm2-db-dir ${shellQuote(checkm2DownloadDir)} \\
-        --checkm2-auto-download-db ${params.checkm2_auto_download_db} \\
-        --run-gtdbtk ${params.run_gtdbtk} \\
-        --gtdbtk-data-path ${shellQuote(gtdbtkDataPath)} \\
-        --run-quast ${params.run_quast} \\
-        --run-ani ${params.run_ani} \\
-        --run-mash ${params.run_mash} \\
-        --run-panr2-comprehensive ${effectiveRunPanr2Comprehensive()} \\
-        --run-integronfinder ${effectiveRunIntegronFinder()} \\
-        --run-mlst ${effectiveRunMlst()} \\
-        --run-mobileelementfinder ${effectiveRunMobileElementFinder()} \\
-        --run-defensefinder ${params.panr2_run_defensefinder} \\
-        --run-isfinder ${effectiveRunIsfinder()} \\
-        --isfinder-db-fasta ${shellQuote(isfinderDbFasta)} \\
-        --run-amrfinderplus ${params.run_amrfinderplus} \\
-        --amrfinderplus-update-db ${params.amrfinderplus_update_db} \\
-        --run-mobsuite ${params.run_mobsuite} \\
-        --run-genomad ${params.run_genomad} \\
-        --genomad-db ${shellQuote(genomadDbPath)} \\
-        --run-kaptive ${params.run_kaptive} \\
-        --kaptive-db ${shellQuote(kaptiveDbPath)} \\
-        --strict
+        python ${baseDir}/scripts/database_setup_status.py \\
+            --sample-dir ${sample_dir} \\
+            --out ${sample_dir}/panr2_inputs/manifest/database_setup_status.tsv \\
+            --analysis-profile ${analysisProfile()} \\
+            --panr2-dbs ${panr2Dbs} \\
+            --qc-filter ${params.qc_filter} \\
+            --run-checkm2 ${params.run_checkm2} \\
+            --checkm2-db ${shellQuote(checkm2DbPath)} \\
+            --checkm2-db-dir ${shellQuote(checkm2DownloadDir)} \\
+            --checkm2-auto-download-db ${params.checkm2_auto_download_db} \\
+            --run-gtdbtk ${params.run_gtdbtk} \\
+            --gtdbtk-data-path ${shellQuote(gtdbtkDataPath)} \\
+            --run-quast ${params.run_quast} \\
+            --run-ani ${params.run_ani} \\
+            --run-mash ${params.run_mash} \\
+            --run-panr2-comprehensive ${effectiveRunPanr2Comprehensive()} \\
+            --run-integronfinder ${effectiveRunIntegronFinder()} \\
+            --run-mlst ${effectiveRunMlst()} \\
+            --run-mobileelementfinder ${effectiveRunMobileElementFinder()} \\
+            --run-defensefinder ${params.panr2_run_defensefinder} \\
+            --run-isfinder ${effectiveRunIsfinder()} \\
+            --isfinder-db-fasta ${shellQuote(isfinderDbFasta)} \\
+            --run-amrfinderplus ${params.run_amrfinderplus} \\
+            --amrfinderplus-update-db ${params.amrfinderplus_update_db} \\
+            --run-mobsuite ${params.run_mobsuite} \\
+            --run-genomad ${params.run_genomad} \\
+            --genomad-db ${shellQuote(genomadDbPath)} \\
+            --run-kaptive ${params.run_kaptive} \\
+            --kaptive-db ${shellQuote(kaptiveDbPath)} \\
+            --strict
+    fi
 
     sample_map_arg=""
     if [ -n "${configuredSampleMap}" ]; then
@@ -2131,6 +2217,29 @@ process PANR2_COMPREHENSIVE {
     fi
 
     extra_feature_args="${externalFeatureArgText}"
+    if [ "${params.panr2_native_feature_runners}" = "true" ]; then
+        for spec in \\
+            "abricate --abricate-dir ${sample_dir}/tool_results/abricate/ncbi table" \\
+            "vfdb --vfdb-dir ${sample_dir}/tool_results/abricate/vfdb table" \\
+            "plasmidfinder --plasmidfinder-dir ${sample_dir}/tool_results/abricate/plasmidfinder table" \\
+            "integronfinder --integronfinder-dir ${sample_dir}/tool_results/integronfinder/panr2_inputs table" \\
+            "mobileelementfinder --mobileelementfinder-dir ${sample_dir}/tool_results/mobileelementfinder/panr2_inputs table" \\
+            "mlst --mlst-dir ${sample_dir}/tool_results/mlst/raw mlst"; do
+            name=\$(echo "\${spec}" | cut -d' ' -f1)
+            option=\$(echo "\${spec}" | cut -d' ' -f2)
+            directory=\$(echo "\${spec}" | cut -d' ' -f3)
+            mode=\$(echo "\${spec}" | cut -d' ' -f4)
+            if [ "\${mode}" = "mlst" ]; then
+                if [ -d "\${directory}" ] && find "\${directory}" -type f \\( -name "*.tsv" -o -name "*.tab" -o -name "*.csv" \\) -print -quit | grep -q .; then
+                    extra_feature_args="\${extra_feature_args} \${option} \${directory}"
+                    echo "Passing PanResistome-native \${name} tables to PanR2: \${directory}"
+                fi
+            elif [ -d "\${directory}" ] && python ${baseDir}/scripts/has_feature_table_rows.py "\${directory}"; then
+                extra_feature_args="\${extra_feature_args} \${option} \${directory}"
+                echo "Passing PanResistome-native \${name} tables to PanR2: \${directory}"
+            fi
+        done
+    fi
     for spec in \\
         "isfinder --isfinder-dir ${sample_dir}/isfinder/tables" \\
         "mobsuite --mobsuite-dir ${sample_dir}/mobsuite/tables" \\
@@ -2151,7 +2260,7 @@ process PANR2_COMPREHENSIVE {
         --ncbi-dir ${sample_dir}/metadata_output/ \\
         --sequence-dir "\${sequence_dir}" \\
         --output-dir ${sample_dir}/ \\
-        --run-abricate \\
+        ${abricateRunFlag} \\
         ${mobileElementFinderFlag} \\
         ${integronFinderFlag} \\
         ${mlstFlag} \\
@@ -2319,6 +2428,10 @@ workflow {
         }
 
         if (effectiveRunPanr2Comprehensive()) {
+            if (params.panr2_native_feature_runners) {
+                PANR2_FEATURE_RUNNERS(qc_ready_ch)
+                qc_ready_ch = PANR2_FEATURE_RUNNERS.out.panr2_feature_runner_results
+            }
             PANR2_COMPREHENSIVE(qc_ready_ch)
             EXPORT_PANR2_INPUTS(PANR2_COMPREHENSIVE.out.panr2_comprehensive_results)
             COLLECT_RESULTS(EXPORT_PANR2_INPUTS.out.panr2_inputs_results)

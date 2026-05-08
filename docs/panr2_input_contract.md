@@ -88,7 +88,11 @@ panr2_inputs/
 │   ├── metadata_column_eligibility.tsv
 │   ├── metadata_normalized_for_analysis.tsv
 │   ├── feature_eligibility.tsv
+│   ├── feature_metadata_associations.tsv
 │   ├── database_burden_by_sample.tsv
+│   ├── database_burden_metadata_associations.tsv
+│   ├── category_burden_by_sample.tsv
+│   ├── category_metadata_associations.tsv
 │   ├── top_findings.tsv
 │   ├── top_findings.md
 │   └── prevalence_tables/
@@ -97,6 +101,10 @@ panr2_inputs/
 │   ├── database_cooccurrence_summary.tsv
 │   ├── amr_mge_context.tsv
 │   ├── amr_plasmid_context.tsv
+│   ├── amr_mge_same_contig.tsv
+│   ├── amr_plasmid_same_contig.tsv
+│   ├── amr_integron_same_contig.tsv
+│   ├── feature_proximity.tsv
 │   └── amrfinder_abricate_concordance.tsv
 ├── ani/analysis/panr2_ani_summary.csv
 ├── assembly_qc/analysis/panr2_quast_summary.csv
@@ -115,6 +123,12 @@ panr2_inputs/
 ├── sccmecfinder/
 ├── cross_database/
 ├── report/
+│   ├── panr2_handoff_index.html
+│   ├── top_findings.html
+│   ├── metadata_quality_and_bias.html
+│   ├── database_burden_by_metadata.html
+│   ├── cross_database_interpretation.html
+│   └── database_setup_and_contract.html
 ├── qc/qc_master_report.csv
 ├── qc/excluded_for_panr2.csv
 └── manifest/
@@ -132,6 +146,8 @@ panr2_inputs/
 ```
 
 `panr2_inputs/features/*.features.tsv` is the strict contract layer. Raw tool folders are still copied for traceability, but downstream analysis should prefer the standardized feature tables when possible. `schema_validation_report.csv` checks required columns, and `unmatched_features.csv` lists feature rows whose assembly accession cannot be matched to metadata. `database_setup_status.tsv` records the required database/tool checks for the selected profile, including CheckM2, AMRFinderPlus, ABRicate `ncbi/vfdb/plasmidfinder`, optional ISfinder FASTA, GTDB-Tk, geNomad, Kaptive, MobileElementFinder, IntegronFinder, and MLST status where relevant.
+
+Cross-database outputs separate sample-level co-occurrence from stronger coordinate context. `feature_cooccurrence.tsv` is genome/sample-level only. `feature_proximity.tsv` and the `amr_*_same_contig.tsv` files indicate when AMR features and plasmid/MGE/integron features share a contig and, when coordinates are available, whether they overlap or fall within 10 kb. These outputs still do not prove transfer, expression, phenotype, or plasmid localization.
 
 ## Design Rule
 

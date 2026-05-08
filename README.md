@@ -63,7 +63,7 @@ GTDB-Tk is disabled by default because it is resource-intensive. If enabled, it 
 
 QUAST, FastANI/skani, and Mash are also optional. They are part of PanResistome because they require external tools and can be expensive on large genome sets. Their outputs are summarized into standardized tables and exported under `panr2_inputs/` for PanR2 to analyze without inheriting the heavy dependencies.
 
-For the broader database/tool workflow, choose an analysis profile with `--analysis_profile comprehensive`. This makes PanResistome call PanR2's integrated runners from the pinned comprehensive Conda environment. The tested default comprehensive mode runs ABRicate `ncbi`, `vfdb`, and `plasmidfinder`, plus IntegronFinder and MLST. MobileElementFinder is available with `--panr2_run_mobileelementfinder true`, but is opt-in because its upstream JSON parser can fail on some valid assemblies. The workflow also writes PanR2 database-specific folders, cross-database associations, temporal summaries, a top-level dashboard at `report/index.html`, citations, software versions, a database/tool setup report at `panr2_inputs/manifest/database_setup_status.tsv`, and a standardized `panr2_inputs/` handoff bundle.
+For the broader database/tool workflow, choose an analysis profile with `--analysis_profile comprehensive`. By default, PanResistome now runs the standard feature runners first through `--panr2_native_feature_runners true`: ABRicate `ncbi`, `vfdb`, and `plasmidfinder`, plus IntegronFinder and MLST, are executed under PanResistome ownership and passed to PanR2 as precomputed directories. This keeps PanR2 focused on standardized analysis/reporting while preserving the same public comprehensive command. MobileElementFinder is available with `--panr2_run_mobileelementfinder true`, but is opt-in because its upstream JSON parser can fail on some valid assemblies. The workflow also writes PanR2 database-specific folders, cross-database associations, temporal summaries, a top-level dashboard at `report/index.html`, citations, software versions, a database/tool setup report at `panr2_inputs/manifest/database_setup_status.tsv`, and a standardized `panr2_inputs/` handoff bundle.
 
 ISfinder is handled separately from ABRicate. The ISfinder database terms do not permit automatic database download or redistribution without written authorization, so PanResistome provides an ISfinder-compatible BLAST runner that builds a local BLAST database from an authorized FASTA supplied with `--isfinder_db_fasta`. When enabled with `--run_isfinder true`, the module writes PanR2-readable tables under `isfinder/tables/` and PanR2 receives them through `--isfinder-dir`.
 
@@ -160,7 +160,7 @@ For the fresh-user validation path, see [`docs/remote_user_validation.md`](docs/
 | ABRicate NCBI/VFDB/PlasmidFinder | Stable in PanR2 comprehensive mode | No | Remote-style run | Main default annotation path |
 | AMRFinderPlus | Stable optional | No | Remote-style Delftia run | Auto-fetches the AMRFinderPlus database by default and exports PanR2 feature tables |
 | MobileElementFinder | Active development, opt-in | No | Real-data parser failure observed | Use `--panr2_run_mobileelementfinder true` when needed; upstream JSON parser can fail on some assemblies |
-| IntegronFinder/MLST | Active development | No | Remote-style run | Managed by PanR2 comprehensive environment |
+| IntegronFinder/MLST | Active development | No | Remote-style run | Run by PanResistome native feature-runner stage by default, then passed to PanR2 |
 | MOB-suite/geNomad/typing tools | Experimental runners, stable table passthrough | No | Syntax/export path | Prefer precomputed tables for difficult DB setups |
 | Database/tool preflight audit | Stable | Comprehensive profile | Unit test + comprehensive path | Writes `panr2_inputs/manifest/database_setup_status.tsv` and fails required missing databases/tools |
 
@@ -372,10 +372,11 @@ PanResistome/
 | `--representative_only` | bool  | false   | Keep one representative per near-duplicate ANI cluster when filtering |
 | `--analysis_profile`    | str   | custom  | Preset mode: `custom`, `qc_only`, `amr_basic`, `amr_vp`, `amr_vp_mge`, or `comprehensive` |
 | `--export_panr2_inputs` | bool  | true    | Export standardized `panr2_inputs/` handoff directory |
-| `--run_panr2_comprehensive` | bool | false | Run PanR2 integrated ABRicate NCBI/VFDB/PlasmidFinder, IntegronFinder, and MLST; MobileElementFinder remains opt-in |
+| `--run_panr2_comprehensive` | bool | false | Run comprehensive PanR2 analysis; PanResistome runs standard feature runners first by default |
 | `--panr2_setup_abricate_db` | bool | true | Run `panr setup-db` before comprehensive analysis |
 | `--panr2_abricate_dbs` | str | ncbi,vfdb,plasmidfinder | ABRicate databases used in comprehensive mode; add `isfinder` only if installed |
-| `--panr2_run_mobileelementfinder` | bool | false | Run MobileElementFinder inside PanR2; opt-in because the upstream parser can fail on some assemblies |
+| `--panr2_native_feature_runners` | bool | true | Run ABRicate/IntegronFinder/MLST under PanResistome before PanR2, then pass precomputed result directories |
+| `--panr2_run_mobileelementfinder` | bool | false | Run MobileElementFinder in the PanR2 feature-runner layer; opt-in because the upstream parser can fail on some assemblies |
 | `--run_isfinder` | bool | false | Run PanResistome's ISfinder-compatible BLAST annotator and pass results to PanR2 |
 | `--isfinder_db_fasta` | path | - | Authorized local ISfinder nucleotide FASTA used to build the local BLAST database |
 | `--isfinder_dir` | path | - | Existing ISfinder-style result directory to pass into PanR2 |
@@ -489,6 +490,25 @@ results/
     │   ├── features/
     │   │   ├── all_features.tsv
     │   │   └── <database>.features.tsv
+    │   ├── cross_database/
+    │   │   ├── feature_cooccurrence.tsv
+    │   │   ├── database_cooccurrence_summary.tsv
+    │   │   ├── amr_mge_same_contig.tsv
+    │   │   ├── amr_plasmid_same_contig.tsv
+    │   │   ├── amr_integron_same_contig.tsv
+    │   │   └── feature_proximity.tsv
+    │   ├── metadata_feature_analysis/
+    │   │   ├── feature_metadata_associations.tsv
+    │   │   ├── database_burden_metadata_associations.tsv
+    │   │   ├── category_metadata_associations.tsv
+    │   │   └── top_findings.tsv
+    │   ├── report/
+    │   │   ├── panr2_handoff_index.html
+    │   │   ├── top_findings.html
+    │   │   ├── metadata_quality_and_bias.html
+    │   │   ├── database_burden_by_metadata.html
+    │   │   ├── cross_database_interpretation.html
+    │   │   └── database_setup_and_contract.html
     │   ├── metadata_analysis/
     │   ├── metadata_audit/
     │   ├── sequence/
