@@ -188,7 +188,7 @@ fi
 echo
 echo
 echo "Recommended standard comprehensive validation command:"
-printf "nextflow run main.nf --input validation/delftia_tsuruhatensis_current/ncbi_dataset.tsv --outdir validation_runs/delftia_fresh -profile %s --analysis_profile comprehensive --qc_filter true --run_gtdbtk false --run_quast true --run_ani true --run_mash true --run_amrfinderplus true --threads 4 --fetchm2_download_workers 2 --db %q" "$PROFILE" "$ABRICATE_DB"
+printf "nextflow run main.nf --input validation/delftia_tsuruhatensis_current/ncbi_dataset.tsv --outdir validation_runs/delftia_fresh -profile %s --analysis_profile comprehensive --qc_filter true --run_gtdbtk false --run_quast true --run_ani true --run_mash true --run_amrfinderplus true --threads 4 --fetchm2_download_workers 2" "$PROFILE"
 if [[ -n "$CHECKM2_DB" ]]; then
     printf " --checkm2_db %q" "$CHECKM2_DB"
 fi

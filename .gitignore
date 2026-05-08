@@ -7,6 +7,7 @@ work/
 results/*
 !results/.gitkeep
 results_*/
+validation_runs/
 test_output/
 tests/fixtures/local_samples/*/metadata_output/ncbi_clean_qc_pass.csv
 tests/fixtures/local_samples/*/metadata_output/ncbi_clean_unfiltered.csv

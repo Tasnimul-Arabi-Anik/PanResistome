@@ -115,6 +115,11 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "GCF_000000001.1,sampleA.fna,koxytoca,199,gapA(2);infB(2),koxytoca:ST199\n",
                 encoding="utf-8",
             )
+            (mlst_dir / "mlst_unknown.csv").write_text(
+                "Assembly Accession,sample,scheme,st,allele_profile,sequence_type\n"
+                "GCF_000000002.1,sampleB.fna,-,-,,-:ST-\n",
+                encoding="utf-8",
+            )
 
             outputs = export_contract(sample_dir, sample_dir / "panr2_inputs")
 
@@ -128,6 +133,7 @@ class FetchM2AdapterTests(unittest.TestCase):
                 {"GCF_000000001.1", "GCF_000000002.1"},
             )
             self.assertTrue({"koxytoca:ST199", "ST_199", "gapA_2", "infB_2"}.issubset(set(all_features["feature_id"])))
+            self.assertFalse({"-:ST-", "ST_-"}.intersection(set(all_features["feature_id"])))
             summary = Path(outputs["schema_validation_summary"]).read_text(encoding="utf-8")
             self.assertIn("feature_rows=6", summary)
             unmatched = pd.read_csv(outputs["unmatched_features"])
@@ -292,6 +298,71 @@ class FetchM2AdapterTests(unittest.TestCase):
             status = pd.read_csv(out, sep="\t")
             vfdb_status = status.loc[status["database_or_tool"] == "abricate_db:vfdb", "status"].iloc[0]
             self.assertEqual(vfdb_status, "FAIL")
+
+    def test_validation_summary_script_reports_manifest_metrics(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            sample_dir = root / "Klebsiella_oxytoca"
+            manifest = sample_dir / "panr2_inputs" / "manifest"
+            features = sample_dir / "panr2_inputs" / "features"
+            metadata = sample_dir / "metadata_output"
+            qc = sample_dir / "qc"
+            report = sample_dir / "report"
+            for directory in [manifest, features, metadata, qc, report, sample_dir / "sequence"]:
+                directory.mkdir(parents=True)
+            (metadata / "ncbi_clean.csv").write_text(
+                "Assembly Accession,Organism Name\nGCF_000000001.1,Klebsiella oxytoca\n",
+                encoding="utf-8",
+            )
+            (sample_dir / "sequence" / "GCF_000000001.1_genomic.fna").write_text(">c\nATGC\n", encoding="utf-8")
+            (qc / "qc_master_report.csv").write_text(
+                "assembly_accession,qc_master_status\nGCF_000000001.1,PASS\n",
+                encoding="utf-8",
+            )
+            (manifest / "schema_validation_summary.txt").write_text(
+                "feature_rows=1\nunmatched_feature_rows=0\ninvalid_feature_rows=0\nduplicate_feature_rows=0\n",
+                encoding="utf-8",
+            )
+            (manifest / "database_setup_status.tsv").write_text(
+                "database_or_tool\trequired_for_profile\tchecked\tstatus\tsetup_action\tversion_or_path\tmessage\n"
+                "abricate_db:ncbi\ttrue\ttrue\tPASS\tpresent\t-\tOK\n",
+                encoding="utf-8",
+            )
+            (manifest / "feature_completeness_audit.tsv").write_text(
+                "database\texpected_from_profile\tmodule_enabled\traw_output_found\tfeature_table_found\tfeature_rows\tunique_features\tsamples_with_features\tsamples_processed\tstatus\tmessage\n"
+                "amr\ttrue\ttrue\ttrue\ttrue\t1\t1\t1\t1\tPASS\tOK\n",
+                encoding="utf-8",
+            )
+            (features / "amr.features.tsv").write_text(
+                "sample_id\tassembly_accession\tdatabase\tfeature_id\tfeature_category\tpresence\tidentity\tcoverage\tcontig\tstart\tend\ttool\ttool_version\tdatabase_version\n"
+                "GCF_000000001.1\tGCF_000000001.1\tamr\tblaTEM\tbeta-lactam\t1\t99\t100\tcontig1\t1\t100\tabricate\t1.0\tncbi\n",
+                encoding="utf-8",
+            )
+            (features / "all_features.tsv").write_text((features / "amr.features.tsv").read_text(encoding="utf-8"), encoding="utf-8")
+            (report / "index.html").write_text("<html></html>\n", encoding="utf-8")
+            nested = sample_dir / "tool_results" / "integronfinder" / "raw" / "sampleA" / "panr2_inputs"
+            nested.mkdir(parents=True)
+            (nested / "not_a_handoff.txt").write_text("nested copy marker\n", encoding="utf-8")
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "scripts" / "summarize_validation_run.py"),
+                    "--run-dir",
+                    str(root),
+                    "--out-dir",
+                    str(root),
+                ],
+                check=True,
+            )
+
+            summary = pd.read_csv(root / "validation_summary.csv")
+            metrics = set(summary["metric"])
+            self.assertIn("schema_feature_rows", metrics)
+            self.assertIn("database_setup_required_failures", metrics)
+            self.assertIn("feature_table_rows", metrics)
+            self.assertFalse(summary["sample_dir"].str.contains("tool_results").any())
+            self.assertTrue((root / "validation_summary.md").exists())
 
 
 if __name__ == "__main__":

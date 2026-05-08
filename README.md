@@ -142,7 +142,9 @@ nextflow run main.nf \
 
 This command intentionally does not require a local CheckM2 database path, manual AMRFinderPlus database setup, manual ABRicate database setup, GTDB-Tk, MobileElementFinder, or ISfinder. The run should write the main dashboard to `<outdir>/<organism>/report/index.html` and the setup audit to `<outdir>/<organism>/panr2_inputs/manifest/database_setup_status.tsv`.
 
-For a fuller release checklist, see `docs/remote_user_validation.md`.
+Fresh-clone validation of this command on 2026-05-08 completed all 19 Nextflow processes on 45 current `Delftia tsuruhatensis` assemblies, including CheckM2 database auto-download, AMRFinderPlus database auto-update, ABRicate `ncbi/vfdb/plasmidfinder` setup verification, comprehensive PanR2 analysis, and PanR2 handoff export. See [`validation/delftia_tsuruhatensis_current/FRESH_CLONE_VALIDATION_RESULTS.md`](validation/delftia_tsuruhatensis_current/FRESH_CLONE_VALIDATION_RESULTS.md).
+
+For the fresh-user validation path, see [`docs/remote_user_validation.md`](docs/remote_user_validation.md). For the 20 release gates used to judge whether the public comprehensive workflow is reliable, see [`docs/release_reliability_checklist.md`](docs/release_reliability_checklist.md).
 
 ### Module Stability
 
@@ -462,7 +464,7 @@ results/
     ├── amrfinderplus/         # only when --run_amrfinderplus true or AMRFinderPlus tables are supplied
     ├── vfdb/                  # only when --run_panr2_comprehensive true
     ├── plasmidfinder/         # only when --run_panr2_comprehensive true
-    ├── mobileelementfinder/   # only when --run_panr2_comprehensive true
+    ├── mobileelementfinder/   # only when --panr2_run_mobileelementfinder true or tables are supplied
     ├── integronfinder/        # only when --run_panr2_comprehensive true
     ├── mlst/                  # only when --run_panr2_comprehensive true
     ├── mobsuite/              # only when --run_mobsuite true

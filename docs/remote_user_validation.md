@@ -2,6 +2,8 @@
 
 This document defines the release-blocking validation path for PanResistome. The goal is to prove that a user starting from a fresh clone can run the standard comprehensive workflow without manually debugging databases or hidden tool dependencies.
 
+The broader release gates are tracked in [`release_reliability_checklist.md`](release_reliability_checklist.md).
+
 ## Scope
 
 The recommended public path is:
@@ -71,6 +73,8 @@ nextflow run main.nf \
 
 Use `--threads 4` on modest desktops. Increase only after a smaller run is stable.
 
+The 2026-05-08 fresh-clone validation of this command on 45 `Delftia tsuruhatensis` assemblies completed in 4h 29m on a 24-thread laptop with 15 GiB RAM visible to the OS. The command used no `--checkm2_db` path and completed all 19 Nextflow processes.
+
 ## What The Command Must Do Automatically
 
 The run must:
@@ -102,6 +106,21 @@ validation_runs/delftia_fresh/<organism>/panr2_inputs/manifest/module_status_sum
 validation_runs/delftia_fresh/<organism>/panr2_inputs/manifest/software_versions.csv
 validation_runs/delftia_fresh/<organism>/qc/qc_master_report.csv
 validation_runs/delftia_fresh/pipeline_versions/
+```
+
+After the run completes, generate a compact release-evidence summary:
+
+```bash
+scripts/summarize_validation_run.py \
+  --run-dir validation_runs/delftia_fresh \
+  --out-dir validation_runs/delftia_fresh
+```
+
+This writes:
+
+```text
+validation_runs/delftia_fresh/validation_summary.csv
+validation_runs/delftia_fresh/validation_summary.md
 ```
 
 ## Required Feature Tables
@@ -158,6 +177,10 @@ geNomad: requires a geNomad database path
 Kleborate/Kaptive/ECTyper: organism-specific; table passthrough is preferred for difficult installs
 DefenseFinder: available in PanR2 but not default until its environment is consistently stable
 ```
+
+## Runtime Caveat
+
+The standard comprehensive command is reliable but not yet optimized for wall time. PanR2 currently runs some integrated tools, especially IntegronFinder, serially inside one PanR2 process. In the fresh-clone Delftia run, fragmented assemblies produced many per-contig IntegronFinder files and made this the longest PanR2 substage. Future performance work should move these per-sample runners into parallel Nextflow processes and let PanR2 analyze the standardized exported tables.
 
 ## Documentation After A Passing Run
 

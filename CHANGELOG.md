@@ -13,8 +13,11 @@
 - Optional PanResistome ISfinder-compatible BLAST module (`--run_isfinder`, `--isfinder_db_fasta`) that builds a local BLAST database from an authorized ISfinder FASTA and exports PanR2-readable `isfinder/tables/*_results.tab` files.
 - Reproducible current NCBI Assembly validation input for `Delftia tsuruhatensis` under `validation/delftia_tsuruhatensis_current/`.
 - `scripts/generate_ncbi_assembly_input.py` for creating FetchM2/PanResistome-compatible validation inputs from NCBI Assembly E-utilities.
+- `scripts/summarize_validation_run.py` for writing compact CSV/Markdown validation summaries from generated PanR2 manifests.
 - README module stability table clarifying stable, active-development, and experimental modules for public users.
 - `docs/remote_user_validation.md` documenting the fresh-clone standard comprehensive validation path and release-passing criteria.
+- `docs/release_reliability_checklist.md` defining the 20 release gates for a reliable fresh-user comprehensive workflow.
+- Fresh-clone validation evidence under `validation/delftia_tsuruhatensis_current/FRESH_CLONE_VALIDATION_RESULTS.md`.
 - `pytest.ini` limiting test discovery to repository tests so local runs do not collect Nextflow work-directory Conda package tests.
 
 ### Changed
@@ -23,6 +26,7 @@
 - CheckM2 QC now declares the same CPU count as `--threads` and allows longer wall time for full 45-genome laptop validation runs.
 - MobileElementFinder is now opt-in through `--panr2_run_mobileelementfinder true`; real Delftia validation showed that the upstream `mefinder` BLAST JSON parser can fail on otherwise valid assemblies, so the public comprehensive default avoids a brittle hard failure.
 - The FetchM2/QC Conda environment no longer installs PanR2 from GitHub; PanR2 is kept in the dedicated PanR2 comprehensive environment and the legacy `PANR` process now uses that environment.
+- PanR2 contract export now suppresses placeholder MLST features such as `ST_-` and `-:ST-` so unknown sequence-type calls do not dominate top-finding summaries.
 
 ### Fixed
 - Relative `--checkm2_db` values are now resolved from the launch directory before CheckM2 runs in a Nextflow work directory.
@@ -32,6 +36,7 @@
 ### Validated
 - A 45-genome `Delftia tsuruhatensis` run completed with FetchM2, sequence QC, CheckM2, QUAST, ANI, Mash, combined QC, AMRFinderPlus database auto-download, AMRFinderPlus, comprehensive PanR2, and PanR2 handoff export, with GTDB-Tk disabled and 4 threads.
 - The validated PanR2 handoff contained AMR, AMRFinderPlus, VFDB, PlasmidFinder, IntegronFinder, and MLST feature tables in `panr2_inputs/features/all_features.tsv` with zero unmatched, invalid, or duplicate feature rows.
+- A true fresh-clone validation at commit `bf241634d1e7bacf9539a5e891ab0329a863abb7` completed all 19 processes with no user-supplied CheckM2 database path, CheckM2 database auto-download, AMRFinderPlus database auto-update, ABRicate `ncbi/vfdb/plasmidfinder` setup verification, 45/45 QC PASS, 291 PanR2 feature rows, and a generated `report/index.html` dashboard.
 
 ## 0.2.1 - 2026-05-06
 

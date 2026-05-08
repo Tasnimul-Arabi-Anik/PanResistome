@@ -207,6 +207,18 @@ def first_value(row: dict[str, str], candidates: list[str], default: str = "") -
     return default
 
 
+def is_missing_value(value: str) -> bool:
+    text = str(value or "").strip()
+    return not text or text in {"-", ".", "?"} or text.lower() in {"na", "n/a", "nan", "none", "null", "unknown"}
+
+
+def is_placeholder_mlst_feature(value: str) -> bool:
+    text = str(value or "").strip()
+    if is_missing_value(text):
+        return True
+    return re.fullmatch(r"[-_:\s]*ST[-_:\s]*", text, flags=re.IGNORECASE) is not None
+
+
 def clean_sample_id(value: str) -> str:
     text = Path(str(value or "").strip()).name
     for suffix in FASTA_SUFFIXES:
@@ -420,8 +432,14 @@ def parse_mlst_tables(path: Path, sample_map: dict[str, str]) -> list[dict[str, 
         scheme = first_value(row, ["scheme", "Scheme"], "")
         sequence_type = first_value(row, ["sequence_type", "Sequence Type"], "")
         st = first_value(row, ["st", "ST"], "")
+        if is_missing_value(scheme):
+            scheme = ""
+        if is_placeholder_mlst_feature(sequence_type):
+            sequence_type = ""
+        if is_missing_value(st):
+            st = ""
         primary_feature = first_value(row, ["feature_id"], "") or sequence_type or (f"ST_{st}" if st else "")
-        if primary_feature:
+        if primary_feature and not is_placeholder_mlst_feature(primary_feature):
             rows.append(
                 contract_row(
                     sample,
@@ -442,7 +460,7 @@ def parse_mlst_tables(path: Path, sample_map: dict[str, str]) -> list[dict[str, 
             )
         if st:
             st_feature = f"ST_{st}"
-            if st_feature != primary_feature:
+            if st_feature != primary_feature and not is_placeholder_mlst_feature(st_feature):
                 rows.append(
                     contract_row(
                         sample,
@@ -467,6 +485,8 @@ def parse_mlst_tables(path: Path, sample_map: dict[str, str]) -> list[dict[str, 
             if not match:
                 continue
             locus, allele_number = match.groups()
+            if is_missing_value(locus) or is_missing_value(allele_number):
+                continue
             allele_feature = f"{locus}_{allele_number}"
             rows.append(
                 contract_row(
