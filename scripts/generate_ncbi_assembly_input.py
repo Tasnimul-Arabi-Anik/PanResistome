@@ -136,8 +136,13 @@ def record_to_row(record: dict) -> dict[str, str]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Create an NCBI Assembly TSV input for PanResistome/FetchM2.")
     parser.add_argument("--organism", default="Delftia tsuruhatensis", help="NCBI organism query.")
-    parser.add_argument("--outdir", required=True, type=Path, help="Validation input directory.")
-    parser.add_argument("--max-records", type=int, default=0, help="Maximum records to write. 0 means all records returned by NCBI.")
+    parser.add_argument("--outdir", "--out", required=True, type=Path, help="Validation input directory.")
+    parser.add_argument("--max-records", "--limit", type=int, default=0, help="Maximum records to write. 0 means all records returned by NCBI.")
+    parser.add_argument(
+        "--prefer-refseq",
+        action="store_true",
+        help="Accepted for readability; records are always sorted with RefSeq/GCF accessions first.",
+    )
     parser.add_argument("--sleep", type=float, default=0.34, help="Delay between NCBI requests.")
     args = parser.parse_args()
 
@@ -184,15 +189,17 @@ def main() -> None:
     raw_path.write_text(json.dumps(raw_summaries, indent=2, sort_keys=True), encoding="utf-8")
 
     readme_path = args.outdir / "README.md"
+    safe_name = re.sub(r"[^A-Za-z0-9]+", "_", args.organism.strip()).strip("_").lower() or "organism"
     readme_path.write_text(
         "\n".join(
             [
-                "# Delftia tsuruhatensis Validation Input",
+                f"# {args.organism} Validation Input",
                 "",
                 f"Generated on: {date.today().isoformat()}",
                 "",
                 f"NCBI E-utilities query: `{query}`",
                 f"Assembly records written: `{len(records)}`",
+                "RefSeq/GCF accessions sorted first: `true`",
                 "",
                 "Files:",
                 "- `ncbi_dataset.tsv`: FetchM2/PanResistome-compatible Assembly TSV.",
@@ -203,7 +210,7 @@ def main() -> None:
                 "```bash",
                 "nextflow run main.nf \\",
                 f"  --input {tsv_path} \\",
-                "  --outdir validation_runs/delftia_current \\",
+                f"  --outdir validation_runs/{safe_name}_current \\",
                 "  -profile conda,mamba \\",
                 "  --analysis_profile comprehensive \\",
                 "  --qc_filter true \\",
@@ -212,13 +219,15 @@ def main() -> None:
                 "  --run_ani true \\",
                 "  --run_mash true \\",
                 "  --run_amrfinderplus true \\",
-                "  --threads 8",
+                "  --panr2_native_feature_runners true \\",
+                "  --threads 4 \\",
+                "  --fetchm2_download_workers 2",
                 "```",
                 "",
                 "The primary combined HTML output from a successful comprehensive run is:",
                 "",
                 "```text",
-                "validation_runs/delftia_current/<organism>/report/index.html",
+                f"validation_runs/{safe_name}_current/<organism>/report/index.html",
                 "```",
                 "",
             ]

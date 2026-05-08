@@ -44,7 +44,7 @@ This checklist turns the public-user reliability goals into release gates. A Pan
     - Evidence: GTDB-Tk, MobileElementFinder, ISfinder FASTA, MOB-suite, geNomad, DefenseFinder, and organism-specific typing are documented as optional or table-input modules unless their required databases are supplied.
 
 14. Every enabled feature-like module exports the PanR2 contract
-    - Evidence: `panr2_inputs/features/<database>.features.tsv` exists for enabled modules that create feature rows.
+    - Evidence: `panr2_inputs/features/<database>.features.tsv` exists for enabled modules that create feature rows. Tools that run successfully but produce no biological calls, such as unsupported-organism MLST, should write a header-only feature table and a documented warning rather than disappearing.
 
 15. A merged feature table is produced
     - Evidence: `panr2_inputs/features/all_features.tsv` exists and includes all successful feature-family exports.
@@ -78,6 +78,7 @@ nextflow run main.nf \
   --run_ani true \
   --run_mash true \
   --run_amrfinderplus true \
+  --panr2_native_feature_runners true \
   --threads 4 \
   --fetchm2_download_workers 2
 ```

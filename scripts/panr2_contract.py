@@ -419,7 +419,7 @@ def parse_amrfinder_tables(path: Path, sample_map: dict[str, str]) -> list[dict[
 def parse_mlst_tables(path: Path, sample_map: dict[str, str]) -> list[dict[str, str]]:
     header = set(read_header(path))
     if not header.intersection({"sequence_type", "Sequence Type", "st", "ST", "allele_profile", "feature_id"}):
-        return []
+        return parse_mlst_raw_table(path, sample_map)
 
     rows = []
     for row in read_table(path):
@@ -511,6 +511,90 @@ def parse_mlst_tables(path: Path, sample_map: dict[str, str]) -> list[dict[str, 
     return rows
 
 
+def parse_mlst_raw_table(path: Path, sample_map: dict[str, str]) -> list[dict[str, str]]:
+    """Parse Torsten Seemann mlst tabular output.
+
+    The native `mlst` command writes rows without a header:
+    file, scheme, ST, then optional allele calls.  Unsupported organisms often
+    report `-` for scheme and ST; those are intentionally retained as raw run
+    evidence but are not converted into biological feature calls.
+    """
+    rows: list[dict[str, str]] = []
+    if not path.exists() or path.stat().st_size == 0:
+        return rows
+    for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        parts = [part.strip() for part in line.split("\t")]
+        if len(parts) < 3:
+            continue
+        sample, scheme, st = parts[:3]
+        if not sample:
+            continue
+        if is_missing_value(scheme):
+            scheme = ""
+        if not is_missing_value(st):
+            st_feature = f"ST_{st}"
+            if not is_placeholder_mlst_feature(st_feature):
+                rows.append(
+                    contract_row(
+                        sample,
+                        "mlst",
+                        st_feature,
+                        feature_category="sequence_type",
+                        identity="100",
+                        tool="mlst",
+                        sample_map=sample_map,
+                        feature_name=st_feature,
+                        feature_subcategory=scheme,
+                        source_table=str(path),
+                        source_file=sample,
+                        raw_feature_id=st,
+                        raw_category="sequence_type",
+                        evidence_type="sequence_type_call",
+                    )
+                )
+        for allele in parts[3:]:
+            match = re.fullmatch(r"([^()]+)\(([^()]+)\)", allele)
+            if not match:
+                continue
+            locus, allele_number = match.groups()
+            if is_missing_value(locus) or is_missing_value(allele_number):
+                continue
+            allele_feature = f"{locus}_{allele_number}"
+            rows.append(
+                contract_row(
+                    sample,
+                    "mlst",
+                    allele_feature,
+                    feature_category="mlst_allele",
+                    identity="100",
+                    tool="mlst",
+                    sample_map=sample_map,
+                    feature_name=allele_feature,
+                    feature_subcategory=scheme,
+                    product=locus,
+                    source_table=str(path),
+                    source_file=sample,
+                    raw_feature_id=allele,
+                    raw_category="mlst_allele",
+                    evidence_type="allele_call",
+                )
+            )
+    return rows
+
+
+def discover_raw_feature_databases(sample_dir: Path) -> set[str]:
+    raw_databases: set[str] = set()
+    mlst_dirs = [
+        sample_dir / "mlst",
+        sample_dir / "tool_results" / "mlst",
+    ]
+    if any(path.exists() and any(child.is_file() for child in path.rglob("*")) for path in mlst_dirs):
+        raw_databases.add("mlst")
+    return raw_databases
+
+
 def discover_feature_rows(sample_dir: Path) -> list[dict[str, str]]:
     sample_map = load_sample_map(sample_dir)
     rows: list[dict[str, str]] = []
@@ -531,9 +615,10 @@ def discover_feature_rows(sample_dir: Path) -> list[dict[str, str]]:
         if path.is_file() and path.suffix.lower() in {".tsv", ".tab", ".csv"}:
             rows.extend(parse_amrfinder_tables(path, sample_map))
 
-    for path in sorted((sample_dir / "mlst").rglob("*")):
-        if path.is_file() and path.suffix.lower() in {".tsv", ".tab", ".csv"}:
-            rows.extend(parse_mlst_tables(path, sample_map))
+    for mlst_dir in [sample_dir / "mlst", sample_dir / "tool_results" / "mlst"]:
+        for path in sorted(mlst_dir.rglob("*")):
+            if path.is_file() and path.suffix.lower() in {".tsv", ".tab", ".csv"}:
+                rows.extend(parse_mlst_tables(path, sample_map))
 
     unique: dict[tuple[str, str, str, str, str, str], dict[str, str]] = {}
     for row in rows:
@@ -553,6 +638,7 @@ def discover_feature_rows(sample_dir: Path) -> list[dict[str, str]]:
 
 def write_feature_tables(sample_dir: Path, out_dir: Path) -> dict[str, str]:
     rows = discover_feature_rows(sample_dir)
+    raw_databases = discover_raw_feature_databases(sample_dir)
     features_dir = out_dir / "features"
     features_dir.mkdir(parents=True, exist_ok=True)
 
@@ -564,6 +650,11 @@ def write_feature_tables(sample_dir: Path, out_dir: Path) -> dict[str, str]:
     for database, database_rows in sorted(by_database.items()):
         path = features_dir / f"{database}.features.tsv"
         write_rows(path, database_rows, FEATURE_COLUMNS)
+        written[database] = str(path)
+
+    for database in sorted(raw_databases - set(by_database)):
+        path = features_dir / f"{database}.features.tsv"
+        write_rows(path, [], FEATURE_COLUMNS)
         written[database] = str(path)
 
     all_path = features_dir / "all_features.tsv"

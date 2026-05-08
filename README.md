@@ -157,10 +157,10 @@ For the fresh-user validation path, see [`docs/remote_user_validation.md`](docs/
 | QUAST | Stable optional | No | Remote-style run | Assembly structure QC |
 | FastANI/skani | Stable optional | No | Remote-style FastANI run | ANI, outliers, duplicates |
 | Mash | Stable optional | No | Remote-style run | Fast pre-screen only |
-| ABRicate NCBI/VFDB/PlasmidFinder | Stable in PanR2 comprehensive mode | No | Remote-style run | Main default annotation path |
+| ABRicate NCBI/VFDB/PlasmidFinder | Stable in PanResistome-native comprehensive mode | No | Remote-style + native-runner validation | Main default annotation path |
 | AMRFinderPlus | Stable optional | No | Remote-style Delftia run | Auto-fetches the AMRFinderPlus database by default and exports PanR2 feature tables |
 | MobileElementFinder | Active development, opt-in | No | Real-data parser failure observed | Use `--panr2_run_mobileelementfinder true` when needed; upstream JSON parser can fail on some assemblies |
-| IntegronFinder/MLST | Active development | No | Remote-style run | Run by PanResistome native feature-runner stage by default, then passed to PanR2 |
+| IntegronFinder/MLST | Active development | No | Native-runner validation | Run by PanResistome native feature-runner stage by default, then passed to PanR2; MLST can be header-only for unsupported organisms |
 | MOB-suite/geNomad/typing tools | Experimental runners, stable table passthrough | No | Syntax/export path | Prefer precomputed tables for difficult DB setups |
 | Database/tool preflight audit | Stable | Comprehensive profile | Unit test + comprehensive path | Writes `panr2_inputs/manifest/database_setup_status.tsv` and fails required missing databases/tools |
 

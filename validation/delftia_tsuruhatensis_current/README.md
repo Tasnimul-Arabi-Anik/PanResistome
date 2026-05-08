@@ -37,6 +37,8 @@ Validated locally on 2026-05-08 with GTDB-Tk disabled, 4 threads, CheckM2 enable
 
 Fresh-clone validation on 2026-05-08 also completed without a user-supplied CheckM2 database path. The pipeline automatically downloaded the CheckM2 database, updated AMRFinderPlus databases, verified ABRicate `ncbi/vfdb/plasmidfinder`, completed all 19 Nextflow processes, and generated a clean PanR2 handoff with 291 feature rows and zero unmatched, invalid, or duplicate feature rows. See `FRESH_CLONE_VALIDATION_RESULTS.md`.
 
+Native feature-runner validation on 2026-05-08 completed all 20 Nextflow processes with `--panr2_native_feature_runners true`. PanResistome ran ABRicate, IntegronFinder, and MLST before PanR2 reporting, then exported 201 standardized feature rows with zero unmatched, invalid, or duplicate feature rows. MLST produced a valid header-only standardized table because this `Delftia` input had no supported PubMLST ST calls. See `NATIVE_FEATURE_RUNNER_VALIDATION_RESULTS.md`.
+
 The release-blocking fresh-clone validation path is documented in:
 
 ```text

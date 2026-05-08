@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -48,6 +49,50 @@ def count_feature_rows(path: Path) -> tuple[int, int]:
         if str(row.get("GENE", "") or row.get("feature_id", "")).strip()
     }
     return len(rows), len(feature_ids)
+
+
+def is_missing_value(value: str) -> bool:
+    text = str(value or "").strip()
+    return not text or text in {"-", ".", "?"} or text.lower() in {"na", "n/a", "nan", "none", "null", "unknown"}
+
+
+def is_placeholder_mlst_feature(value: str) -> bool:
+    text = str(value or "").strip()
+    if is_missing_value(text):
+        return True
+    return re.fullmatch(r"[-_:\s]*ST[-_:\s]*", text, flags=re.IGNORECASE) is not None
+
+
+def count_mlst_feature_rows(path: Path) -> tuple[int, int]:
+    """Count biological MLST features in native headerless `mlst` output.
+
+    The `mlst` command writes one row per input FASTA even when the organism has
+    no matching PubMLST scheme.  Those unsupported rows are useful run evidence
+    but should not be counted as sequence-type features.
+    """
+    if not path.exists():
+        return 0, 0
+    feature_ids: list[str] = []
+    for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        parts = [part.strip() for part in line.split("\t")]
+        if len(parts) < 3:
+            continue
+        st = parts[2]
+        if not is_missing_value(st):
+            st_feature = f"ST_{st}"
+            if not is_placeholder_mlst_feature(st_feature):
+                feature_ids.append(st_feature)
+        for allele in parts[3:]:
+            match = re.fullmatch(r"([^()]+)\(([^()]+)\)", allele)
+            if not match:
+                continue
+            locus, allele_number = match.groups()
+            if is_missing_value(locus) or is_missing_value(allele_number):
+                continue
+            feature_ids.append(f"{locus}_{allele_number}")
+    return len(feature_ids), len(set(feature_ids))
 
 
 def count_fastas(sequence_dir: Path) -> int:
@@ -216,7 +261,7 @@ def main() -> int:
         try:
             result = run_mlst(str(sequence_dir), str(sample_dir), force=args.force)
             raw_path = Path(result["raw_table"])
-            raw_rows = max(len(raw_path.read_text(encoding="utf-8", errors="ignore").splitlines()), 0) if raw_path.exists() else 0
+            feature_rows, unique_features = count_mlst_feature_rows(raw_path)
             rows.append(
                 status_row(
                     "mlst",
@@ -229,8 +274,8 @@ def main() -> int:
                     sample_count,
                     0,
                     1 if raw_path.exists() else 0,
-                    raw_rows,
-                    raw_rows,
+                    feature_rows,
+                    unique_features,
                 )
             )
         except Exception as exc:

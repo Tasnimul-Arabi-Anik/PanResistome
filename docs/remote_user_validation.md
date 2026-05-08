@@ -87,7 +87,7 @@ Run QUAST, ANI/skani, and Mash summaries
 Run AMRFinderPlus and update/download its database when needed
 Run PanR2 setup-db for ABRicate ncbi,vfdb,plasmidfinder
 Verify required ABRicate databases before PanR2 analysis
-Run PanR2 comprehensive analysis with IntegronFinder and MLST
+Run PanResistome-native ABRicate, IntegronFinder, and MLST feature runners before PanR2 analysis
 Export panr2_inputs/features/*.features.tsv
 Export panr2_inputs/features/all_features.tsv
 Validate feature contracts and metadata matching
@@ -137,6 +137,8 @@ panr2_inputs/features/mlst.features.tsv
 panr2_inputs/features/all_features.tsv
 ```
 
+`mlst.features.tsv` may be header-only for organisms without a supported PubMLST scheme. That is an acceptable `WARNING_EMPTY` result when the raw MLST command completed and no real ST/allele calls were detected.
+
 No enabled module may silently disappear. If a required table is missing, inspect:
 
 ```text
@@ -181,6 +183,12 @@ DefenseFinder: available in PanR2 but not default until its environment is consi
 ## Runtime Caveat
 
 The standard comprehensive command is reliable but not yet fully optimized for wall time. PanResistome now owns the standard feature-runner stage through `--panr2_native_feature_runners true` and passes precomputed ABRicate, IntegronFinder, and MLST directories into PanR2. Large fragmented assemblies can still make IntegronFinder the longest substage; future performance work should split per-assembly execution into finer-grained Nextflow channels while keeping PanR2 focused on standardized analysis/reporting.
+
+The 2026-05-08 native feature-runner validation is documented in:
+
+```text
+validation/delftia_tsuruhatensis_current/NATIVE_FEATURE_RUNNER_VALIDATION_RESULTS.md
+```
 
 ## Documentation After A Passing Run
 

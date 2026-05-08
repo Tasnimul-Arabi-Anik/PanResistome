@@ -16,6 +16,7 @@ Implemented groundwork after `v0.2.2`:
 
 - `--panr2_native_feature_runners true` runs ABRicate, IntegronFinder, MLST, and optional MobileElementFinder under PanResistome before PanR2.
 - PanR2 receives precomputed `--abricate-dir`, `--vfdb-dir`, `--plasmidfinder-dir`, `--integronfinder-dir`, and `--mlst-dir` inputs rather than being asked to run those tools internally.
+- A 45-genome `Delftia tsuruhatensis` validation passed with native ABRicate, IntegronFinder, and MLST runners enabled before PanR2 reporting. Results are documented in `validation/delftia_tsuruhatensis_current/NATIVE_FEATURE_RUNNER_VALIDATION_RESULTS.md`.
 
 ## 2. Scalability
 
@@ -28,10 +29,12 @@ Current target:
 
 Near-term candidates:
 
+- Per-database and eventually per-assembly ABRicate channels.
 - Per-assembly IntegronFinder channel.
 - Per-assembly MLST channel.
-- Per-database ABRicate channel.
 - Optional representative-only downstream analysis after ANI duplicate clustering.
+
+The native-runner Delftia validation showed that the current architecture is functionally valid but still serial inside `PANR2_FEATURE_RUNNERS`. ABRicate and IntegronFinder were the most important bottlenecks, so parallelizing those runners is the next engineering priority before larger organism validations.
 
 ## 3. Metadata Interpretation
 
@@ -95,6 +98,12 @@ Validation target:
 - AMRFinderPlus enabled.
 - Comprehensive PanR2 enabled.
 - Optional Kleborate/Kaptive table-input or runner validation when databases are available.
+
+Recommended order:
+
+1. Parallelize the standard native runners while preserving the current serial native-runner fallback.
+2. Re-run the 45-genome `Delftia tsuruhatensis` native-runner validation after parallelization.
+3. Run the planned `Klebsiella pneumoniae` validation to test richer AMR, plasmid, VFDB, MLST, and metadata-feature associations.
 
 ## 6. Deployment
 
