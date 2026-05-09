@@ -88,6 +88,7 @@ panr2_inputs/cross_database/amr_mge_context.tsv
 panr2_inputs/cross_database/amr_plasmid_context.tsv
 panr2_inputs/cross_database/amrfinder_abricate_concordance.tsv
 panr2_inputs/cross_database/feature_proximity.tsv
+panr2_inputs/cross_database/feature_proximity_all.tsv
 ```
 
 `amrfinder_abricate_concordance.tsv` classifies AMR calls as:
@@ -110,6 +111,8 @@ interpretation_warning
 ```
 
 Use `evidence_level` to distinguish same-contig coordinate context from weaker same-genome co-occurrence. Same-contig or within-10-kb evidence is stronger than sample-level co-occurrence, but it still does not prove transfer, expression, phenotype, or plasmid localization.
+
+In large-dataset mode, `feature_proximity.tsv` is capped for report readability. Use `feature_proximity_all.tsv` when you need the complete proximity evidence table.
 
 HTML interpretation pages:
 

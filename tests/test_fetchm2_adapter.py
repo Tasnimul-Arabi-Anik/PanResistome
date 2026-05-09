@@ -151,9 +151,11 @@ class FetchM2AdapterTests(unittest.TestCase):
             sample_dir = Path(tmpdir) / "Klebsiella_pneumoniae"
             metadata_dir = sample_dir / "metadata_output"
             abricate_dir = sample_dir / "abricate"
+            plasmid_dir = sample_dir / "plasmidfinder"
             vfdb_dir = sample_dir / "vfdb"
             metadata_dir.mkdir(parents=True)
             abricate_dir.mkdir()
+            plasmid_dir.mkdir()
             vfdb_dir.mkdir()
 
             pd.DataFrame(
@@ -175,6 +177,13 @@ class FetchM2AdapterTests(unittest.TestCase):
                 header
                 + "GCF_000000001.1.fna\tcontig1\t120\t220\tfimH\t100\t99\tvfdb\tV1\tadhesin\tvirulence\n"
                 + "GCF_000000002.1.fna\tcontig2\t120\t220\tybtS\t100\t99\tvfdb\tV2\tsiderophore\tvirulence\n",
+                encoding="utf-8",
+            )
+            (plasmid_dir / "plasmidfinder_results.tab").write_text(
+                header
+                + "GCF_000000001.1.fna\tcontig1\t150\t250\tIncFIB\t100\t99\tplasmidfinder\tP1\treplicon\tplasmid\n"
+                + "GCF_000000002.1.fna\tcontig2\t150\t250\tIncFIB\t100\t99\tplasmidfinder\tP1\treplicon\tplasmid\n"
+                + "GCF_000000003.1.fna\tcontig3\t150\t250\tIncX\t100\t99\tplasmidfinder\tP2\treplicon\tplasmid\n",
                 encoding="utf-8",
             )
 
@@ -200,6 +209,14 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertEqual(control_values["report_mode"], "compact")
             self.assertEqual(control_values["max_features_heatmap"], "2")
             self.assertEqual(control_values["skip_heavy_interactive_plots"], "true")
+            proximity = pd.read_csv(outputs["feature_proximity"], sep="\t")
+            proximity_features = set(zip(proximity["feature_a_database"], proximity["feature_a_id"]))
+            proximity_features.update(zip(proximity["feature_b_database"], proximity["feature_b_id"]))
+            self.assertLessEqual(len(proximity_features), 2)
+            complete_proximity = pd.read_csv(outputs["feature_proximity_all"], sep="\t")
+            complete_features = set(zip(complete_proximity["feature_a_database"], complete_proximity["feature_a_id"]))
+            complete_features.update(zip(complete_proximity["feature_b_database"], complete_proximity["feature_b_id"]))
+            self.assertGreater(len(complete_features), len(proximity_features))
             self.assertTrue(Path(outputs["report_controls_html"]).exists())
 
     def test_isfinder_blast_converter_writes_abricate_style_tables(self):

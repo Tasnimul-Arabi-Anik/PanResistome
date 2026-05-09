@@ -1965,7 +1965,7 @@ def write_cross_database_outputs(rows: list[dict[str, str]], metadata_rows: list
     amr_mge_same_contig_rows = _same_contig_pairs(rows, AMR_CONTEXT_DATABASES, MGE_CONTEXT_DATABASES, "amr_mge")
     amr_plasmid_same_contig_rows = _same_contig_pairs(rows, AMR_CONTEXT_DATABASES, PLASMID_CONTEXT_DATABASES, "amr_plasmid")
     amr_integron_same_contig_rows = _same_contig_pairs(rows, AMR_CONTEXT_DATABASES, INTEGRON_CONTEXT_DATABASES, "amr_integron")
-    feature_proximity_rows = sorted(
+    feature_proximity_all_rows = sorted(
         amr_mge_same_contig_rows + amr_plasmid_same_contig_rows + amr_integron_same_contig_rows,
         key=lambda row: (
             row["assembly_accession"],
@@ -1978,13 +1978,33 @@ def write_cross_database_outputs(rows: list[dict[str, str]], metadata_rows: list
             _as_int(row["distance_bp"]) if row["distance_bp"] else 10**18,
         ),
     )
+    proximity_feature_counts: Counter[tuple[str, str]] = Counter()
+    for row in feature_proximity_all_rows:
+        proximity_feature_counts[(row["feature_a_database"], row["feature_a_id"])] += 1
+        proximity_feature_counts[(row["feature_b_database"], row["feature_b_id"])] += 1
+    proximity_allowed_features = {
+        feature
+        for feature, _count in sorted(
+            proximity_feature_counts.items(),
+            key=lambda item: (-item[1], item[0][0], item[0][1]),
+        )[:max_features]
+    }
+    if proximity_allowed_features and len(proximity_feature_counts) > max_features:
+        feature_proximity_rows = [
+            row for row in feature_proximity_all_rows
+            if (row["feature_a_database"], row["feature_a_id"]) in proximity_allowed_features
+            and (row["feature_b_database"], row["feature_b_id"]) in proximity_allowed_features
+        ]
+    else:
+        feature_proximity_rows = feature_proximity_all_rows
     amr_mge_same_contig_path = write_rows(cross_dir / "amr_mge_same_contig.tsv", amr_mge_same_contig_rows, proximity_fields)
     amr_plasmid_same_contig_path = write_rows(cross_dir / "amr_plasmid_same_contig.tsv", amr_plasmid_same_contig_rows, proximity_fields)
     amr_integron_same_contig_path = write_rows(cross_dir / "amr_integron_same_contig.tsv", amr_integron_same_contig_rows, proximity_fields)
+    feature_proximity_all_path = write_rows(cross_dir / "feature_proximity_all.tsv", feature_proximity_all_rows, proximity_fields)
     feature_proximity_path = write_rows(cross_dir / "feature_proximity.tsv", feature_proximity_rows, proximity_fields)
     samples_with_same_contig = {
         row["assembly_accession"]
-        for row in feature_proximity_rows
+        for row in feature_proximity_all_rows
         if row.get("assembly_accession")
     }
 
@@ -2128,6 +2148,7 @@ def write_cross_database_outputs(rows: list[dict[str, str]], metadata_rows: list
         "amr_plasmid_same_contig": amr_plasmid_same_contig_path,
         "amr_integron_same_contig": amr_integron_same_contig_path,
         "feature_proximity": feature_proximity_path,
+        "feature_proximity_all": feature_proximity_all_path,
         "amrfinder_abricate_concordance": concordance_path,
     }
 
@@ -2297,7 +2318,7 @@ def write_report_controls(
         },
         {"setting": "report_mode", "value": report_mode, "message": "Handoff HTML density preset."},
         {"setting": "max_features_heatmap", "value": str(max_features_heatmap), "message": "Feature cap for handoff presence/absence matrices."},
-        {"setting": "max_features_network", "value": str(max_features_network), "message": "Feature cap for co-occurrence/network-style summaries."},
+        {"setting": "max_features_network", "value": str(max_features_network), "message": "Feature cap for report-facing co-occurrence/proximity summaries; complete proximity evidence is preserved as feature_proximity_all.tsv."},
         {"setting": "max_metadata_columns", "value": str(max_metadata_columns), "message": "Metadata rows shown in compact HTML report tables."},
         {"setting": "top_n_features_per_database", "value": str(top_n_features_per_database), "message": "Top prevalent features summarized per database."},
         {"setting": "skip_heavy_interactive_plots", "value": str(skip_heavy_interactive_plots).lower(), "message": "Heavy interactive plots are deprioritized/skipped when supported."},
@@ -2476,7 +2497,8 @@ th { background: #f0f4f8; }
         ("AMR-MGE same-contig evidence", cross_dir / "amr_mge_same_contig.tsv"),
         ("AMR-plasmid same-contig evidence", cross_dir / "amr_plasmid_same_contig.tsv"),
         ("AMR-integron same-contig evidence", cross_dir / "amr_integron_same_contig.tsv"),
-        ("All feature proximity evidence", cross_dir / "feature_proximity.tsv"),
+        ("Report-capped feature proximity evidence", cross_dir / "feature_proximity.tsv"),
+        ("Complete feature proximity evidence", cross_dir / "feature_proximity_all.tsv"),
         ("AMRFinderPlus vs ABRicate concordance", cross_dir / "amrfinder_abricate_concordance.tsv"),
     ]:
         cross_body += f"<div class='card'><strong>{html.escape(label)}</strong><br><a href='../{html.escape(_relative_link(path, out_dir))}'>{html.escape(_relative_link(path, out_dir))}</a></div>"

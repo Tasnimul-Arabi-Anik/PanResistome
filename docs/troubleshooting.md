@@ -10,6 +10,8 @@ CheckM2 can put heavy memory pressure on DIAMOND. Keep general pipeline parallel
 
 Use `--checkm2_threads 1` on low-memory machines. The `lowmem`, `desktop_parallel`, and `workstation` profiles set conservative CheckM2 caps.
 
+For 100+ genome desktop validations on 16 GB RAM, prefer `--checkm2_threads 1` when you can tolerate a longer run. `--checkm2_threads 2` completed the Klebsiella 100 large-mode validation, but the DIAMOND phase still created noticeable memory pressure.
+
 ## CheckM2 Database Download Fails
 
 PanResistome downloads the CheckM2 database automatically when `--checkm2_db` is not supplied. If a network or storage error occurs:
@@ -107,4 +109,11 @@ For large validations, inspect the top-level dashboard and top findings before o
 <sample>/report/index.html
 <sample>/panr2_inputs/report/top_findings.html
 <sample>/panr2_inputs/manifest/report_controls.tsv
+```
+
+For same-contig/proximity evidence, large mode writes a capped report-facing table and a complete table:
+
+```text
+<sample>/panr2_inputs/cross_database/feature_proximity.tsv
+<sample>/panr2_inputs/cross_database/feature_proximity_all.tsv
 ```
