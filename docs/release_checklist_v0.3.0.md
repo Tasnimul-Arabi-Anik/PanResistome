@@ -4,7 +4,7 @@ Use this checklist before tagging v0.3.0. Do not move an existing tag; create a 
 
 ## Required Gates
 
-- [ ] CI passes for the release commit.
+- [x] CI passes for the release commit.
 - [x] `pytest` passes locally or in CI.
 - [x] `nextflow run main.nf -profile test` passes.
 - [x] `python -m py_compile` passes for pipeline helper scripts.
