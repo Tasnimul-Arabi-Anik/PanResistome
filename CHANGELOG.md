@@ -2,7 +2,12 @@
 
 ## Unreleased
 
-No unreleased changes yet.
+### Added
+- BioProject/study-bias reporting in the PanR2 handoff bundle, including `metadata_feature_analysis/bioproject_bias_report.tsv` and `report/bioproject_bias.html`.
+- Confidence and warning labels for `metadata_feature_analysis/top_findings.tsv`, including support sample counts, BioProject dominance flags, and interpretation labels.
+- Richer AMRFinderPlus-vs-ABRicate concordance summaries with normalized gene-symbol matching, class-level possible matches, and a dedicated `report/amrfinder_abricate_concordance.html` page.
+- Explicit `evidence_level` and interpretation-warning columns in same-contig/proximity cross-database outputs.
+- Tests covering BioProject dominance warnings, top-finding labels, AMRFinderPlus/ABRicate concordance, and proximity evidence columns.
 
 ## 0.3.0 - 2026-05-09
 

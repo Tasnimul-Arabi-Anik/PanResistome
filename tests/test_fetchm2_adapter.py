@@ -220,12 +220,75 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertFalse(proximity.empty)
             self.assertIn("level_3_same_contig_within_10kb", set(proximity["interpretation_level"]))
             self.assertIn("level_4_same_contig_overlapping", set(proximity["interpretation_level"]))
+            self.assertIn("evidence_level", proximity.columns)
+            self.assertIn("interpretation_warning", proximity.columns)
             amr_mge = pd.read_csv(outputs["amr_mge_same_contig"], sep="\t")
             self.assertTrue({"isfinder", "integronfinder"}.issubset(set(amr_mge["feature_b_database"])))
             context = pd.read_csv(outputs["amr_mge_context"], sep="\t")
             self.assertEqual(context.loc[0, "same_contig_evidence"], "yes")
             self.assertTrue(Path(outputs["cross_database_interpretation_html"]).exists())
             self.assertTrue(Path(outputs["top_findings_html"]).exists())
+
+    def test_bioproject_bias_and_amrfinder_abricate_concordance_outputs(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_dir = Path(tmpdir) / "Klebsiella_pneumoniae"
+            metadata_dir = sample_dir / "metadata_output"
+            abricate_dir = sample_dir / "abricate"
+            amrfinder_dir = sample_dir / "amrfinderplus" / "raw"
+            metadata_dir.mkdir(parents=True)
+            abricate_dir.mkdir()
+            amrfinder_dir.mkdir(parents=True)
+
+            metadata_rows = []
+            map_lines = ["sample_id,Assembly Accession\n"]
+            for idx in range(1, 7):
+                accession = f"GCF_00000000{idx}.1"
+                country = "CountryA" if idx <= 3 else "CountryB"
+                bioproject = "PRJNA_DOMINANT" if idx <= 3 else f"PRJNA_OTHER_{idx}"
+                metadata_rows.append(
+                    {
+                        "Assembly Accession": accession,
+                        "Organism Name": "Klebsiella pneumoniae",
+                        "Country": country,
+                        "Assembly BioProject Accession": bioproject,
+                    }
+                )
+                map_lines.append(f"sample{idx},{accession}\n")
+            pd.DataFrame(metadata_rows).to_csv(metadata_dir / "ncbi_clean.csv", index=False)
+            (metadata_dir / "sample_map.csv").write_text("".join(map_lines), encoding="utf-8")
+
+            header = "#FILE\tSEQUENCE\tSTART\tEND\tGENE\t%COVERAGE\t%IDENTITY\tDATABASE\tACCESSION\tPRODUCT\tRESISTANCE\n"
+            abricate_lines = [header]
+            for idx in range(1, 4):
+                abricate_lines.append(
+                    f"sample{idx}.fna\tcontig{idx}\t10\t90\tblaABC\t100\t99.5\tncbi\tACC{idx}\tbeta-lactamase\tbeta-lactam\n"
+                )
+            abricate_lines.append(
+                "sample4.fna\tcontig4\t10\t90\ttetB\t100\t99.5\tncbi\tACC4\ttetracycline efflux\ttetracycline\n"
+            )
+            (abricate_dir / "ncbi_results.tab").write_text("".join(abricate_lines), encoding="utf-8")
+            (amrfinder_dir / "calls.tsv").write_text(
+                "sample_id\tGene symbol\tClass\t% Identity to reference sequence\t% Coverage of reference sequence\tContig id\tStart\tStop\n"
+                "sample1\tblaABC\tbeta-lactam\t99.0\t100\tcontig1\t12\t88\n"
+                "sample4\ttet(A)\ttetracycline\t98.0\t99\tcontig4\t15\t85\n",
+                encoding="utf-8",
+            )
+
+            outputs = export_contract(sample_dir, sample_dir / "panr2_inputs")
+            top_findings = pd.read_csv(outputs["top_findings"], sep="\t")
+            self.assertIn("warning_flags", top_findings.columns)
+            self.assertIn("interpretation_label", top_findings.columns)
+            self.assertIn("single_bioproject_dominance", ";".join(top_findings["warning_flags"].fillna("")))
+            self.assertIn("bioproject_bias_warning", set(top_findings["interpretation_label"]))
+
+            bioproject = pd.read_csv(outputs["bioproject_bias_report"], sep="\t")
+            self.assertIn("single_bioproject_dominance", ";".join(bioproject["warning"].fillna("")))
+            self.assertTrue(Path(outputs["bioproject_bias_html"]).exists())
+
+            concordance = pd.read_csv(outputs["amrfinder_abricate_concordance"], sep="\t")
+            self.assertIn("called_by_both", set(concordance["status"]))
+            self.assertIn("possible_class_match", set(concordance["status"]))
+            self.assertTrue(Path(outputs["amrfinder_abricate_concordance_html"]).exists())
 
     def test_database_setup_status_passes_required_abricate_databases(self):
         with tempfile.TemporaryDirectory() as tmpdir:

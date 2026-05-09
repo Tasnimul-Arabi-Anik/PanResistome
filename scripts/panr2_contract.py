@@ -901,6 +901,70 @@ def _classify_metadata_column(values: list[str]) -> str:
     return "categorical"
 
 
+def _float_or_none(value: str | None) -> float | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _format_fraction(value: float | None) -> str:
+    return "" if value is None else f"{value:.4f}"
+
+
+def _flag_string(flags: list[str]) -> str:
+    return ";".join(sorted({flag for flag in flags if flag}))
+
+
+def _interpretation_label(effect_size: str, q_value: str = "", warning_flags: str = "") -> str:
+    flags = {flag for flag in str(warning_flags or "").split(";") if flag}
+    effect = _float_or_none(effect_size) or 0.0
+    q = _float_or_none(q_value)
+    if "single_bioproject_dominance" in flags or "bioproject_bias_warning" in flags:
+        return "bioproject_bias_warning"
+    if "small_group" in flags or "low_sample_warning" in flags:
+        return "low_sample_warning"
+    if "sparse_metadata_warning" in flags:
+        return "sparse_metadata_warning"
+    if q is not None and q <= 0.05 and effect >= 0.5:
+        return "strong_supported"
+    if effect >= 0.5 and "screening_no_p_value" not in flags:
+        return "moderate_supported"
+    if effect >= 0.5:
+        return "exploratory"
+    return "exploratory"
+
+
+def _bioproject_by_sample(metadata_rows: list[dict[str, str]]) -> dict[str, str]:
+    normalized = normalize_metadata_rows(metadata_rows)
+    return {
+        row["assembly_accession"]: row.get("bioproject", "")
+        for row in normalized
+        if row.get("assembly_accession") and row.get("bioproject")
+    }
+
+
+def _top_project_summary(samples: set[str], project_by_sample: dict[str, str]) -> dict[str, str]:
+    projects = [project_by_sample.get(sample, "") for sample in samples if project_by_sample.get(sample, "")]
+    counts = Counter(projects)
+    top_project, top_count = counts.most_common(1)[0] if counts else ("", 0)
+    fraction = top_count / len(projects) if projects else None
+    status = "WARNING_DOMINATED" if fraction is not None and len(projects) >= 3 and fraction >= 0.8 else "PASS"
+    warning = "single_bioproject_dominance" if status == "WARNING_DOMINATED" else ""
+    return {
+        "samples_evaluated": str(len(projects)),
+        "n_bioprojects": str(len(counts)),
+        "largest_bioproject": top_project,
+        "largest_bioproject_count": str(top_count),
+        "largest_bioproject_fraction": _format_fraction(fraction),
+        "status": status,
+        "warning": warning,
+    }
+
+
 def write_metadata_analysis(sample_dir: Path, out_dir: Path) -> dict[str, str]:
     metadata_rows = load_metadata_rows(sample_dir)
     analysis_dir = out_dir / "metadata_feature_analysis"
@@ -989,6 +1053,30 @@ def write_metadata_analysis(sample_dir: Path, out_dir: Path) -> dict[str, str]:
             "reason",
         ],
     )
+    usability_path = write_rows(
+        analysis_dir / "metadata_usability_summary.tsv",
+        [
+            {
+                "metadata_column": row["metadata_column"],
+                "non_missing_count": row["non_missing_count"],
+                "missing_fraction": row["missing_fraction"],
+                "unique_values": row["unique_values"],
+                "largest_group_fraction": row["largest_group_fraction"],
+                "recommended_for_analysis": row["eligible"],
+                "reason": row["reason"],
+            }
+            for row in eligibility_rows
+        ],
+        [
+            "metadata_column",
+            "non_missing_count",
+            "missing_fraction",
+            "unique_values",
+            "largest_group_fraction",
+            "recommended_for_analysis",
+            "reason",
+        ],
+    )
     recommended_path = analysis_dir / "recommended_metadata_columns.txt"
     recommended_path.parent.mkdir(parents=True, exist_ok=True)
     with recommended_path.open("w", encoding="utf-8") as handle:
@@ -1001,6 +1089,7 @@ def write_metadata_analysis(sample_dir: Path, out_dir: Path) -> dict[str, str]:
         "metadata_normalized": normalized_path,
         "metadata_audit": audit_path,
         "metadata_column_eligibility": eligibility_path,
+        "metadata_usability_summary": usability_path,
         "recommended_metadata_columns": str(recommended_path),
     }
 
@@ -1020,6 +1109,125 @@ def feature_presence(rows: list[dict[str, str]]) -> dict[tuple[str, str], set[st
         if database and feature_id and sample:
             presence[(database, feature_id)].add(sample)
     return presence
+
+
+def _supporting_samples_for_finding(
+    finding: dict[str, str],
+    normalized_metadata_rows: list[dict[str, str]],
+    presence: dict[tuple[str, str], set[str]],
+) -> set[str]:
+    metadata_column = finding.get("metadata_column", "")
+    metadata_value = finding.get("metadata_value", "")
+    group_samples = {
+        row["assembly_accession"]
+        for row in normalized_metadata_rows
+        if row.get("assembly_accession") and (not metadata_column or row.get(metadata_column, "") == metadata_value)
+    }
+    if finding.get("feature_id") == "database_burden":
+        return group_samples
+    feature_samples = presence.get((finding.get("database", ""), finding.get("feature_id", "")), set())
+    return feature_samples & group_samples if group_samples else set(feature_samples)
+
+
+def _annotate_top_findings(
+    top_findings: list[dict[str, str]],
+    normalized_metadata_rows: list[dict[str, str]],
+    presence: dict[tuple[str, str], set[str]],
+    project_by_sample: dict[str, str],
+) -> list[dict[str, str]]:
+    annotated = []
+    for finding in top_findings:
+        support_samples = _supporting_samples_for_finding(finding, normalized_metadata_rows, presence)
+        project_summary = _top_project_summary(support_samples, project_by_sample)
+        flags = []
+        if finding.get("warning"):
+            flags.extend(flag.strip() for flag in finding["warning"].split(";") if flag.strip())
+        if not finding.get("p_value") and not finding.get("q_value"):
+            flags.append("screening_no_p_value")
+        if 0 < len(support_samples) < 5:
+            flags.append("low_sample_warning")
+        if project_summary["warning"]:
+            flags.append(project_summary["warning"])
+        warning_flags = _flag_string(flags)
+        out = dict(finding)
+        out.update({
+            "supporting_samples": str(len(support_samples)),
+            "largest_bioproject": project_summary["largest_bioproject"],
+            "largest_bioproject_fraction": project_summary["largest_bioproject_fraction"],
+            "warning_flags": warning_flags,
+            "interpretation_label": _interpretation_label(finding.get("effect_size", ""), finding.get("q_value", ""), warning_flags),
+        })
+        annotated.append(out)
+    return annotated
+
+
+def write_bioproject_bias_report(
+    rows: list[dict[str, str]],
+    metadata_rows: list[dict[str, str]],
+    top_findings: list[dict[str, str]],
+    out_dir: Path,
+) -> str:
+    analysis_dir = out_dir / "metadata_feature_analysis"
+    analysis_dir.mkdir(parents=True, exist_ok=True)
+    normalized = normalize_metadata_rows(metadata_rows)
+    project_by_sample = _bioproject_by_sample(metadata_rows)
+    presence = feature_presence(rows)
+    output_rows = []
+
+    all_samples = {row.get("assembly_accession", "") for row in normalized if row.get("assembly_accession")}
+    summary = _top_project_summary(all_samples, project_by_sample)
+    output_rows.append({
+        "row_type": "dataset_summary",
+        "database": "",
+        "feature_id": "",
+        "metadata_column": "bioproject",
+        "metadata_value": "",
+        **summary,
+    })
+
+    for (database, feature_id), present_samples in sorted(presence.items()):
+        if len(present_samples) < 3:
+            continue
+        summary = _top_project_summary(present_samples, project_by_sample)
+        output_rows.append({
+            "row_type": "feature_project_dominance",
+            "database": database,
+            "feature_id": feature_id,
+            "metadata_column": "bioproject",
+            "metadata_value": "",
+            **summary,
+        })
+
+    for finding in top_findings:
+        support_samples = _supporting_samples_for_finding(finding, normalized, presence)
+        summary = _top_project_summary(support_samples, project_by_sample)
+        output_rows.append({
+            "row_type": "top_finding_project_support",
+            "database": finding.get("database", ""),
+            "feature_id": finding.get("feature_id", ""),
+            "metadata_column": finding.get("metadata_column", ""),
+            "metadata_value": finding.get("metadata_value", ""),
+            **summary,
+        })
+
+    return write_rows(
+        analysis_dir / "bioproject_bias_report.tsv",
+        output_rows,
+        [
+            "row_type",
+            "database",
+            "feature_id",
+            "metadata_column",
+            "metadata_value",
+            "samples_evaluated",
+            "n_bioprojects",
+            "largest_bioproject",
+            "largest_bioproject_count",
+            "largest_bioproject_fraction",
+            "status",
+            "warning",
+        ],
+    )
 
 
 def write_feature_matrices(rows: list[dict[str, str]], metadata_rows: list[dict[str, str]], out_dir: Path, max_features: int = 300) -> dict[str, str]:
@@ -1339,6 +1547,9 @@ def write_feature_eligibility_and_prevalence(rows: list[dict[str, str]], metadat
                 "metadata_column": row["metadata_column"],
                 "metadata_value": row["top_enriched_group"],
                 "effect_size": row["effect_size"],
+                "p_value": row.get("p_value", ""),
+                "q_value": row.get("q_value", ""),
+                "warning": row.get("warning", ""),
                 "message": f"{row['database']} feature {row['feature_id']} was enriched in {row['metadata_column']}={row['top_enriched_group']} compared with {row['lowest_group']} (prevalence difference {row['effect_size']}).",
             })
     for row in burden_association_rows:
@@ -1350,11 +1561,15 @@ def write_feature_eligibility_and_prevalence(rows: list[dict[str, str]], metadat
                 "metadata_column": row["metadata_column"],
                 "metadata_value": row["top_group"],
                 "effect_size": row["effect_size"],
+                "p_value": "",
+                "q_value": "",
+                "warning": row.get("warning", ""),
                 "message": f"{row['database']} feature burden was highest in {row['metadata_column']}={row['top_group']} compared with {row['lowest_group']} (mean difference {row['effect_size']}).",
             })
     for key, path in prevalence_outputs.items():
         for row in read_table(Path(path)):
-            if int(row.get("n_group", "0") or 0) >= 3 and float(row.get("prevalence", "0") or 0) >= 0.8:
+            n_group = int(row.get("n_group", "0") or 0)
+            if n_group >= 3 and float(row.get("prevalence", "0") or 0) >= 0.8:
                 top_findings.append({
                     "finding_type": "metadata_feature_prevalence",
                     "database": row["database"],
@@ -1362,20 +1577,41 @@ def write_feature_eligibility_and_prevalence(rows: list[dict[str, str]], metadat
                     "metadata_column": row["metadata_column"],
                     "metadata_value": row["metadata_value"],
                     "effect_size": row["prevalence"],
+                    "p_value": "",
+                    "q_value": "",
+                    "warning": "small_group" if n_group < 5 else "",
                     "message": f"{row['database']} feature {row['feature_id']} was common in {row['metadata_column']}={row['metadata_value']} (prevalence {row['prevalence']}).",
                 })
     top_findings = sorted(top_findings, key=lambda row: float(row["effect_size"]), reverse=True)[:50]
+    top_findings = _annotate_top_findings(top_findings, normalized, presence, _bioproject_by_sample(metadata_rows))
     top_findings_path = write_rows(
         analysis_dir / "top_findings.tsv",
         top_findings,
-        ["finding_type", "database", "feature_id", "metadata_column", "metadata_value", "effect_size", "message"],
+        [
+            "finding_type",
+            "database",
+            "feature_id",
+            "metadata_column",
+            "metadata_value",
+            "effect_size",
+            "p_value",
+            "q_value",
+            "supporting_samples",
+            "largest_bioproject",
+            "largest_bioproject_fraction",
+            "warning_flags",
+            "interpretation_label",
+            "message",
+        ],
     )
     top_findings_md = analysis_dir / "top_findings.md"
     with top_findings_md.open("w", encoding="utf-8") as handle:
         handle.write("# Top Metadata-Feature Findings\n\n")
         handle.write("These are screening summaries only. They show sample-level enrichment and do not prove causality, physical linkage, or transfer.\n\n")
         for row in top_findings[:20]:
-            handle.write(f"- {row['message']}\n")
+            warning_note = f" [{row['interpretation_label']}]" if row.get("interpretation_label") else ""
+            handle.write(f"- {row['message']}{warning_note}\n")
+    bioproject_bias_path = write_bioproject_bias_report(rows, metadata_rows, top_findings, out_dir)
 
     return {
         "feature_eligibility": feature_eligibility_path,
@@ -1386,6 +1622,7 @@ def write_feature_eligibility_and_prevalence(rows: list[dict[str, str]], metadat
         "category_metadata_associations": category_association_path,
         "top_findings": top_findings_path,
         "top_findings_md": str(top_findings_md),
+        "bioproject_bias_report": bioproject_bias_path,
         **prevalence_outputs,
     }
 
@@ -1547,8 +1784,45 @@ def _same_contig_pairs(
                     "feature_b_end": row_b.get("end", ""),
                     "distance_bp": distance,
                     "interpretation_level": level,
+                    "evidence_level": level,
+                    "interpretation_warning": "Same-contig/proximity evidence is stronger than same-genome co-occurrence but does not prove transfer, expression, phenotype, or plasmid localization.",
                 })
     return pair_rows
+
+
+def _normalize_amr_symbol(value: str) -> str:
+    text = str(value or "").strip().lower()
+    text = re.sub(r"[^a-z0-9]+", "", text)
+    return text
+
+
+def _category_terms(row: dict[str, str]) -> set[str]:
+    raw_values = [
+        row.get("feature_category", ""),
+        row.get("drug_class", ""),
+        row.get("feature_subcategory", ""),
+        row.get("raw_category", ""),
+    ]
+    terms = set()
+    for value in raw_values:
+        for part in re.split(r"[;,/|]", str(value or "").lower()):
+            clean = re.sub(r"\s+", "_", part.strip())
+            if clean and clean not in {"na", "n/a", "none", "unknown", "-"}:
+                terms.add(clean)
+    return terms
+
+
+def _amr_calls_by_normalized_symbol(rows: list[dict[str, str]], database: str) -> dict[str, list[dict[str, str]]]:
+    calls: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row in rows:
+        if row.get("database") != database or row.get("presence", "1") != "1":
+            continue
+        feature_id = row.get("feature_id", "")
+        normalized = _normalize_amr_symbol(feature_id)
+        sample = row.get("assembly_accession", "") or row.get("sample_id", "")
+        if feature_id and normalized and sample:
+            calls[normalized].append(row)
+    return calls
 
 
 def write_cross_database_outputs(rows: list[dict[str, str]], metadata_rows: list[dict[str, str]], out_dir: Path, max_features: int = 300) -> dict[str, str]:
@@ -1655,6 +1929,8 @@ def write_cross_database_outputs(rows: list[dict[str, str]], metadata_rows: list
         "feature_b_end",
         "distance_bp",
         "interpretation_level",
+        "evidence_level",
+        "interpretation_warning",
     ]
     amr_mge_same_contig_rows = _same_contig_pairs(rows, AMR_CONTEXT_DATABASES, MGE_CONTEXT_DATABASES, "amr_mge")
     amr_plasmid_same_contig_rows = _same_contig_pairs(rows, AMR_CONTEXT_DATABASES, PLASMID_CONTEXT_DATABASES, "amr_plasmid")
@@ -1717,20 +1993,101 @@ def write_cross_database_outputs(rows: list[dict[str, str]], metadata_rows: list
         ["assembly_accession", "amr_features", "plasmid_features", "mge_features", "amr_count", "plasmid_count", "mge_count", "same_contig_evidence"],
     )
 
-    abricate_amr = {feature_id for database, feature_id in presence if database == "amr"}
-    amrfinder = {feature_id for database, feature_id in presence if database == "amrfinderplus"}
+    abricate_calls = _amr_calls_by_normalized_symbol(rows, "amr")
+    amrfinder_calls = _amr_calls_by_normalized_symbol(rows, "amrfinderplus")
     concordance_rows = []
-    for feature in sorted(abricate_amr | amrfinder):
+    for normalized_feature in sorted(set(abricate_calls) | set(amrfinder_calls)):
+        abricate_rows = abricate_calls.get(normalized_feature, [])
+        amrfinder_rows = amrfinder_calls.get(normalized_feature, [])
+        abricate_features = sorted({row.get("feature_id", "") for row in abricate_rows if row.get("feature_id")})
+        amrfinder_features = sorted({row.get("feature_id", "") for row in amrfinder_rows if row.get("feature_id")})
+        abricate_samples = {row.get("assembly_accession", "") or row.get("sample_id", "") for row in abricate_rows}
+        amrfinder_samples = {row.get("assembly_accession", "") or row.get("sample_id", "") for row in amrfinder_rows}
+        shared_samples = abricate_samples & amrfinder_samples
+        if shared_samples:
+            status = "called_by_both"
+        elif abricate_rows and amrfinder_rows:
+            status = "same_symbol_different_samples"
+        elif abricate_rows:
+            status = "abricate_only"
+        else:
+            status = "amrfinderplus_only"
         concordance_rows.append({
-            "feature_id": feature,
-            "abricate_present": str(feature in abricate_amr).lower(),
-            "amrfinderplus_present": str(feature in amrfinder).lower(),
-            "status": "both" if feature in abricate_amr and feature in amrfinder else ("abricate_only" if feature in abricate_amr else "amrfinderplus_only"),
+            "feature_id": ";".join(abricate_features or amrfinder_features),
+            "sample_id": "",
+            "normalized_feature_id": normalized_feature,
+            "abricate_feature_ids": ";".join(abricate_features),
+            "amrfinderplus_feature_ids": ";".join(amrfinder_features),
+            "abricate_present": str(bool(abricate_rows)).lower(),
+            "amrfinderplus_present": str(bool(amrfinder_rows)).lower(),
+            "abricate_sample_count": str(len(abricate_samples)),
+            "amrfinderplus_sample_count": str(len(amrfinder_samples)),
+            "shared_sample_count": str(len(shared_samples)),
+            "status": status,
+            "possible_match_basis": "normalized_gene_symbol",
+            "interpretation_note": "Gene-symbol matching is normalized for punctuation/case; inspect raw tool outputs for naming differences.",
+        })
+
+    abricate_by_sample_class: dict[tuple[str, str], set[str]] = defaultdict(set)
+    amrfinder_by_sample_class: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for row in rows:
+        database = row.get("database", "")
+        if database not in {"amr", "amrfinderplus"} or row.get("presence", "1") != "1":
+            continue
+        sample = row.get("assembly_accession", "") or row.get("sample_id", "")
+        if not sample:
+            continue
+        for term in _category_terms(row):
+            if database == "amr":
+                abricate_by_sample_class[(sample, term)].add(row.get("feature_id", ""))
+            else:
+                amrfinder_by_sample_class[(sample, term)].add(row.get("feature_id", ""))
+    for sample_class in sorted(set(abricate_by_sample_class) & set(amrfinder_by_sample_class)):
+        sample, category = sample_class
+        abricate_features = sorted(abricate_by_sample_class[sample_class])
+        amrfinder_features = sorted(amrfinder_by_sample_class[sample_class])
+        shared_normalized = {
+            _normalize_amr_symbol(feature)
+            for feature in abricate_features
+        } & {
+            _normalize_amr_symbol(feature)
+            for feature in amrfinder_features
+        }
+        if shared_normalized:
+            continue
+        concordance_rows.append({
+            "feature_id": f"class:{category}",
+            "sample_id": sample,
+            "normalized_feature_id": f"class:{category}",
+            "abricate_feature_ids": ";".join(abricate_features),
+            "amrfinderplus_feature_ids": ";".join(amrfinder_features),
+            "abricate_present": "true",
+            "amrfinderplus_present": "true",
+            "abricate_sample_count": "1",
+            "amrfinderplus_sample_count": "1",
+            "shared_sample_count": "1",
+            "status": "possible_class_match",
+            "possible_match_basis": "same_sample_same_drug_or_feature_class",
+            "interpretation_note": "Tools reported different feature names in the same sample but shared a drug/class label; treat as possible concordance, not exact agreement.",
         })
     concordance_path = write_rows(
         cross_dir / "amrfinder_abricate_concordance.tsv",
         concordance_rows,
-        ["feature_id", "abricate_present", "amrfinderplus_present", "status"],
+        [
+            "feature_id",
+            "sample_id",
+            "normalized_feature_id",
+            "abricate_feature_ids",
+            "amrfinderplus_feature_ids",
+            "abricate_present",
+            "amrfinderplus_present",
+            "abricate_sample_count",
+            "amrfinderplus_sample_count",
+            "shared_sample_count",
+            "status",
+            "possible_match_basis",
+            "interpretation_note",
+        ],
     )
     return {
         "feature_cooccurrence": cooccurrence_path,
@@ -1935,7 +2292,19 @@ th { background: #f0f4f8; }
 """
     top_findings_body += _html_table(
         top_findings_rows,
-        ["finding_type", "database", "feature_id", "metadata_column", "metadata_value", "effect_size", "message"],
+        [
+            "finding_type",
+            "database",
+            "feature_id",
+            "metadata_column",
+            "metadata_value",
+            "effect_size",
+            "supporting_samples",
+            "largest_bioproject_fraction",
+            "warning_flags",
+            "interpretation_label",
+            "message",
+        ],
         max_rows=50,
     )
     top_findings_path.write_text(page("Top Metadata-Feature Findings", top_findings_body), encoding="utf-8")
@@ -1943,9 +2312,17 @@ th { background: #f0f4f8; }
     metadata_path = report_dir / "metadata_quality_and_bias.html"
     metadata_rows = read_table(analysis_dir / "metadata_column_eligibility.tsv")
     audit_rows = read_table(analysis_dir / "fetchm2_metadata_audit.tsv")
+    usability_rows = read_table(analysis_dir / "metadata_usability_summary.tsv")
+    bioproject_rows = read_table(analysis_dir / "bioproject_bias_report.tsv")
     metadata_body = """
 <p>This page summarizes which FetchM2 metadata columns are usable for comparative analysis and which are sparse, dominated by one value, or likely identifiers.</p>
 """
+    metadata_body += "<h2>Metadata Usability Summary</h2>"
+    metadata_body += _html_table(
+        usability_rows,
+        ["metadata_column", "non_missing_count", "missing_fraction", "unique_values", "largest_group_fraction", "recommended_for_analysis", "reason"],
+        max_rows=80,
+    )
     metadata_body += "<h2>Metadata Column Eligibility</h2>"
     metadata_body += _html_table(
         metadata_rows,
@@ -1958,7 +2335,25 @@ th { background: #f0f4f8; }
         ["column", "standardized_name", "data_type", "non_missing_count", "missing_fraction", "unique_values", "top_value", "top_value_fraction", "recommended_for_analysis", "reason"],
         max_rows=80,
     )
+    metadata_body += "<h2>BioProject / Study Bias</h2>"
+    metadata_body += "<p>Dominance by one BioProject can make metadata-feature associations reflect study design rather than biology.</p>"
+    metadata_body += _html_table(
+        bioproject_rows,
+        ["row_type", "database", "feature_id", "metadata_column", "metadata_value", "samples_evaluated", "n_bioprojects", "largest_bioproject", "largest_bioproject_fraction", "status", "warning"],
+        max_rows=80,
+    )
     metadata_path.write_text(page("Metadata Quality And Bias", metadata_body), encoding="utf-8")
+
+    bioproject_path = report_dir / "bioproject_bias.html"
+    bioproject_body = """
+<div class="warning">Public genome sets often reflect study design. Treat associations dominated by one BioProject as exploratory until validated with independent sampling.</div>
+"""
+    bioproject_body += _html_table(
+        bioproject_rows,
+        ["row_type", "database", "feature_id", "metadata_column", "metadata_value", "samples_evaluated", "n_bioprojects", "largest_bioproject", "largest_bioproject_count", "largest_bioproject_fraction", "status", "warning"],
+        max_rows=120,
+    )
+    bioproject_path.write_text(page("BioProject Bias", bioproject_body), encoding="utf-8")
 
     burden_path = report_dir / "database_burden_by_metadata.html"
     burden_rows = read_table(analysis_dir / "database_burden_by_sample.tsv")
@@ -1975,8 +2370,10 @@ th { background: #f0f4f8; }
     cross_path = report_dir / "cross_database_interpretation.html"
     proximity_rows = read_table(cross_dir / "feature_proximity.tsv")
     cooccurrence_rows = read_table(cross_dir / "database_cooccurrence_summary.tsv")
+    concordance_rows = read_table(cross_dir / "amrfinder_abricate_concordance.tsv")
     cross_body = """
 <div class="warning">Genome-level co-occurrence means features were detected in the same sample/genome. Same-contig and proximity rows provide stronger context, but still do not prove transfer, expression, phenotype, or plasmid localization.</div>
+<p>Evidence levels are ordered from weaker sample-level context to stronger same-contig coordinate context. Assembly fragmentation and naming differences can still limit interpretation.</p>
 <div class="grid">
 """
     for label, path in [
@@ -1986,6 +2383,7 @@ th { background: #f0f4f8; }
         ("AMR-plasmid same-contig evidence", cross_dir / "amr_plasmid_same_contig.tsv"),
         ("AMR-integron same-contig evidence", cross_dir / "amr_integron_same_contig.tsv"),
         ("All feature proximity evidence", cross_dir / "feature_proximity.tsv"),
+        ("AMRFinderPlus vs ABRicate concordance", cross_dir / "amrfinder_abricate_concordance.tsv"),
     ]:
         cross_body += f"<div class='card'><strong>{html.escape(label)}</strong><br><a href='../{html.escape(_relative_link(path, out_dir))}'>{html.escape(_relative_link(path, out_dir))}</a></div>"
     cross_body += "</div><h2>Database Co-occurrence</h2>"
@@ -1993,10 +2391,27 @@ th { background: #f0f4f8; }
     cross_body += "<h2>Same-Contig And Proximity Evidence</h2>"
     cross_body += _html_table(
         proximity_rows,
-        ["assembly_accession", "contig", "context", "feature_a_database", "feature_a_id", "feature_b_database", "feature_b_id", "distance_bp", "interpretation_level"],
+        ["assembly_accession", "contig", "context", "feature_a_database", "feature_a_id", "feature_b_database", "feature_b_id", "distance_bp", "evidence_level", "interpretation_warning"],
+        max_rows=80,
+    )
+    cross_body += "<h2>AMRFinderPlus vs ABRicate Concordance</h2>"
+    cross_body += _html_table(
+        concordance_rows,
+        ["feature_id", "sample_id", "abricate_feature_ids", "amrfinderplus_feature_ids", "shared_sample_count", "status", "possible_match_basis", "interpretation_note"],
         max_rows=80,
     )
     cross_path.write_text(page("Cross-Database Interpretation", cross_body), encoding="utf-8")
+
+    concordance_path = report_dir / "amrfinder_abricate_concordance.html"
+    concordance_body = """
+<div class="warning">ABRicate and AMRFinderPlus use different databases, algorithms, and naming conventions. Discordance should be inspected in raw outputs before drawing biological conclusions.</div>
+"""
+    concordance_body += _html_table(
+        concordance_rows,
+        ["feature_id", "sample_id", "normalized_feature_id", "abricate_feature_ids", "amrfinderplus_feature_ids", "abricate_sample_count", "amrfinderplus_sample_count", "shared_sample_count", "status", "possible_match_basis"],
+        max_rows=120,
+    )
+    concordance_path.write_text(page("AMRFinderPlus vs ABRicate Concordance", concordance_body), encoding="utf-8")
 
     setup_path = report_dir / "database_setup_and_contract.html"
     setup_rows = read_table(manifest_dir / "database_setup_status.tsv")
@@ -2020,8 +2435,10 @@ th { background: #f0f4f8; }
     for label, path in [
         ("Top findings", top_findings_path),
         ("Metadata quality and bias", metadata_path),
+        ("BioProject bias", bioproject_path),
         ("Database burden by metadata", burden_path),
         ("Cross-database interpretation", cross_path),
+        ("AMRFinderPlus vs ABRicate concordance", concordance_path),
         ("Database setup and feature contract", setup_path),
     ]:
         index_body += f"<li><a href='{html.escape(path.name)}'>{html.escape(label)}</a></li>"
@@ -2032,8 +2449,10 @@ th { background: #f0f4f8; }
         "handoff_report_index": str(index_path),
         "top_findings_html": str(top_findings_path),
         "metadata_quality_html": str(metadata_path),
+        "bioproject_bias_html": str(bioproject_path),
         "database_burden_html": str(burden_path),
         "cross_database_interpretation_html": str(cross_path),
+        "amrfinder_abricate_concordance_html": str(concordance_path),
         "database_setup_contract_html": str(setup_path),
     }
 
