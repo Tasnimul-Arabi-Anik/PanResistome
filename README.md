@@ -103,6 +103,8 @@ This table-input path is the preferred stable route for organism-specific typing
 
 For large runs, add `--large_dataset true` or combine a resource profile with `large`, for example `-profile conda,mamba,desktop_parallel,large`. Large-dataset mode still writes complete feature TSV outputs, but caps report-facing matrices/co-occurrence/proximity summaries, switches the handoff pages to compact mode, summarizes top features per database, and records the applied limits in `panr2_inputs/manifest/report_controls.tsv`. Complete proximity evidence is preserved separately as `panr2_inputs/cross_database/feature_proximity_all.tsv`.
 
+For 300+ genome desktop validations, start with CheckM2, ANI, and AMRFinderPlus disabled, then add those heavier stages intentionally. The documented 300-record Klebsiella large-mode run used `--run_checkm2 false --run_ani false --run_amrfinderplus false` and still validated FetchM2, sequence QC, QUAST, Mash, ABRicate AMR/VFDB/PlasmidFinder, IntegronFinder, MLST, PanR2 feature contracts, and compact report safeguards. FastANI all-vs-all and AMRFinderPlus nucleotide `tblastn` were the observed long-running optional stages at this scale. If ANI is enabled with `--large_dataset true`, the default `--ani_large_run_strategy auto` skips all-vs-all ANI above `--ani_max_all_vs_all_genomes` and writes an ANI status audit instead of accidentally launching a long all-vs-all run.
+
 ### Recommended Analysis Profiles
 
 Use profiles for simple public-facing commands, and use individual flags when you need fine control.
@@ -171,7 +173,7 @@ Fresh-clone validation of this command on 2026-05-08 completed all 19 Nextflow p
 
 For the fresh-user validation path, see [`docs/remote_user_validation.md`](docs/remote_user_validation.md). For the 20 release gates used to judge whether the public comprehensive workflow is reliable, see [`docs/release_reliability_checklist.md`](docs/release_reliability_checklist.md).
 
-For v0.3.0 validation status, see [`docs/validation_matrix.md`](docs/validation_matrix.md), [`docs/release_checklist_v0.3.0.md`](docs/release_checklist_v0.3.0.md), [`docs/troubleshooting.md`](docs/troubleshooting.md), and [`docs/example_klebsiella_interpretation.md`](docs/example_klebsiella_interpretation.md). For v0.4.0 large-dataset and deployment planning, see [`docs/roadmap_v0.4.0.md`](docs/roadmap_v0.4.0.md), [`docs/hpc.md`](docs/hpc.md), and [`docs/containers.md`](docs/containers.md).
+For v0.3.0 validation status, see [`docs/validation_matrix.md`](docs/validation_matrix.md), [`docs/release_checklist_v0.3.0.md`](docs/release_checklist_v0.3.0.md), [`docs/troubleshooting.md`](docs/troubleshooting.md), and [`docs/example_klebsiella_interpretation.md`](docs/example_klebsiella_interpretation.md). For v0.4.0 large-dataset and deployment planning, see [`docs/roadmap_v0.4.0.md`](docs/roadmap_v0.4.0.md), [`validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md`](validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md), [`docs/hpc.md`](docs/hpc.md), and [`docs/containers.md`](docs/containers.md).
 
 ### Module Stability
 
@@ -397,6 +399,8 @@ PanResistome/
 | `--ani_tool`            | str   | fastani | ANI engine: `fastani` or `skani`                 |
 | `--ani_duplicate_threshold` | float | 99.9 | ANI threshold for near-duplicate clusters        |
 | `--ani_species_threshold` | float | 95.0 | ANI warning threshold for species consistency    |
+| `--ani_large_run_strategy` | str | auto | ANI strategy for large runs: `auto`, `all`, or `skip`; `auto` skips all-vs-all ANI in large-dataset mode above `--ani_max_all_vs_all_genomes` |
+| `--ani_max_all_vs_all_genomes` | int | 200 | Maximum genomes for automatic all-vs-all ANI in large-dataset mode |
 | `--run_mash`            | bool  | false   | Enable Mash sketch/distance pre-screening        |
 | `--representative_only` | bool  | false   | Keep one representative per near-duplicate ANI cluster when filtering |
 | `--analysis_profile`    | str   | custom  | Preset mode: `custom`, `qc_only`, `amr_basic`, `amr_vp`, `amr_vp_mge`, or `comprehensive` |
@@ -420,6 +424,8 @@ PanResistome/
 | `--amrfinderplus_update_db` | bool | true | Run `amrfinder -u` before AMRFinderPlus execution so fresh installs fetch the AMRFinderPlus database |
 | `--amrfinderplus_jobs` | int | `--threads` | Parallel AMRFinderPlus sample jobs |
 | `--amrfinderplus_threads_per_sample` | int | 1 | Threads used by each AMRFinderPlus sample job |
+| `--amrfinderplus_reuse_existing` | bool | true | Reuse non-empty per-sample AMRFinderPlus TSVs on resumed/interrupted runs |
+| `--amrfinderplus_progress_every` | int | 10 | Print AMRFinderPlus progress every N completed sample jobs |
 | `--panr2_min_identity` | float | 90 | Minimum identity threshold for PanR2 feature calls |
 | `--panr2_plot_style` | str | publication | PanR2 plot preset: `publication`, `dashboard`, or `compact` |
 | `--panr2_label_max_length` | int | 40 | Maximum feature label length in crowded plots |

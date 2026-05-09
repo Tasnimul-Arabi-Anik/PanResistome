@@ -45,6 +45,18 @@ def read_pairs(path):
     return rows
 
 
+def read_genomes(path):
+    genomes = []
+    if not path or not path.exists():
+        return genomes
+    with path.open() as handle:
+        for line in handle:
+            text = line.strip()
+            if text:
+                genomes.append(accession(text))
+    return genomes
+
+
 def union_find(items):
     parent = {item: item for item in items}
 
@@ -67,6 +79,7 @@ def main():
     parser = argparse.ArgumentParser(description="Summarize FastANI/skani pairwise ANI output for PanResistome.")
     parser.add_argument("--sample-dir", required=True)
     parser.add_argument("--pairs", required=True)
+    parser.add_argument("--genomes-list")
     parser.add_argument("--tool", default="fastani")
     parser.add_argument("--duplicate-threshold", type=float, default=99.9)
     parser.add_argument("--species-threshold", type=float, default=95.0)
@@ -76,7 +89,8 @@ def main():
     out_dir = sample_dir / "ani" / "analysis"
     out_dir.mkdir(parents=True, exist_ok=True)
     rows = read_pairs(Path(args.pairs))
-    genomes = sorted({row["query"] for row in rows} | {row["reference"] for row in rows})
+    listed_genomes = set(read_genomes(Path(args.genomes_list))) if args.genomes_list else set()
+    genomes = sorted(listed_genomes | {row["query"] for row in rows} | {row["reference"] for row in rows})
 
     long_path = out_dir / "pairwise_ani_long.csv"
     with long_path.open("w", newline="") as handle:

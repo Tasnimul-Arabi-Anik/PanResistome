@@ -68,6 +68,8 @@ params.run_ani = false
 params.ani_tool = 'fastani'
 params.ani_duplicate_threshold = 99.9
 params.ani_species_threshold = 95.0
+params.ani_large_run_strategy = 'auto'
+params.ani_max_all_vs_all_genomes = 200
 params.run_mash = false
 params.representative_only = false
 params.export_panr2_inputs = true
@@ -105,6 +107,8 @@ params.amrfinderplus_organism = null
 params.amrfinderplus_update_db = true
 params.amrfinderplus_jobs = null
 params.amrfinderplus_threads_per_sample = 1
+params.amrfinderplus_reuse_existing = true
+params.amrfinderplus_progress_every = 10
 params.run_mobsuite = false
 params.mobsuite_dir = null
 params.run_genomad = false
@@ -327,6 +331,8 @@ def helpMessage() {
       --ani_tool               ANI tool: fastani or skani [default: fastani]
       --ani_duplicate_threshold ANI threshold for near-duplicate clusters [default: 99.9]
       --ani_species_threshold  ANI warning threshold for species consistency [default: 95.0]
+      --ani_large_run_strategy Large ANI strategy: auto, all, or skip. In auto mode, large-dataset runs above --ani_max_all_vs_all_genomes are skipped with an audit file [default: auto]
+      --ani_max_all_vs_all_genomes Maximum genomes for automatic all-vs-all ANI in large-dataset mode [default: 200]
       --run_mash               Enable Mash sketch/distance pre-screen [default: false]
       --representative_only    Keep one representative per near-duplicate ANI cluster for PanR2 when --qc_filter true [default: false]
       --export_panr2_inputs    Export standardized panr2_inputs handoff directory [default: true]
@@ -340,6 +346,8 @@ def helpMessage() {
       --amrfinderplus_update_db Run amrfinder -u before AMRFinderPlus execution [default: true]
       --amrfinderplus_jobs     Parallel AMRFinderPlus sample jobs [default: --threads]
       --amrfinderplus_threads_per_sample Threads per AMRFinderPlus sample job [default: 1]
+      --amrfinderplus_reuse_existing Reuse non-empty per-sample AMRFinderPlus TSVs on resume [default: true]
+      --amrfinderplus_progress_every Print AMRFinderPlus progress every N completed samples [default: 10]
       --panr2_setup_abricate_db Run panr setup-db before comprehensive PanR2 analysis [default: true]
       --panr2_abricate_dbs     ABRicate databases for PanR2 comprehensive mode [default: ncbi,vfdb,plasmidfinder; add isfinder only if installed]
       --panr2_min_identity     Minimum identity for PanR2 integrated feature analysis [default: 90]
@@ -1649,6 +1657,8 @@ process ANI_ANALYSIS {
     path "${sample_dir}", emit: ani_results
 
     script:
+    def aniStrategy = params.ani_large_run_strategy ?: "auto"
+    def aniMaxAllVsAll = params.ani_max_all_vs_all_genomes ? params.ani_max_all_vs_all_genomes as int : 200
     """
     mkdir -p ${sample_dir}/ani/analysis
     sequence_dir="${sample_dir}/sequence"
@@ -1657,23 +1667,54 @@ process ANI_ANALYSIS {
     fi
     find \${sequence_dir} -name "*.fna" | sort > ${sample_dir}/ani/genomes.list || true
     genome_count=\$(wc -l < ${sample_dir}/ani/genomes.list || echo 0)
+    estimated_comparisons=\$((genome_count * genome_count))
+    ani_decision="run_all_vs_all"
+    ani_status="PASS"
+    ani_message="Running all-vs-all ANI."
     if [ "\${genome_count}" -ge 2 ]; then
-        if [ "${params.ani_tool}" = "skani" ]; then
-            skani triangle -t ${params.threads} \$(cat ${sample_dir}/ani/genomes.list) > ${sample_dir}/ani/skani_pairs.tsv || true
-            pair_file="${sample_dir}/ani/skani_pairs.tsv"
-        else
-            fastANI --ql ${sample_dir}/ani/genomes.list --rl ${sample_dir}/ani/genomes.list -t ${params.threads} -o ${sample_dir}/ani/fastani_pairs.tsv || true
-            pair_file="${sample_dir}/ani/fastani_pairs.tsv"
+        if [ "${aniStrategy}" = "skip" ]; then
+            ani_decision="skip_requested"
+            ani_status="SKIPPED"
+            ani_message="ANI skipped because --ani_large_run_strategy skip was requested."
+        elif [ "${aniStrategy}" = "auto" ] && [ "${params.large_dataset}" = "true" ] && [ "\${genome_count}" -gt "${aniMaxAllVsAll}" ]; then
+            ani_decision="skip_large_dataset"
+            ani_status="SKIPPED_LARGE_DATASET"
+            ani_message="ANI skipped automatically: \${genome_count} genomes exceed --ani_max_all_vs_all_genomes ${aniMaxAllVsAll} in large-dataset mode."
         fi
-        python ${baseDir}/scripts/ani_summary.py \\
-            --sample-dir ${sample_dir} \\
-            --pairs \${pair_file} \\
-            --tool ${params.ani_tool} \\
-            --duplicate-threshold ${params.ani_duplicate_threshold} \\
-            --species-threshold ${params.ani_species_threshold}
+
+        printf "tool\\tgenome_count\\testimated_comparisons\\tstrategy\\tmax_all_vs_all_genomes\\tlarge_dataset\\tdecision\\tstatus\\tmessage\\n" > ${sample_dir}/ani/analysis/ani_run_status.tsv
+        printf "%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n" "${params.ani_tool}" "\${genome_count}" "\${estimated_comparisons}" "${aniStrategy}" "${aniMaxAllVsAll}" "${params.large_dataset}" "\${ani_decision}" "\${ani_status}" "\${ani_message}" >> ${sample_dir}/ani/analysis/ani_run_status.tsv
+
+        if [ "\${ani_status}" = "SKIPPED" ] || [ "\${ani_status}" = "SKIPPED_LARGE_DATASET" ]; then
+            printf "query\\treference\\tani\\tfragments_mapped\\tfragments_total\\n" > ${sample_dir}/ani/fastani_pairs.tsv
+            python ${baseDir}/scripts/ani_summary.py \\
+                --sample-dir ${sample_dir} \\
+                --pairs ${sample_dir}/ani/fastani_pairs.tsv \\
+                --genomes-list ${sample_dir}/ani/genomes.list \\
+                --tool ${params.ani_tool} \\
+                --duplicate-threshold ${params.ani_duplicate_threshold} \\
+                --species-threshold ${params.ani_species_threshold}
+        else
+            if [ "${params.ani_tool}" = "skani" ]; then
+                skani triangle -t ${params.threads} \$(cat ${sample_dir}/ani/genomes.list) > ${sample_dir}/ani/skani_pairs.tsv || true
+                pair_file="${sample_dir}/ani/skani_pairs.tsv"
+            else
+                fastANI --ql ${sample_dir}/ani/genomes.list --rl ${sample_dir}/ani/genomes.list -t ${params.threads} -o ${sample_dir}/ani/fastani_pairs.tsv || true
+                pair_file="${sample_dir}/ani/fastani_pairs.tsv"
+            fi
+            python ${baseDir}/scripts/ani_summary.py \\
+                --sample-dir ${sample_dir} \\
+                --pairs \${pair_file} \\
+                --genomes-list ${sample_dir}/ani/genomes.list \\
+                --tool ${params.ani_tool} \\
+                --duplicate-threshold ${params.ani_duplicate_threshold} \\
+                --species-threshold ${params.ani_species_threshold}
+        fi
     else
+        printf "tool\\tgenome_count\\testimated_comparisons\\tstrategy\\tmax_all_vs_all_genomes\\tlarge_dataset\\tdecision\\tstatus\\tmessage\\n" > ${sample_dir}/ani/analysis/ani_run_status.tsv
+        printf "%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n" "${params.ani_tool}" "\${genome_count}" "\${estimated_comparisons}" "${aniStrategy}" "${aniMaxAllVsAll}" "${params.large_dataset}" "insufficient_genomes" "SKIPPED" "ANI requires at least two genomes." >> ${sample_dir}/ani/analysis/ani_run_status.tsv
         printf "query\\treference\\tani\\tfragments_mapped\\tfragments_total\\n" > ${sample_dir}/ani/fastani_pairs.tsv
-        python ${baseDir}/scripts/ani_summary.py --sample-dir ${sample_dir} --pairs ${sample_dir}/ani/fastani_pairs.tsv --tool ${params.ani_tool}
+        python ${baseDir}/scripts/ani_summary.py --sample-dir ${sample_dir} --pairs ${sample_dir}/ani/fastani_pairs.tsv --genomes-list ${sample_dir}/ani/genomes.list --tool ${params.ani_tool}
     fi
     """
 }
@@ -1936,6 +1977,8 @@ process AMRFINDERPLUS_ANALYSIS {
         --jobs ${jobs} \\
         --threads-per-sample ${threadsPerSample} \\
         --update-db ${params.amrfinderplus_update_db} \\
+        --reuse-existing ${params.amrfinderplus_reuse_existing} \\
+        --progress-every ${params.amrfinderplus_progress_every} \\
         ${organismArg}
     python ${baseDir}/scripts/collect_optional_tool_tables.py \\
         --raw-dir ${sample_dir}/amrfinderplus/raw \\

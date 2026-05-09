@@ -212,15 +212,25 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
             rows.append(row(module, False, False, "SKIPPED", "not_requested", "", f"{module} was disabled."))
             continue
         found = next((path for path in paths if path.exists()), None)
+        status = "PASS" if found else "FAIL"
+        message = f"{module} output found." if found else f"{module} was enabled but expected output was missing."
+        if module == "ani" and found:
+            ani_status = sample_dir / "ani" / "analysis" / "ani_run_status.tsv"
+            if ani_status.exists():
+                with ani_status.open(newline="", encoding="utf-8") as handle:
+                    status_rows = list(csv.DictReader(handle, delimiter="\t"))
+                if status_rows and status_rows[0].get("status", "").startswith("SKIPPED"):
+                    status = "WARNING_SKIPPED"
+                    message = status_rows[0].get("message") or "ANI summary exists, but pairwise ANI was skipped."
         rows.append(
             row(
                 module,
                 True,
                 True,
-                "PASS" if found else "FAIL",
+                status,
                 "module_output_check",
                 str(found) if found else "",
-                f"{module} output found." if found else f"{module} was enabled but expected output was missing.",
+                message,
             )
         )
 

@@ -50,6 +50,10 @@ For a 16-core desktop, this usually gives better throughput than one serial AMRF
 --amrfinderplus_jobs 4
 ```
 
+For 300+ genome nucleotide runs, AMRFinderPlus can still take multiple hours because each sample may spend several minutes in `tblastn`. The 300-record Klebsiella large-mode validation therefore skipped AMRFinderPlus for the desktop-safe pass and treats AMRFinderPlus as a separate workstation/HPC or overnight benchmark.
+
+Interrupted AMRFinderPlus runs can be resumed more safely: non-empty per-sample TSV outputs are reused instead of recomputed.
+
 Per-sample status and logs are written under:
 
 ```text
@@ -95,6 +99,26 @@ For a desktop-scale run, combine this with:
 ```bash
 -profile conda,mamba,desktop_parallel
 ```
+
+On 300+ genomes, IntegronFinder remains a visible runtime cost even with parallel workers. This is expected; inspect `pipeline_runtime_summary.tsv` to decide whether to lower or raise runner parallelism for the machine.
+
+## ANI Is Slow On 300+ Genomes
+
+FastANI all-vs-all can dominate wall time on 300+ genomes. For a first desktop-scale large-mode validation, disable ANI:
+
+```bash
+--run_ani false
+```
+
+When ANI is enabled in large-dataset mode, PanResistome now protects against accidental expensive all-vs-all runs:
+
+```bash
+--run_ani true --large_dataset true --ani_large_run_strategy auto
+```
+
+With the default `--ani_max_all_vs_all_genomes 200`, this writes an ANI run-status audit and per-genome placeholder ANI-cluster features instead of launching all-vs-all ANI above the threshold. Use `--ani_large_run_strategy all` only when you intentionally want the full ANI run, or `--ani_large_run_strategy skip` when you want a clear skip regardless of sample count.
+
+Use full ANI later as a separate comparative-genomics pass, preferably with chunking, Mash/sketch pre-screening, representative-only genomes, skani, or an HPC/workstation profile.
 
 ## MobileElementFinder Fails
 

@@ -54,6 +54,46 @@ class RuntimeSummaryTests(unittest.TestCase):
             self.assertEqual(set(tasks_df["process"]), {"AMRFINDERPLUS_ANALYSIS", "CHECKM2_QC"})
 
 
+class AniSummaryTests(unittest.TestCase):
+    def test_empty_pairs_with_genome_list_keeps_samples(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            sample_dir = tmp / "sample"
+            ani_dir = sample_dir / "ani"
+            ani_dir.mkdir(parents=True)
+            pairs = ani_dir / "fastani_pairs.tsv"
+            genomes = ani_dir / "genomes.list"
+            pairs.write_text("query\treference\tani\tfragments_mapped\tfragments_total\n", encoding="utf-8")
+            genomes.write_text(
+                f"{tmp}/GCF_000000001.1_ASM1_genomic.fna\n{tmp}/GCF_000000002.1_ASM2_genomic.fna\n",
+                encoding="utf-8",
+            )
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "scripts" / "ani_summary.py"),
+                    "--sample-dir",
+                    str(sample_dir),
+                    "--pairs",
+                    str(pairs),
+                    "--genomes-list",
+                    str(genomes),
+                    "--tool",
+                    "fastani",
+                ],
+                check=True,
+            )
+
+            panr2 = pd.read_csv(sample_dir / "ani" / "analysis" / "panr2_ani_summary.csv")
+            closest = pd.read_csv(sample_dir / "ani" / "analysis" / "closest_genome.csv")
+            clusters = pd.read_csv(sample_dir / "ani" / "analysis" / "duplicate_clusters.csv")
+            self.assertEqual(len(panr2), 2)
+            self.assertEqual(set(panr2["feature_id"]), {"ANI_CLUSTER_0001", "ANI_CLUSTER_0002"})
+            self.assertEqual(set(closest["species_consistency_status"]), {"WARN"})
+            self.assertEqual(set(clusters["cluster_size"]), {1})
+
+
 class AMRFinderPlusParallelRunnerTests(unittest.TestCase):
     def test_runs_fake_amrfinder_per_sample_and_writes_status(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -109,6 +149,56 @@ class AMRFinderPlusParallelRunnerTests(unittest.TestCase):
             self.assertTrue((raw_dir / "GCF_000000001.1.tsv").exists())
             self.assertTrue((raw_dir / "GCF_000000002.1.tsv").exists())
             self.assertTrue((raw_dir / "amrfinder_update.log").exists())
+
+    def test_reuses_existing_sample_outputs(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            bin_dir = tmp / "bin"
+            sequence_dir = tmp / "sequence"
+            raw_dir = tmp / "raw"
+            status_file = tmp / "tables" / "amrfinderplus_sample_status.tsv"
+            bin_dir.mkdir()
+            sequence_dir.mkdir()
+            raw_dir.mkdir()
+            (sequence_dir / "GCF_000000001.1.fna").write_text(">c1\nATGC\n", encoding="utf-8")
+            existing = raw_dir / "GCF_000000001.1.tsv"
+            existing.write_text("Gene symbol\tClass\nexisting\tbeta-lactam\n", encoding="utf-8")
+            fake_amrfinder = bin_dir / "amrfinder"
+            fake_amrfinder.write_text(
+                "#!/usr/bin/env bash\n"
+                "if [ \"$1\" = \"-u\" ]; then exit 0; fi\n"
+                "exit 99\n",
+                encoding="utf-8",
+            )
+            fake_amrfinder.chmod(0o755)
+            env = os.environ.copy()
+            env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "scripts" / "run_amrfinderplus_parallel.py"),
+                    "--sequence-dir",
+                    str(sequence_dir),
+                    "--raw-dir",
+                    str(raw_dir),
+                    "--status-file",
+                    str(status_file),
+                    "--jobs",
+                    "1",
+                    "--threads-per-sample",
+                    "1",
+                    "--update-db",
+                    "true",
+                ],
+                check=True,
+                env=env,
+            )
+
+            status = pd.read_csv(status_file, sep="\t")
+            self.assertEqual(status.loc[0, "status"], "PASS")
+            self.assertEqual(status.loc[0, "message"], "existing_output_reused")
+            self.assertEqual(existing.read_text(encoding="utf-8").splitlines()[1], "existing\tbeta-lactam")
 
 
 if __name__ == "__main__":

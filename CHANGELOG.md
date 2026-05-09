@@ -9,13 +9,20 @@
 - Large-mode validation evidence for the existing 100-record `Klebsiella pneumoniae` input under `validation/klebsiella_pneumoniae_100/LARGE_MODE_VALIDATION_RESULTS.md`.
 - Parallel AMRFinderPlus sample execution through `--amrfinderplus_jobs` and `--amrfinderplus_threads_per_sample`, with per-sample status preserved in `amrfinderplus_sample_status.tsv`.
 - Runtime/resource summary tables generated from the Nextflow trace as `pipeline_runtime_summary.tsv` and `pipeline_runtime_tasks.tsv`.
+- A 300-record BioProject-diverse `Klebsiella pneumoniae` validation input and desktop-safe large-mode validation report under `validation/klebsiella_pneumoniae_300/`.
+- Large-run ANI controls through `--ani_large_run_strategy auto|all|skip` and `--ani_max_all_vs_all_genomes`, with `ani/analysis/ani_run_status.tsv` documenting whether all-vs-all ANI ran or was skipped.
 
 ### Changed
 - PanR2 handoff export now applies configured feature caps to presence/absence matrices and co-occurrence/proximity summaries, preserves complete proximity evidence as `feature_proximity_all.tsv`, and surfaces report-control settings in `panr2_inputs/report/report_controls.html`.
 - AMRFinderPlus now runs independent assemblies concurrently by default using `--threads` as the sample-job count and one AMRFinderPlus thread per sample, avoiding the previous serial per-genome bottleneck.
+- AMRFinderPlus per-sample execution now reuses existing non-empty TSV outputs, making interrupted large runs safer to resume without recomputing completed assemblies.
+- AMRFinderPlus now prints periodic per-sample progress and records per-sample runtime in `amrfinderplus_sample_status.tsv`.
+- In large-dataset mode, ANI `auto` strategy skips all-vs-all ANI above 200 genomes by default instead of silently launching a long FastANI/skani all-vs-all run; users can force full ANI with `--ani_large_run_strategy all`.
 
 ### Validated
 - The 100-record `Klebsiella pneumoniae` input completed with `-profile conda,mamba,desktop_parallel,large`, GTDB-Tk disabled, CheckM2 capped, AMRFinderPlus enabled, and parallel native feature runners. The run produced 12,838 complete standardized feature rows, 99 QC PASS calls, zero unmatched/invalid/duplicate feature rows, capped report-facing matrices/summaries, and the expected HTML report set.
+- The 300-record `Klebsiella pneumoniae` large-mode validation completed with CheckM2, GTDB-Tk, ANI, and AMRFinderPlus disabled for desktop safety. It downloaded 299 genomes, produced 299 QC PASS calls, generated 36,638 standardized feature rows across AMR, VFDB, PlasmidFinder, IntegronFinder, and MLST, kept zero unmatched/invalid/duplicate feature rows, and generated compact large-mode reports.
+- The same 300-record validation identified two scale-sensitive optional steps: FastANI all-vs-all and AMRFinderPlus nucleotide `tblastn`. Both should be treated as separate workstation/HPC or optimized-strategy targets for 300+ genome runs.
 
 ## 0.3.1 - 2026-05-09
 
