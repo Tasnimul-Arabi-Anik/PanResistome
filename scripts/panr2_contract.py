@@ -1256,7 +1256,12 @@ def write_feature_matrices(rows: list[dict[str, str]], metadata_rows: list[dict[
     return outputs
 
 
-def write_feature_eligibility_and_prevalence(rows: list[dict[str, str]], metadata_rows: list[dict[str, str]], out_dir: Path) -> dict[str, str]:
+def write_feature_eligibility_and_prevalence(
+    rows: list[dict[str, str]],
+    metadata_rows: list[dict[str, str]],
+    out_dir: Path,
+    top_n_features_per_database: int = 25,
+) -> dict[str, str]:
     analysis_dir = out_dir / "metadata_feature_analysis"
     prevalence_dir = analysis_dir / "prevalence_tables"
     prevalence_dir.mkdir(parents=True, exist_ok=True)
@@ -1286,6 +1291,30 @@ def write_feature_eligibility_and_prevalence(rows: list[dict[str, str]], metadat
         analysis_dir / "feature_eligibility.tsv",
         eligibility_rows,
         ["database", "feature_id", "feature_category", "present_count", "absent_count", "prevalence", "eligible", "reason"],
+    )
+    top_feature_rows = []
+    by_database: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row in eligibility_rows:
+        by_database[row["database"]].append(row)
+    for database, database_rows in sorted(by_database.items()):
+        ranked = sorted(
+            database_rows,
+            key=lambda row: (-_float_or_none(row.get("prevalence", "")) if _float_or_none(row.get("prevalence", "")) is not None else 0, row["feature_id"]),
+        )[:max(top_n_features_per_database, 0)]
+        for rank, row in enumerate(ranked, start=1):
+            top_feature_rows.append({
+                "database": database,
+                "rank": str(rank),
+                "feature_id": row["feature_id"],
+                "feature_category": row["feature_category"],
+                "present_count": row["present_count"],
+                "absent_count": row["absent_count"],
+                "prevalence": row["prevalence"],
+            })
+    top_features_path = write_rows(
+        analysis_dir / "top_features_by_database.tsv",
+        top_feature_rows,
+        ["database", "rank", "feature_id", "feature_category", "present_count", "absent_count", "prevalence"],
     )
 
     normalized = normalize_metadata_rows(metadata_rows)
@@ -1615,6 +1644,7 @@ def write_feature_eligibility_and_prevalence(rows: list[dict[str, str]], metadat
 
     return {
         "feature_eligibility": feature_eligibility_path,
+        "top_features_by_database": top_features_path,
         "feature_metadata_associations": feature_metadata_association_path,
         "database_burden_by_sample": burden_path,
         "database_burden_metadata_associations": burden_association_path,
@@ -2238,6 +2268,53 @@ def write_feature_completeness_audit(sample_dir: Path, out_dir: Path) -> dict[st
     return {"feature_completeness_audit": audit_path, "module_status_summary": module_status_path}
 
 
+def write_report_controls(
+    out_dir: Path,
+    rows: list[dict[str, str]],
+    metadata_rows: list[dict[str, str]],
+    large_dataset: bool = False,
+    report_mode: str = "publication",
+    max_features_heatmap: int = 300,
+    max_features_network: int = 300,
+    max_metadata_columns: int = 80,
+    top_n_features_per_database: int = 25,
+    skip_heavy_interactive_plots: bool = False,
+) -> dict[str, str]:
+    manifest_dir = out_dir / "manifest"
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    databases = sorted({row.get("database", "") for row in rows if row.get("database")})
+    feature_count = len(rows)
+    unique_feature_count = len({(row.get("database", ""), row.get("feature_id", "")) for row in rows if row.get("database") and row.get("feature_id")})
+    sample_count = len({metadata_accession(row) for row in metadata_rows if metadata_accession(row)} | {row.get("assembly_accession", "") for row in rows if row.get("assembly_accession")})
+    warning = ""
+    if large_dataset or feature_count > 10000 or unique_feature_count > max_features_network:
+        warning = "large_dataset_summary_mode"
+    controls_rows = [
+        {
+            "setting": "large_dataset",
+            "value": str(large_dataset).lower(),
+            "message": "Large-dataset safeguards enabled." if large_dataset else "Standard report limits.",
+        },
+        {"setting": "report_mode", "value": report_mode, "message": "Handoff HTML density preset."},
+        {"setting": "max_features_heatmap", "value": str(max_features_heatmap), "message": "Feature cap for handoff presence/absence matrices."},
+        {"setting": "max_features_network", "value": str(max_features_network), "message": "Feature cap for co-occurrence/network-style summaries."},
+        {"setting": "max_metadata_columns", "value": str(max_metadata_columns), "message": "Metadata rows shown in compact HTML report tables."},
+        {"setting": "top_n_features_per_database", "value": str(top_n_features_per_database), "message": "Top prevalent features summarized per database."},
+        {"setting": "skip_heavy_interactive_plots", "value": str(skip_heavy_interactive_plots).lower(), "message": "Heavy interactive plots are deprioritized/skipped when supported."},
+        {"setting": "samples", "value": str(sample_count), "message": "Samples represented in metadata or feature tables."},
+        {"setting": "feature_rows", "value": str(feature_count), "message": "Total standardized feature rows."},
+        {"setting": "unique_features", "value": str(unique_feature_count), "message": "Unique database-feature pairs."},
+        {"setting": "databases", "value": ",".join(databases), "message": "Databases with standardized feature rows."},
+        {"setting": "report_warning", "value": warning, "message": "Summary/report-level warning generated from dataset size and configured limits."},
+    ]
+    controls_path = write_rows(
+        manifest_dir / "report_controls.tsv",
+        controls_rows,
+        ["setting", "value", "message"],
+    )
+    return {"report_controls": controls_path}
+
+
 def _relative_link(target: Path, base: Path) -> str:
     try:
         return target.relative_to(base).as_posix()
@@ -2259,12 +2336,19 @@ def _html_table(rows: list[dict[str, str]], fields: list[str], max_rows: int = 2
     return f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(body_rows)}</tbody></table>"
 
 
-def write_interpretation_reports(out_dir: Path) -> dict[str, str]:
+def write_interpretation_reports(
+    out_dir: Path,
+    report_mode: str = "publication",
+    max_metadata_columns: int = 80,
+    skip_heavy_interactive_plots: bool = False,
+) -> dict[str, str]:
     report_dir = out_dir / "report"
     report_dir.mkdir(parents=True, exist_ok=True)
     analysis_dir = out_dir / "metadata_feature_analysis"
     cross_dir = out_dir / "cross_database"
     manifest_dir = out_dir / "manifest"
+    row_limit = 40 if report_mode == "compact" else (200 if report_mode == "exploratory" else 80)
+    metadata_row_limit = max_metadata_columns if report_mode == "compact" else max(max_metadata_columns, row_limit)
 
     styles = """
 body { font-family: Arial, sans-serif; margin: 2rem; color: #1f2933; }
@@ -2285,6 +2369,8 @@ th { background: #f0f4f8; }
         )
 
     top_findings_rows = read_table(analysis_dir / "top_findings.tsv")
+    top_feature_rows = read_table(analysis_dir / "top_features_by_database.tsv")
+    report_control_rows = read_table(manifest_dir / "report_controls.tsv")
     top_findings_path = report_dir / "top_findings.html"
     top_findings_body = """
 <div class="warning">These are screening summaries. They indicate metadata-feature patterns in this dataset and do not prove causality, transmission, plasmid localization, or physical linkage.</div>
@@ -2305,7 +2391,13 @@ th { background: #f0f4f8; }
             "interpretation_label",
             "message",
         ],
-        max_rows=50,
+        max_rows=row_limit,
+    )
+    top_findings_body += "<h2>Top Features By Database</h2>"
+    top_findings_body += _html_table(
+        top_feature_rows,
+        ["database", "rank", "feature_id", "feature_category", "present_count", "prevalence"],
+        max_rows=row_limit,
     )
     top_findings_path.write_text(page("Top Metadata-Feature Findings", top_findings_body), encoding="utf-8")
 
@@ -2321,26 +2413,26 @@ th { background: #f0f4f8; }
     metadata_body += _html_table(
         usability_rows,
         ["metadata_column", "non_missing_count", "missing_fraction", "unique_values", "largest_group_fraction", "recommended_for_analysis", "reason"],
-        max_rows=80,
+        max_rows=metadata_row_limit,
     )
     metadata_body += "<h2>Metadata Column Eligibility</h2>"
     metadata_body += _html_table(
         metadata_rows,
         ["metadata_column", "data_type", "non_missing_count", "missing_fraction", "unique_values", "largest_group_fraction", "eligible", "reason"],
-        max_rows=80,
+        max_rows=metadata_row_limit,
     )
     metadata_body += "<h2>FetchM2 Metadata Audit</h2>"
     metadata_body += _html_table(
         audit_rows,
         ["column", "standardized_name", "data_type", "non_missing_count", "missing_fraction", "unique_values", "top_value", "top_value_fraction", "recommended_for_analysis", "reason"],
-        max_rows=80,
+        max_rows=metadata_row_limit,
     )
     metadata_body += "<h2>BioProject / Study Bias</h2>"
     metadata_body += "<p>Dominance by one BioProject can make metadata-feature associations reflect study design rather than biology.</p>"
     metadata_body += _html_table(
         bioproject_rows,
         ["row_type", "database", "feature_id", "metadata_column", "metadata_value", "samples_evaluated", "n_bioprojects", "largest_bioproject", "largest_bioproject_fraction", "status", "warning"],
-        max_rows=80,
+        max_rows=row_limit,
     )
     metadata_path.write_text(page("Metadata Quality And Bias", metadata_body), encoding="utf-8")
 
@@ -2351,7 +2443,7 @@ th { background: #f0f4f8; }
     bioproject_body += _html_table(
         bioproject_rows,
         ["row_type", "database", "feature_id", "metadata_column", "metadata_value", "samples_evaluated", "n_bioprojects", "largest_bioproject", "largest_bioproject_count", "largest_bioproject_fraction", "status", "warning"],
-        max_rows=120,
+        max_rows=row_limit,
     )
     bioproject_path.write_text(page("BioProject Bias", bioproject_body), encoding="utf-8")
 
@@ -2363,7 +2455,7 @@ th { background: #f0f4f8; }
     burden_body += _html_table(
         burden_rows,
         ["assembly_accession", "database", "unique_feature_count", "category_count", "country", "host", "sample_type", "isolation_source", "environment_medium", "collection_year"],
-        max_rows=80,
+        max_rows=row_limit,
     )
     burden_path.write_text(page("Database Burden By Metadata", burden_body), encoding="utf-8")
 
@@ -2376,6 +2468,8 @@ th { background: #f0f4f8; }
 <p>Evidence levels are ordered from weaker sample-level context to stronger same-contig coordinate context. Assembly fragmentation and naming differences can still limit interpretation.</p>
 <div class="grid">
 """
+    if skip_heavy_interactive_plots:
+        cross_body += "<div class='card'><strong>Large-dataset mode</strong><br>Heavy interactive plots are skipped or deprioritized when supported; use TSV summaries first.</div>"
     for label, path in [
         ("Feature co-occurrence", cross_dir / "feature_cooccurrence.tsv"),
         ("Database co-occurrence", cross_dir / "database_cooccurrence_summary.tsv"),
@@ -2387,18 +2481,18 @@ th { background: #f0f4f8; }
     ]:
         cross_body += f"<div class='card'><strong>{html.escape(label)}</strong><br><a href='../{html.escape(_relative_link(path, out_dir))}'>{html.escape(_relative_link(path, out_dir))}</a></div>"
     cross_body += "</div><h2>Database Co-occurrence</h2>"
-    cross_body += _html_table(cooccurrence_rows, ["database_a", "database_b", "n_total", "n_both_present", "jaccard"], max_rows=50)
+    cross_body += _html_table(cooccurrence_rows, ["database_a", "database_b", "n_total", "n_both_present", "jaccard"], max_rows=row_limit)
     cross_body += "<h2>Same-Contig And Proximity Evidence</h2>"
     cross_body += _html_table(
         proximity_rows,
         ["assembly_accession", "contig", "context", "feature_a_database", "feature_a_id", "feature_b_database", "feature_b_id", "distance_bp", "evidence_level", "interpretation_warning"],
-        max_rows=80,
+        max_rows=row_limit,
     )
     cross_body += "<h2>AMRFinderPlus vs ABRicate Concordance</h2>"
     cross_body += _html_table(
         concordance_rows,
         ["feature_id", "sample_id", "abricate_feature_ids", "amrfinderplus_feature_ids", "shared_sample_count", "status", "possible_match_basis", "interpretation_note"],
-        max_rows=80,
+        max_rows=row_limit,
     )
     cross_path.write_text(page("Cross-Database Interpretation", cross_body), encoding="utf-8")
 
@@ -2409,7 +2503,7 @@ th { background: #f0f4f8; }
     concordance_body += _html_table(
         concordance_rows,
         ["feature_id", "sample_id", "normalized_feature_id", "abricate_feature_ids", "amrfinderplus_feature_ids", "abricate_sample_count", "amrfinderplus_sample_count", "shared_sample_count", "status", "possible_match_basis"],
-        max_rows=120,
+        max_rows=row_limit,
     )
     concordance_path.write_text(page("AMRFinderPlus vs ABRicate Concordance", concordance_body), encoding="utf-8")
 
@@ -2426,9 +2520,16 @@ th { background: #f0f4f8; }
     setup_body += _html_table(
         audit_rows,
         ["database", "expected_from_profile", "module_enabled", "feature_table_found", "feature_rows", "unique_features", "samples_with_features", "status", "message"],
-        max_rows=80,
+        max_rows=row_limit,
     )
     setup_path.write_text(page("Database Setup And Feature Contract", setup_body), encoding="utf-8")
+
+    controls_path = report_dir / "report_controls.html"
+    controls_body = """
+<p>This page records report density, large-dataset safeguards, and output-size limits applied while building the PanR2 handoff bundle.</p>
+"""
+    controls_body += _html_table(report_control_rows, ["setting", "value", "message"], max_rows=80)
+    controls_path.write_text(page("Report Controls", controls_body), encoding="utf-8")
 
     index_path = report_dir / "panr2_handoff_index.html"
     index_body = "<p>PanResistome-generated PanR2 handoff interpretation pages.</p><ul>"
@@ -2440,6 +2541,7 @@ th { background: #f0f4f8; }
         ("Cross-database interpretation", cross_path),
         ("AMRFinderPlus vs ABRicate concordance", concordance_path),
         ("Database setup and feature contract", setup_path),
+        ("Report controls", controls_path),
     ]:
         index_body += f"<li><a href='{html.escape(path.name)}'>{html.escape(label)}</a></li>"
     index_body += "</ul>"
@@ -2454,18 +2556,71 @@ th { background: #f0f4f8; }
         "cross_database_interpretation_html": str(cross_path),
         "amrfinder_abricate_concordance_html": str(concordance_path),
         "database_setup_contract_html": str(setup_path),
+        "report_controls_html": str(controls_path),
     }
 
 
-def export_contract(sample_dir: Path, out_dir: Path) -> dict[str, str]:
+def export_contract(
+    sample_dir: Path,
+    out_dir: Path,
+    large_dataset: bool = False,
+    report_mode: str = "publication",
+    max_features_heatmap: int = 300,
+    max_features_network: int = 300,
+    max_metadata_columns: int = 80,
+    top_n_features_per_database: int = 25,
+    skip_heavy_interactive_plots: bool = False,
+) -> dict[str, str]:
     written = write_feature_tables(sample_dir, out_dir)
     validation = validate_feature_tables(sample_dir, out_dir)
     all_features = read_table(out_dir / "features" / "all_features.tsv")
     metadata_rows = load_metadata_rows(sample_dir)
     metadata_outputs = write_metadata_analysis(sample_dir, out_dir)
-    feature_outputs = write_feature_eligibility_and_prevalence(all_features, metadata_rows, out_dir)
-    matrix_outputs = write_feature_matrices(all_features, metadata_rows, out_dir)
-    cross_outputs = write_cross_database_outputs(all_features, metadata_rows, out_dir)
+    feature_outputs = write_feature_eligibility_and_prevalence(
+        all_features,
+        metadata_rows,
+        out_dir,
+        top_n_features_per_database=top_n_features_per_database,
+    )
+    matrix_outputs = write_feature_matrices(
+        all_features,
+        metadata_rows,
+        out_dir,
+        max_features=max_features_heatmap,
+    )
+    cross_outputs = write_cross_database_outputs(
+        all_features,
+        metadata_rows,
+        out_dir,
+        max_features=max_features_network,
+    )
     audit_outputs = write_feature_completeness_audit(sample_dir, out_dir)
-    report_outputs = write_interpretation_reports(out_dir)
-    return {**written, **validation, **metadata_outputs, **feature_outputs, **matrix_outputs, **cross_outputs, **audit_outputs, **report_outputs}
+    control_outputs = write_report_controls(
+        out_dir,
+        all_features,
+        metadata_rows,
+        large_dataset=large_dataset,
+        report_mode=report_mode,
+        max_features_heatmap=max_features_heatmap,
+        max_features_network=max_features_network,
+        max_metadata_columns=max_metadata_columns,
+        top_n_features_per_database=top_n_features_per_database,
+        skip_heavy_interactive_plots=skip_heavy_interactive_plots,
+    )
+    report_outputs = write_interpretation_reports(
+        out_dir,
+        report_mode=report_mode,
+        max_metadata_columns=max_metadata_columns,
+        skip_heavy_interactive_plots=skip_heavy_interactive_plots,
+    )
+    return {
+        **written,
+        **validation,
+        **metadata_outputs,
+        **feature_outputs,
+        **matrix_outputs,
+        **cross_outputs,
+        **audit_outputs,
+        **control_outputs,
+        **report_outputs,
+    }

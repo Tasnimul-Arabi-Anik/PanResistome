@@ -2,7 +2,13 @@
 
 ## Unreleased
 
-No unreleased changes yet.
+### Added
+- v0.4.0 large-dataset report safeguards through `--large_dataset`, `--report_mode`, feature/metadata report caps, top-feature-per-database summaries, and `panr2_inputs/manifest/report_controls.tsv`.
+- A `large` profile that enables compact report mode, report-facing feature caps, and large-dataset safeguards while preserving complete TSV exports.
+- Draft HPC and container execution notes under `docs/hpc.md` and `docs/containers.md`.
+
+### Changed
+- PanR2 handoff export now applies configured feature caps to presence/absence matrices and co-occurrence/proximity summaries, and surfaces report-control settings in `panr2_inputs/report/report_controls.html`.
 
 ## 0.3.1 - 2026-05-09
 

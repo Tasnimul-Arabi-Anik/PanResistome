@@ -128,12 +128,14 @@ panr2_inputs/
 │   ├── metadata_quality_and_bias.html
 │   ├── database_burden_by_metadata.html
 │   ├── cross_database_interpretation.html
-│   └── database_setup_and_contract.html
+│   ├── database_setup_and_contract.html
+│   └── report_controls.html
 ├── qc/qc_master_report.csv
 ├── qc/excluded_for_panr2.csv
 └── manifest/
     ├── software_versions.csv
     ├── database_setup_status.tsv
+    ├── report_controls.tsv
     ├── panr2_feature_contract_columns.txt
     ├── panr2_feature_contract_all_columns.txt
     ├── schema_validation_report.csv
@@ -146,6 +148,8 @@ panr2_inputs/
 ```
 
 `panr2_inputs/features/*.features.tsv` is the strict contract layer. Raw tool folders are still copied for traceability, but downstream analysis should prefer the standardized feature tables when possible. `schema_validation_report.csv` checks required columns, and `unmatched_features.csv` lists feature rows whose assembly accession cannot be matched to metadata. `database_setup_status.tsv` records the required database/tool checks for the selected profile, including CheckM2, AMRFinderPlus, ABRicate `ncbi/vfdb/plasmidfinder`, optional ISfinder FASTA, GTDB-Tk, geNomad, Kaptive, MobileElementFinder, IntegronFinder, and MLST status where relevant.
+
+`manifest/report_controls.tsv` records report density settings such as `large_dataset`, `report_mode`, feature caps for handoff matrices/co-occurrence summaries, metadata row caps for HTML pages, and whether heavy interactive plots were skipped or deprioritized. Complete feature TSVs remain available even when large-dataset safeguards cap report-facing summaries.
 
 Cross-database outputs separate sample-level co-occurrence from stronger coordinate context. `feature_cooccurrence.tsv` is genome/sample-level only. `feature_proximity.tsv` and the `amr_*_same_contig.tsv` files indicate when AMR features and plasmid/MGE/integron features share a contig and, when coordinates are available, whether they overlap or fall within 10 kb. These outputs still do not prove transfer, expression, phenotype, or plasmid localization.
 

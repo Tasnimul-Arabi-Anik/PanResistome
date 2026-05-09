@@ -76,6 +76,13 @@ params.panr2_min_identity = 90
 params.panr2_plot_style = 'publication'
 params.panr2_label_max_length = 40
 params.panr2_cross_database_max_features = 300
+params.large_dataset = false
+params.report_mode = 'publication'
+params.max_features_heatmap = null
+params.max_features_network = null
+params.max_metadata_columns = null
+params.top_n_features_per_database = null
+params.skip_heavy_interactive_plots = false
 params.panr2_force_tool_run = false
 params.panr2_native_feature_runners = true
 params.panr2_native_feature_runner_mode = 'serial'
@@ -204,6 +211,45 @@ def effectiveRunIsfinder() {
     return params.run_isfinder || (params.isfinder_db_fasta && profile in ['amr_vp_mge', 'comprehensive'])
 }
 
+def truthyParam(value) {
+    return value != null && value.toString().trim().toLowerCase() in ['true', '1', 'yes', 'y']
+}
+
+def effectiveReportMode() {
+    def mode = (params.report_mode ?: '').toString().trim().toLowerCase()
+    if (!mode || mode == 'publication') {
+        return truthyParam(params.large_dataset) ? 'compact' : 'publication'
+    }
+    return mode
+}
+
+def effectiveMaxFeaturesHeatmap() {
+    return params.max_features_heatmap ? params.max_features_heatmap as int : (truthyParam(params.large_dataset) ? 150 : 300)
+}
+
+def effectiveMaxFeaturesNetwork() {
+    return params.max_features_network ? params.max_features_network as int : (truthyParam(params.large_dataset) ? 150 : params.panr2_cross_database_max_features as int)
+}
+
+def effectiveMaxMetadataColumns() {
+    return params.max_metadata_columns ? params.max_metadata_columns as int : (truthyParam(params.large_dataset) ? 20 : 80)
+}
+
+def effectiveTopNFeaturesPerDatabase() {
+    return params.top_n_features_per_database ? params.top_n_features_per_database as int : (truthyParam(params.large_dataset) ? 50 : 25)
+}
+
+def effectiveSkipHeavyInteractivePlots() {
+    return truthyParam(params.skip_heavy_interactive_plots) || truthyParam(params.large_dataset)
+}
+
+def effectivePanr2PlotStyle() {
+    if (truthyParam(params.large_dataset) && params.panr2_plot_style == 'publication') {
+        return 'compact'
+    }
+    return params.panr2_plot_style
+}
+
 
 // Help message
 def helpMessage() {
@@ -293,6 +339,15 @@ def helpMessage() {
       --panr2_min_identity     Minimum identity for PanR2 integrated feature analysis [default: 90]
       --panr2_plot_style       PanR2 plot style: publication, dashboard, compact [default: publication]
       --panr2_label_max_length Maximum feature-label length in PanR2 plots [default: 40]
+      --large_dataset          Enable large-dataset report safeguards and compact defaults [default: false]
+      --report_mode            PanR2 handoff report mode: compact, publication, exploratory [default: publication; compact when --large_dataset true]
+      --max_features_heatmap   Maximum features retained in handoff presence/absence matrices [default: 300; 150 in large-dataset mode]
+      --max_features_network   Maximum features used for cross-database co-occurrence/proximity summaries [default: --panr2_cross_database_max_features; 150 in large-dataset mode]
+      --max_metadata_columns   Maximum metadata audit rows shown in handoff HTML pages [default: 80; 20 in large-dataset mode]
+      --top_n_features_per_database
+                              Number of top prevalent features per database summarized for report navigation [default: 25; 50 in large-dataset mode]
+      --skip_heavy_interactive_plots
+                              Mark heavy interactive plots as skipped/deprioritized in report controls [default: false; true in large-dataset mode]
       --panr2_native_feature_runners
                               Run ABRicate, IntegronFinder, MLST, and optional MobileElementFinder under PanResistome, then pass precomputed directories to PanR2 [default: true]
       --panr2_native_feature_runner_mode
@@ -1982,13 +2037,24 @@ process EXPORT_PANR2_INPUTS {
     script:
     def versionReportsDir = params.outdir.toString().startsWith("/") ? "${params.outdir}/pipeline_versions" : "${launchDir}/${params.outdir}/pipeline_versions"
     def externalAmrfinderDir = params.amrfinderplus_dir ? launchPath(params.amrfinderplus_dir) : ""
+    def largeDatasetFlag = truthyParam(params.large_dataset) ? "--large-dataset" : ""
+    def skipHeavyPlotsFlag = effectiveSkipHeavyInteractivePlots() ? "--skip-heavy-interactive-plots" : ""
     """
     if [ "${params.export_panr2_inputs}" = "true" ]; then
         if [ -n "${externalAmrfinderDir}" ] && [ -d "${externalAmrfinderDir}" ]; then
             mkdir -p ${sample_dir}/amrfinderplus/tables
             cp -r "${externalAmrfinderDir}"/* ${sample_dir}/amrfinderplus/tables/ || true
         fi
-        python ${baseDir}/scripts/export_panr2_inputs.py --sample-dir ${sample_dir} --versions-dir ${shellQuote(versionReportsDir)}
+        python ${baseDir}/scripts/export_panr2_inputs.py \\
+            --sample-dir ${sample_dir} \\
+            --versions-dir ${shellQuote(versionReportsDir)} \\
+            --report-mode ${effectiveReportMode()} \\
+            --max-features-heatmap ${effectiveMaxFeaturesHeatmap()} \\
+            --max-features-network ${effectiveMaxFeaturesNetwork()} \\
+            --max-metadata-columns ${effectiveMaxMetadataColumns()} \\
+            --top-n-features-per-database ${effectiveTopNFeaturesPerDatabase()} \\
+            ${largeDatasetFlag} \\
+            ${skipHeavyPlotsFlag}
     fi
     """
 }
@@ -2284,8 +2350,8 @@ process PANR2_COMPREHENSIVE {
         --format ${params.format} \\
         --abricate-dbs ${panr2Dbs} \\
         --min-identity ${params.panr2_min_identity} \\
-        --plot-style ${params.panr2_plot_style} \\
-        --cross-database-max-features ${params.panr2_cross_database_max_features} \\
+        --plot-style ${effectivePanr2PlotStyle()} \\
+        --cross-database-max-features ${effectiveMaxFeaturesNetwork()} \\
         --mobileelementfinder-threads ${params.threads} \\
         --integronfinder-threads ${params.threads} \\
         ${optionalArgText} \\

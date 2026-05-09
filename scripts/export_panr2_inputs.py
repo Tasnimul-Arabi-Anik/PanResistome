@@ -43,6 +43,13 @@ def main():
     parser = argparse.ArgumentParser(description="Export a PanResistome sample directory into PanR2-ready inputs.")
     parser.add_argument("--sample-dir", required=True)
     parser.add_argument("--versions-dir", help="Optional pipeline_versions directory to include in the PanR2 manifest.")
+    parser.add_argument("--large-dataset", action="store_true", help="Enable large-dataset report safeguards in the PanR2 handoff bundle.")
+    parser.add_argument("--report-mode", choices=["compact", "publication", "exploratory"], default="publication")
+    parser.add_argument("--max-features-heatmap", type=int, default=300)
+    parser.add_argument("--max-features-network", type=int, default=300)
+    parser.add_argument("--max-metadata-columns", type=int, default=80)
+    parser.add_argument("--top-n-features-per-database", type=int, default=25)
+    parser.add_argument("--skip-heavy-interactive-plots", action="store_true")
     args = parser.parse_args()
     sample_dir = Path(args.sample_dir)
     out = sample_dir / "panr2_inputs"
@@ -146,7 +153,17 @@ def main():
     schema_path.write_text("\n".join(CONTRACT_COLUMNS) + "\n")
     all_schema_path = out / "manifest" / "panr2_feature_contract_all_columns.txt"
     all_schema_path.write_text("\n".join(FEATURE_COLUMNS) + "\n")
-    export_contract(sample_dir, out)
+    export_contract(
+        sample_dir,
+        out,
+        large_dataset=args.large_dataset,
+        report_mode=args.report_mode,
+        max_features_heatmap=args.max_features_heatmap,
+        max_features_network=args.max_features_network,
+        max_metadata_columns=args.max_metadata_columns,
+        top_n_features_per_database=args.top_n_features_per_database,
+        skip_heavy_interactive_plots=args.skip_heavy_interactive_plots,
+    )
 
 
 if __name__ == "__main__":

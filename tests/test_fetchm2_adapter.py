@@ -143,6 +143,64 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertEqual(mlst_status, "PASS")
             self.assertTrue(Path(outputs["all_feature_matrix"]).exists())
             self.assertTrue(Path(outputs["feature_cooccurrence"]).exists())
+            self.assertTrue(Path(outputs["report_controls"]).exists())
+            self.assertTrue(Path(outputs["report_controls_html"]).exists())
+
+    def test_large_dataset_export_controls_limit_matrices_and_top_features(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_dir = Path(tmpdir) / "Klebsiella_pneumoniae"
+            metadata_dir = sample_dir / "metadata_output"
+            abricate_dir = sample_dir / "abricate"
+            vfdb_dir = sample_dir / "vfdb"
+            metadata_dir.mkdir(parents=True)
+            abricate_dir.mkdir()
+            vfdb_dir.mkdir()
+
+            pd.DataFrame(
+                [
+                    {"Assembly Accession": "GCF_000000001.1", "Organism Name": "Klebsiella pneumoniae"},
+                    {"Assembly Accession": "GCF_000000002.1", "Organism Name": "Klebsiella pneumoniae"},
+                    {"Assembly Accession": "GCF_000000003.1", "Organism Name": "Klebsiella pneumoniae"},
+                ]
+            ).to_csv(metadata_dir / "ncbi_clean.csv", index=False)
+            header = "#FILE\tSEQUENCE\tSTART\tEND\tGENE\t%COVERAGE\t%IDENTITY\tDATABASE\tACCESSION\tPRODUCT\tRESISTANCE\n"
+            (abricate_dir / "ncbi_results.tab").write_text(
+                header
+                + "GCF_000000001.1.fna\tcontig1\t1\t100\tblaA\t100\t99\tncbi\tA1\tproduct\tbeta-lactam\n"
+                + "GCF_000000002.1.fna\tcontig2\t1\t100\tblaA\t100\t99\tncbi\tA1\tproduct\tbeta-lactam\n"
+                + "GCF_000000003.1.fna\tcontig3\t1\t100\tblaB\t100\t99\tncbi\tA2\tproduct\tbeta-lactam\n",
+                encoding="utf-8",
+            )
+            (vfdb_dir / "vfdb_results.tab").write_text(
+                header
+                + "GCF_000000001.1.fna\tcontig1\t120\t220\tfimH\t100\t99\tvfdb\tV1\tadhesin\tvirulence\n"
+                + "GCF_000000002.1.fna\tcontig2\t120\t220\tybtS\t100\t99\tvfdb\tV2\tsiderophore\tvirulence\n",
+                encoding="utf-8",
+            )
+
+            outputs = export_contract(
+                sample_dir,
+                sample_dir / "panr2_inputs",
+                large_dataset=True,
+                report_mode="compact",
+                max_features_heatmap=2,
+                max_features_network=2,
+                max_metadata_columns=5,
+                top_n_features_per_database=1,
+                skip_heavy_interactive_plots=True,
+            )
+
+            matrix = pd.read_csv(outputs["all_feature_matrix"], sep="\t")
+            self.assertLessEqual(len(matrix.columns), 3)
+            top_features = pd.read_csv(outputs["top_features_by_database"], sep="\t")
+            self.assertLessEqual(top_features.groupby("database").size().max(), 1)
+            controls = pd.read_csv(outputs["report_controls"], sep="\t")
+            control_values = dict(zip(controls["setting"], controls["value"]))
+            self.assertEqual(control_values["large_dataset"], "true")
+            self.assertEqual(control_values["report_mode"], "compact")
+            self.assertEqual(control_values["max_features_heatmap"], "2")
+            self.assertEqual(control_values["skip_heavy_interactive_plots"], "true")
+            self.assertTrue(Path(outputs["report_controls_html"]).exists())
 
     def test_isfinder_blast_converter_writes_abricate_style_tables(self):
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -85,7 +85,16 @@ If it fails, rerun without it and provide MobileElementFinder tables later as pr
 
 ## Report Has Too Many Features
 
-Use stricter PanR2 plotting controls:
+Use the large-dataset report safeguards first. Complete TSV outputs are still written, but report-facing matrices and co-occurrence summaries are capped:
+
+```bash
+--large_dataset true \
+--report_mode compact \
+--max_features_heatmap 150 \
+--max_features_network 150
+```
+
+You can also use stricter PanR2 plotting controls:
 
 ```bash
 --panr2_plot_style compact \
@@ -97,4 +106,5 @@ For large validations, inspect the top-level dashboard and top findings before o
 ```text
 <sample>/report/index.html
 <sample>/panr2_inputs/report/top_findings.html
+<sample>/panr2_inputs/manifest/report_controls.tsv
 ```

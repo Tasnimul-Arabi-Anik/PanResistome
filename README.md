@@ -96,6 +96,8 @@ The same feature families can also be supplied as precomputed tables without run
 
 This table-input path is the preferred stable route for organism-specific typing and CGE outputs until their database setup is reproducible across fresh machines. SerotypeFinder and SCCmecFinder are currently supported as PanR2-compatible table inputs; their CGE database-driven runners are intentionally kept outside the default environment.
 
+For large runs, add `--large_dataset true` or combine a resource profile with `large`, for example `-profile conda,mamba,desktop_parallel,large`. Large-dataset mode still writes complete TSV outputs, but caps report-facing matrices/co-occurrence summaries, switches the handoff pages to compact mode, summarizes top features per database, and records the applied limits in `panr2_inputs/manifest/report_controls.tsv`.
+
 ### Recommended Analysis Profiles
 
 Use profiles for simple public-facing commands, and use individual flags when you need fine control.
@@ -164,7 +166,7 @@ Fresh-clone validation of this command on 2026-05-08 completed all 19 Nextflow p
 
 For the fresh-user validation path, see [`docs/remote_user_validation.md`](docs/remote_user_validation.md). For the 20 release gates used to judge whether the public comprehensive workflow is reliable, see [`docs/release_reliability_checklist.md`](docs/release_reliability_checklist.md).
 
-For v0.3.0 validation status, see [`docs/validation_matrix.md`](docs/validation_matrix.md), [`docs/release_checklist_v0.3.0.md`](docs/release_checklist_v0.3.0.md), [`docs/troubleshooting.md`](docs/troubleshooting.md), and [`docs/example_klebsiella_interpretation.md`](docs/example_klebsiella_interpretation.md).
+For v0.3.0 validation status, see [`docs/validation_matrix.md`](docs/validation_matrix.md), [`docs/release_checklist_v0.3.0.md`](docs/release_checklist_v0.3.0.md), [`docs/troubleshooting.md`](docs/troubleshooting.md), and [`docs/example_klebsiella_interpretation.md`](docs/example_klebsiella_interpretation.md). For v0.4.0 large-dataset and deployment planning, see [`docs/roadmap_v0.4.0.md`](docs/roadmap_v0.4.0.md), [`docs/hpc.md`](docs/hpc.md), and [`docs/containers.md`](docs/containers.md).
 
 ### Module Stability
 
@@ -415,6 +417,14 @@ PanResistome/
 | `--panr2_plot_style` | str | publication | PanR2 plot preset: `publication`, `dashboard`, or `compact` |
 | `--panr2_label_max_length` | int | 40 | Maximum feature label length in crowded plots |
 | `--panr2_sample_map` | path | - | Optional `sample_id` to `Assembly Accession` map for external PanR2 table inputs; FetchM2 `sample_map.csv` is used automatically when present |
+| `--panr2_cross_database_max_features` | int | 300 | Default feature cap for PanR2 cross-database summaries when large-dataset mode is not enabled |
+| `--large_dataset` | bool | false | Enable compact report safeguards for large feature matrices while preserving complete TSV exports |
+| `--report_mode` | str | publication | Handoff report density preset: `compact`, `publication`, or `exploratory`; defaults to compact when `--large_dataset true` |
+| `--max_features_heatmap` | int | 300 | Maximum features retained in exported presence/absence matrices; defaults to 150 in large-dataset mode |
+| `--max_features_network` | int | `--panr2_cross_database_max_features` | Maximum features used for co-occurrence/proximity summaries; defaults to 150 in large-dataset mode |
+| `--max_metadata_columns` | int | 80 | Maximum metadata audit rows shown in handoff HTML pages; defaults to 20 in large-dataset mode |
+| `--top_n_features_per_database` | int | 25 | Number of top prevalent features per database summarized for report navigation; defaults to 50 in large-dataset mode |
+| `--skip_heavy_interactive_plots` | bool | false | Mark heavy interactive plots as skipped/deprioritized in report controls; enabled automatically by large-dataset mode |
 | `--run_mobsuite` | bool | false | Run MOB-suite and pass plasmid reconstruction/typing tables into PanR2 |
 | `--mobsuite_dir` | path | - | Existing MOB-suite table directory to pass into PanR2 |
 | `--run_genomad` | bool | false | Run geNomad and pass prophage/viral-region tables into PanR2 |
@@ -448,11 +458,28 @@ Profiles can be combined with `conda,mamba`.
 | `lowmem` | Small desktop or laptop | `threads=4`, `checkm2_threads=1`, serial native feature runners, one FetchM2 download worker |
 | `desktop_parallel` | Validated desktop-scale parallel run | `threads=16`, `checkm2_threads=2`, parallel native feature runners, two FetchM2 download workers |
 | `workstation` | Higher-memory workstation | `threads=16`, `checkm2_threads=4`, parallel native feature runners, two FetchM2 download workers |
+| `large` | Large feature matrices or 300+ genome planning | `large_dataset=true`, compact report mode, report-facing feature caps; combine with `desktop_parallel` or `workstation` for parallel native feature runners |
 
 Example:
 
 ```bash
 nextflow run main.nf -profile conda,mamba,desktop_parallel ...
+```
+
+Large-run example:
+
+```bash
+nextflow run main.nf \
+  --input validation/klebsiella_pneumoniae_100/ncbi_dataset.tsv \
+  --outdir validation_runs/klebsiella_large_mode \
+  -profile conda,mamba,desktop_parallel,large \
+  --analysis_profile comprehensive \
+  --qc_filter true \
+  --run_gtdbtk false \
+  --run_quast true \
+  --run_ani true \
+  --run_mash true \
+  --run_amrfinderplus true
 ```
 
 Explicit command-line parameters override profile values when both are supplied.
