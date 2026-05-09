@@ -53,7 +53,7 @@ This checklist turns the public-user reliability goals into release gates. A Pan
     - Evidence: `schema_validation_summary.txt`, `unmatched_features.csv`, `duplicate_features.csv`, and `invalid_feature_rows.csv` exist; release validation should have zero unmatched, duplicate, and invalid rows unless documented.
 
 17. Module completeness is audited
-    - Evidence: `feature_completeness_audit.tsv` and `module_status_summary.tsv` list every expected module as pass, warning, failure, or skipped with a reason.
+    - Evidence: `feature_completeness_audit.tsv`, `module_status_summary.tsv`, and `native_runner_merge_audit.tsv` list every expected module as pass, warning, failure, or skipped with a reason.
 
 18. PanR2 produces a combined report
     - Evidence: `<sample>/report/index.html` exists and links QC, metadata, database-specific outputs, cross-database results, citations, and software versions.
@@ -89,4 +89,5 @@ nextflow run main.nf \
 - ISfinder is not auto-downloaded or redistributed. Use `--run_isfinder true --isfinder_db_fasta <authorized.fasta>` when the user has an authorized local database.
 - MobileElementFinder remains opt-in because upstream output parsing has failed on otherwise valid assemblies during real validation.
 - Standard ABRicate, IntegronFinder, MLST, and opt-in MobileElementFinder execution is now owned by the PanResistome native feature-runner stage when `--panr2_native_feature_runners true`. Parallel mode now uses per-genome ABRicate workers within each database and per-assembly IntegronFinder/MLST workers inside that stage; a later optimization can split these into finer-grained Nextflow channels if needed.
-- `--panr2_native_feature_runner_mode parallel` is available for v0.3.0 validation with 16 cores, but `serial` remains the conservative fallback until serial-vs-parallel Delftia comparison and Klebsiella validation are documented.
+- `--panr2_native_feature_runner_mode parallel` is validated for the Delftia parallel comparison and the Klebsiella 100-record run, but `serial` remains the conservative fallback.
+- `--checkm2_threads` should remain low on desktops. The `desktop_parallel` profile uses 16 general threads with a 2-thread CheckM2 cap.

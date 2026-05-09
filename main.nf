@@ -329,6 +329,11 @@ def helpMessage() {
       --db               Directory containing abricate databases [default: ./db]
       --help             Show this help message and exit
 
+    Resource profiles can be combined with -profile conda,mamba:
+      lowmem             threads=4, checkm2_threads=1, serial native runners
+      desktop_parallel   threads=16, checkm2_threads=2, parallel native runners
+      workstation        threads=16, checkm2_threads=4, parallel native runners
+
     Example:
        nextflow run main.nf --input test_small.tsv --outdir results_small -profile conda --threads 8 
     """.stripIndent()
@@ -1003,6 +1008,10 @@ process CHECKM2_QC {
     """
     mkdir -p ${sample_dir}/checkm2
     checkm2_db_arg="${checkm2_db_arg}"
+    echo "CheckM2 thread cap: ${checkm2Threads} thread(s). General --threads remains ${params.threads} for other stages."
+    if [ "${checkm2Threads}" -ge 8 ]; then
+        echo "Warning: CheckM2 is running with ${checkm2Threads} threads. On 16-32 GB desktops, use --checkm2_threads 2 or 4 to reduce DIAMOND memory pressure." >&2
+    fi
 
     if [ -z "\${checkm2_db_arg}" ] && [ "${params.checkm2_auto_download_db}" = "true" ]; then
         mkdir -p "${checkm2DownloadDir}"

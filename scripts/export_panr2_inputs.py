@@ -99,6 +99,14 @@ def main():
     ]:
         copytree_if_exists(sample_dir / database_dir, out / database_dir)
     copytree_if_exists(sample_dir / "tool_results", out / "tool_results")
+    copy_if_exists(
+        sample_dir / "panr2_native_feature_runners" / "native_runner_merge_audit.tsv",
+        out / "manifest" / "native_runner_merge_audit.tsv",
+    )
+    copy_if_exists(
+        sample_dir / "panr2_native_feature_runners" / "module_status.tsv",
+        out / "manifest" / "native_runner_module_status.tsv",
+    )
     copy_if_exists(sample_dir / "qc" / "qc_master_report.csv", out / "qc" / "qc_master_report.csv")
     copy_if_exists(sample_dir / "qc" / "excluded_for_panr2.csv", out / "qc" / "excluded_for_panr2.csv")
     copy_if_exists(sample_dir / "ani" / "analysis" / "panr2_ani_summary.csv", out / "ani" / "analysis" / "panr2_ani_summary.csv")

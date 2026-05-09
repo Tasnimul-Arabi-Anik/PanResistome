@@ -42,3 +42,27 @@ def test_worker_count_bounds_threads_to_tasks():
     assert native.worker_count(4, 20) == 4
     assert native.worker_count(0, 20) == 1
     assert native.worker_count(16, 0) == 1
+
+
+def test_native_runner_audit_writer(tmp_path):
+    native = load_native_feature_module()
+    audit_path = tmp_path / "native_runner_merge_audit.tsv"
+    row = native.audit_row(
+        "abricate",
+        "parallel",
+        6,
+        6,
+        2,
+        2,
+        0,
+        10,
+        4,
+        "PASS",
+        "ABRicate completed",
+    )
+
+    native.write_audit(audit_path, [row])
+
+    text = audit_path.read_text(encoding="utf-8")
+    assert "expected_raw_tables\tobserved_raw_tables" in text
+    assert "abricate\tparallel\t6\t6\t2\t2\t0\t10\t4\tPASS" in text

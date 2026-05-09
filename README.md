@@ -142,9 +142,29 @@ nextflow run main.nf \
 
 This command intentionally does not require a local CheckM2 database path, manual AMRFinderPlus database setup, manual ABRicate database setup, GTDB-Tk, MobileElementFinder, or ISfinder. The run should write the main dashboard to `<outdir>/<organism>/report/index.html` and the setup audit to `<outdir>/<organism>/panr2_inputs/manifest/database_setup_status.tsv`.
 
+For desktop-scale validation with parallel native feature runners, use the resource profile instead of manually tuning every thread option:
+
+```bash
+nextflow run main.nf \
+  --input validation/klebsiella_pneumoniae_100/ncbi_dataset.tsv \
+  --outdir validation_runs/klebsiella_pneumoniae_parallel \
+  -profile conda,mamba,desktop_parallel \
+  --analysis_profile comprehensive \
+  --qc_filter true \
+  --run_gtdbtk false \
+  --run_quast true \
+  --run_ani true \
+  --run_mash true \
+  --run_amrfinderplus true
+```
+
+`desktop_parallel` sets `--threads 16`, `--checkm2_threads 2`, `--fetchm2_download_workers 2`, and `--panr2_native_feature_runner_mode parallel`. Use `lowmem` for smaller machines and `workstation` when additional RAM is available.
+
 Fresh-clone validation of this command on 2026-05-08 completed all 19 Nextflow processes on 45 current `Delftia tsuruhatensis` assemblies, including CheckM2 database auto-download, AMRFinderPlus database auto-update, ABRicate `ncbi/vfdb/plasmidfinder` setup verification, comprehensive PanR2 analysis, and PanR2 handoff export. See [`validation/delftia_tsuruhatensis_current/FRESH_CLONE_VALIDATION_RESULTS.md`](validation/delftia_tsuruhatensis_current/FRESH_CLONE_VALIDATION_RESULTS.md).
 
 For the fresh-user validation path, see [`docs/remote_user_validation.md`](docs/remote_user_validation.md). For the 20 release gates used to judge whether the public comprehensive workflow is reliable, see [`docs/release_reliability_checklist.md`](docs/release_reliability_checklist.md).
+
+For v0.3.0 validation status, see [`docs/validation_matrix.md`](docs/validation_matrix.md), [`docs/release_checklist_v0.3.0.md`](docs/release_checklist_v0.3.0.md), [`docs/troubleshooting.md`](docs/troubleshooting.md), and [`docs/example_klebsiella_interpretation.md`](docs/example_klebsiella_interpretation.md).
 
 ### Module Stability
 
@@ -163,6 +183,7 @@ For the fresh-user validation path, see [`docs/remote_user_validation.md`](docs/
 | IntegronFinder/MLST | Active development | No | Native-runner validation | Run by PanResistome native feature-runner stage by default, then passed to PanR2; MLST can be header-only for unsupported organisms |
 | MOB-suite/geNomad/typing tools | Experimental runners, stable table passthrough | No | Syntax/export path | Prefer precomputed tables for difficult DB setups |
 | Database/tool preflight audit | Stable | Comprehensive profile | Unit test + comprehensive path | Writes `panr2_inputs/manifest/database_setup_status.tsv` and fails required missing databases/tools |
+| Native runner merge audit | Stable | Native feature runners | Delftia/Klebsiella validation | Writes `panr2_inputs/manifest/native_runner_merge_audit.tsv` with expected vs observed raw table counts |
 
 ---
 
@@ -418,6 +439,23 @@ PanResistome/
 | `--db`      | str  | ./db    | Directory containing abricate databases |
 | `--help`    | flag | -       | Show help message and exit              |
 
+### Resource Profiles
+
+Profiles can be combined with `conda,mamba`.
+
+| Profile | Intended use | Settings |
+| --- | --- | --- |
+| `lowmem` | Small desktop or laptop | `threads=4`, `checkm2_threads=1`, serial native feature runners, one FetchM2 download worker |
+| `desktop_parallel` | Validated desktop-scale parallel run | `threads=16`, `checkm2_threads=2`, parallel native feature runners, two FetchM2 download workers |
+| `workstation` | Higher-memory workstation | `threads=16`, `checkm2_threads=4`, parallel native feature runners, two FetchM2 download workers |
+
+Example:
+
+```bash
+nextflow run main.nf -profile conda,mamba,desktop_parallel ...
+```
+
+Explicit command-line parameters override profile values when both are supplied.
 
 ## 📂 Output Structure
 

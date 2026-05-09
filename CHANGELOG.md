@@ -14,10 +14,14 @@
 - `docs/roadmap_v0.3.0.md` and `validation/klebsiella_pneumoniae_100/README.md` to define the scale and interpretation validation target.
 - Native feature-runner validation evidence under `validation/delftia_tsuruhatensis_current/NATIVE_FEATURE_RUNNER_VALIDATION_RESULTS.md`.
 - BioProject-diverse 100-record `Klebsiella pneumoniae` validation input under `validation/klebsiella_pneumoniae_100/`.
+- `lowmem`, `desktop_parallel`, and `workstation` profiles for safer resource defaults, including independent CheckM2 thread caps.
+- Native feature-runner merge audit at `panr2_inputs/manifest/native_runner_merge_audit.tsv`, recording expected vs observed raw table counts for ABRicate, IntegronFinder, MLST, and MobileElementFinder.
+- v0.3.0 release-hardening docs: `docs/validation_matrix.md`, `docs/release_checklist_v0.3.0.md`, `docs/troubleshooting.md`, and `docs/example_klebsiella_interpretation.md`.
 
 ### Changed
 - Comprehensive mode now passes precomputed ABRicate, IntegronFinder, and MLST directories to PanR2 by default instead of asking PanR2 to execute those standard runners internally.
 - Native MLST runner status now counts only biological ST/allele features, not unsupported-organism placeholder rows emitted by the `mlst` command.
+- CheckM2 now prints the effective CheckM2-only thread cap before execution and warns when the cap is high enough to risk desktop memory pressure.
 
 ### Fixed
 - PanR2 feature-contract export now parses headerless native `mlst` output, suppresses placeholder calls such as `ST_-`, and writes a header-only `mlst.features.tsv` when MLST ran successfully but no valid ST/allele features were detected.

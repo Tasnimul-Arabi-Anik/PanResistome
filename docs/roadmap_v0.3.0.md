@@ -18,6 +18,7 @@ Implemented groundwork after `v0.2.2`:
 - `--panr2_native_feature_runner_mode serial|parallel` preserves the validated serial path while exposing an experimental parallel backend that runs each ABRicate database with per-genome workers, then runs per-assembly IntegronFinder/MLST execution.
 - PanR2 receives precomputed `--abricate-dir`, `--vfdb-dir`, `--plasmidfinder-dir`, `--integronfinder-dir`, and `--mlst-dir` inputs rather than being asked to run those tools internally.
 - A 45-genome `Delftia tsuruhatensis` validation passed with native ABRicate, IntegronFinder, and MLST runners enabled before PanR2 reporting. Results are documented in `validation/delftia_tsuruhatensis_current/NATIVE_FEATURE_RUNNER_VALIDATION_RESULTS.md`.
+- The parallel native-runner backend passed the 45-genome Delftia comparison and the 100-record Klebsiella validation. See `validation/delftia_tsuruhatensis_current/NATIVE_PARALLEL_COMPARISON.md` and `validation/klebsiella_pneumoniae_100/VALIDATION_RESULTS.md`.
 
 ## 2. Scalability
 
@@ -35,7 +36,13 @@ Near-term candidates:
 - Per-assembly MLST channel.
 - Optional representative-only downstream analysis after ANI duplicate clustering.
 
-The native-runner Delftia validation showed that the current architecture is functionally valid but still serial inside `PANR2_FEATURE_RUNNERS`. ABRicate and IntegronFinder were the most important bottlenecks, so parallelizing those runners is the next engineering priority before larger organism validations.
+The native-runner Delftia validation showed that the architecture is functionally valid, and the parallel backend now provides a validated speed path for ABRicate, IntegronFinder, and MLST while preserving the serial fallback.
+
+Implemented resource-safety work:
+
+- `--checkm2_threads` caps CheckM2 independently from general `--threads`.
+- `lowmem`, `desktop_parallel`, and `workstation` profiles provide safer defaults for common local machines.
+- `PANR2_FEATURE_RUNNERS` writes `native_runner_merge_audit.tsv` so expected and observed raw table counts can be audited after serial or parallel runs.
 
 ## 3. Metadata Interpretation
 
@@ -100,11 +107,16 @@ Validation target:
 - Comprehensive PanR2 enabled.
 - Optional Kleborate/Kaptive table-input or runner validation when databases are available.
 
-Recommended order:
+Completed v0.3.0 validation:
 
-1. Re-run the 45-genome `Delftia tsuruhatensis` native-runner validation with `--panr2_native_feature_runner_mode parallel --threads 16`, and cap CheckM2 separately on low-memory desktops with `--checkm2_threads 2` or `4`.
-2. Compare serial and parallel outputs in `validation/delftia_tsuruhatensis_current/NATIVE_PARALLEL_COMPARISON.md`.
-3. Run the planned `Klebsiella pneumoniae` validation to test richer AMR, plasmid, VFDB, MLST, and metadata-feature associations.
+- The 45-genome Delftia parallel comparison passed.
+- The 100-record Klebsiella validation passed with 99 downloaded genomes, 99 QC PASS genomes, 12,838 feature rows, and zero unmatched, invalid, or duplicate PanR2 feature rows.
+
+Next validation targets:
+
+1. Repeat Klebsiella without `-resume` for final release evidence if resources allow.
+2. Add a larger 300-500 genome stress test after v0.3.0.
+3. Add container/HPC validation after deployment profiles are implemented.
 
 ## 6. Deployment
 

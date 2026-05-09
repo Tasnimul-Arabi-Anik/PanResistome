@@ -29,6 +29,20 @@ MODULE_STATUS_FIELDS = [
     "message",
 ]
 
+NATIVE_RUNNER_AUDIT_FIELDS = [
+    "module",
+    "runner_mode",
+    "expected_raw_tables",
+    "observed_raw_tables",
+    "samples_input",
+    "samples_processed",
+    "samples_failed",
+    "feature_rows",
+    "unique_features",
+    "status",
+    "message",
+]
+
 
 def as_bool(value: str | bool) -> bool:
     if isinstance(value, bool):
@@ -149,6 +163,42 @@ def write_status(path: Path, rows: list[dict[str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=MODULE_STATUS_FIELDS, delimiter="\t")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def audit_row(
+    module: str,
+    runner_mode: str,
+    expected_raw_tables: int | str,
+    observed_raw_tables: int | str,
+    samples_input: int | str,
+    samples_processed: int | str,
+    samples_failed: int | str,
+    feature_rows: int | str,
+    unique_features: int | str,
+    status: str,
+    message: str,
+) -> dict[str, str]:
+    return {
+        "module": module,
+        "runner_mode": runner_mode,
+        "expected_raw_tables": str(expected_raw_tables),
+        "observed_raw_tables": str(observed_raw_tables),
+        "samples_input": str(samples_input),
+        "samples_processed": str(samples_processed),
+        "samples_failed": str(samples_failed),
+        "feature_rows": str(feature_rows),
+        "unique_features": str(unique_features),
+        "status": status,
+        "message": message,
+    }
+
+
+def write_audit(path: Path, rows: list[dict[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=NATIVE_RUNNER_AUDIT_FIELDS, delimiter="\t")
         writer.writeheader()
         writer.writerows(rows)
 
@@ -425,7 +475,9 @@ def main() -> int:
     sequence_dir = args.sequence_dir.resolve()
     status_dir = sample_dir / "panr2_native_feature_runners"
     status_path = status_dir / "module_status.tsv"
+    audit_path = status_dir / "native_runner_merge_audit.tsv"
     rows: list[dict[str, str]] = []
+    audit_rows: list[dict[str, str]] = []
     sample_count = count_fastas(sequence_dir)
 
     if sample_count == 0:
@@ -440,6 +492,21 @@ def main() -> int:
             )
         )
         write_status(status_path, rows)
+        write_audit(audit_path, [
+            audit_row(
+                "panr2_native_feature_runners",
+                args.mode,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                "FAIL",
+                f"No FASTA files found in {sequence_dir}",
+            )
+        ])
         return 1
 
     started = utc_now()
@@ -466,25 +533,43 @@ def main() -> int:
             rows_count, unique_count = count_feature_rows(Path(db_dir) / f"{Path(db_dir).name}_results.tab")
             feature_rows += rows_count
             unique_features += unique_count
-        rows.append(
-            status_row(
+        raw_tables = len(result.get("raw_tables", [])) or len(databases)
+        module_row = status_row(
+            "abricate",
+            True,
+            started,
+            "PASS",
+            sample_dir / "tool_results" / "abricate",
+            abricate_message,
+            sample_count,
+            sample_count,
+            0,
+            raw_tables,
+            feature_rows,
+            unique_features,
+        )
+        rows.append(module_row)
+        expected_raw_tables = sample_count * len(databases) if args.mode == "parallel" else len(databases)
+        audit_rows.append(
+            audit_row(
                 "abricate",
-                True,
-                started,
-                "PASS",
-                sample_dir / "tool_results" / "abricate",
-                abricate_message,
+                args.mode,
+                expected_raw_tables,
+                raw_tables,
                 sample_count,
                 sample_count,
                 0,
-                len(result.get("raw_tables", [])) or len(databases),
                 feature_rows,
                 unique_features,
+                "PASS" if raw_tables >= expected_raw_tables else "WARNING",
+                abricate_message,
             )
         )
     except Exception as exc:
         rows.append(status_row("abricate", True, started, "FAIL", sample_dir / "tool_results" / "abricate", str(exc), sample_count, 0, sample_count))
         write_status(status_path, rows)
+        audit_rows.append(audit_row("abricate", args.mode, sample_count * len(databases) if args.mode == "parallel" else len(databases), 0, sample_count, 0, sample_count, 0, 0, "FAIL", str(exc)))
+        write_audit(audit_path, audit_rows)
         raise
 
     if args.run_integronfinder:
@@ -505,28 +590,46 @@ def main() -> int:
                 )
                 integron_message = "IntegronFinder completed and was converted to PanR2-compatible tables."
             feature_rows, unique_features = count_feature_rows(Path(result["feature_dir"]) / "integronfinder_results.tab")
-            rows.append(
-                status_row(
+            raw_tables = len(result.get("raw_tables", []))
+            module_row = status_row(
+                "integronfinder",
+                True,
+                started,
+                "PASS",
+                Path(result["feature_dir"]),
+                integron_message,
+                sample_count,
+                sample_count,
+                0,
+                raw_tables,
+                feature_rows,
+                unique_features,
+            )
+            rows.append(module_row)
+            audit_rows.append(
+                audit_row(
                     "integronfinder",
-                    True,
-                    started,
-                    "PASS",
-                    Path(result["feature_dir"]),
-                    integron_message,
+                    args.mode,
+                    sample_count,
+                    raw_tables,
                     sample_count,
                     sample_count,
                     0,
-                    len(result.get("raw_tables", [])),
                     feature_rows,
                     unique_features,
+                    "PASS" if raw_tables >= sample_count else "WARNING",
+                    integron_message,
                 )
             )
         except Exception as exc:
             rows.append(status_row("integronfinder", True, started, "FAIL", sample_dir / "tool_results" / "integronfinder", str(exc), sample_count, 0, sample_count))
             write_status(status_path, rows)
+            audit_rows.append(audit_row("integronfinder", args.mode, sample_count, 0, sample_count, 0, sample_count, 0, 0, "FAIL", str(exc)))
+            write_audit(audit_path, audit_rows)
             raise
     else:
         rows.append(status_row("integronfinder", False, utc_now(), "SKIPPED", sample_dir / "tool_results" / "integronfinder", "Not enabled for this profile."))
+        audit_rows.append(audit_row("integronfinder", args.mode, 0, 0, sample_count, 0, 0, 0, 0, "SKIPPED", "Not enabled for this profile."))
 
     if args.run_mlst:
         started = utc_now()
@@ -539,28 +642,46 @@ def main() -> int:
                 mlst_message = "MLST completed and is available for PanR2 analysis."
             raw_path = Path(result["raw_table"])
             feature_rows, unique_features = count_mlst_feature_rows(raw_path)
-            rows.append(
-                status_row(
+            raw_tables = 1 if raw_path.exists() else 0
+            module_row = status_row(
+                "mlst",
+                True,
+                started,
+                "PASS",
+                Path(result["mlst_dir"]),
+                mlst_message,
+                sample_count,
+                sample_count,
+                0,
+                raw_tables,
+                feature_rows,
+                unique_features,
+            )
+            rows.append(module_row)
+            audit_rows.append(
+                audit_row(
                     "mlst",
-                    True,
-                    started,
-                    "PASS",
-                    Path(result["mlst_dir"]),
-                    mlst_message,
+                    args.mode,
+                    1,
+                    raw_tables,
                     sample_count,
                     sample_count,
                     0,
-                    1 if raw_path.exists() else 0,
                     feature_rows,
                     unique_features,
+                    "PASS" if raw_tables >= 1 else "WARNING",
+                    mlst_message,
                 )
             )
         except Exception as exc:
             rows.append(status_row("mlst", True, started, "FAIL", sample_dir / "tool_results" / "mlst", str(exc), sample_count, 0, sample_count))
             write_status(status_path, rows)
+            audit_rows.append(audit_row("mlst", args.mode, 1, 0, sample_count, 0, sample_count, 0, 0, "FAIL", str(exc)))
+            write_audit(audit_path, audit_rows)
             raise
     else:
         rows.append(status_row("mlst", False, utc_now(), "SKIPPED", sample_dir / "tool_results" / "mlst", "Not enabled for this profile."))
+        audit_rows.append(audit_row("mlst", args.mode, 0, 0, sample_count, 0, 0, 0, 0, "SKIPPED", "Not enabled for this profile."))
 
     if args.run_mobileelementfinder:
         started = utc_now()
@@ -572,30 +693,49 @@ def main() -> int:
                 force=args.force,
             )
             feature_rows, unique_features = count_feature_rows(Path(result["feature_dir"]) / "mobileelementfinder_results.tab")
-            rows.append(
-                status_row(
+            raw_tables = len(result.get("raw_csv", []))
+            module_row = status_row(
+                "mobileelementfinder",
+                True,
+                started,
+                "PASS",
+                Path(result["feature_dir"]),
+                "MobileElementFinder completed and was converted to PanR2-compatible tables.",
+                sample_count,
+                sample_count,
+                0,
+                raw_tables,
+                feature_rows,
+                unique_features,
+            )
+            rows.append(module_row)
+            audit_rows.append(
+                audit_row(
                     "mobileelementfinder",
-                    True,
-                    started,
-                    "PASS",
-                    Path(result["feature_dir"]),
-                    "MobileElementFinder completed and was converted to PanR2-compatible tables.",
+                    args.mode,
+                    sample_count,
+                    raw_tables,
                     sample_count,
                     sample_count,
                     0,
-                    len(result.get("raw_csv", [])),
                     feature_rows,
                     unique_features,
+                    "PASS" if raw_tables >= sample_count else "WARNING",
+                    "MobileElementFinder completed and was converted to PanR2-compatible tables.",
                 )
             )
         except Exception as exc:
             rows.append(status_row("mobileelementfinder", True, started, "FAIL", sample_dir / "tool_results" / "mobileelementfinder", str(exc), sample_count, 0, sample_count))
             write_status(status_path, rows)
+            audit_rows.append(audit_row("mobileelementfinder", args.mode, sample_count, 0, sample_count, 0, sample_count, 0, 0, "FAIL", str(exc)))
+            write_audit(audit_path, audit_rows)
             raise
     else:
         rows.append(status_row("mobileelementfinder", False, utc_now(), "SKIPPED", sample_dir / "tool_results" / "mobileelementfinder", "Not enabled for this profile."))
+        audit_rows.append(audit_row("mobileelementfinder", args.mode, 0, 0, sample_count, 0, 0, 0, 0, "SKIPPED", "Not enabled for this profile."))
 
     write_status(status_path, rows)
+    write_audit(audit_path, audit_rows)
     return 0
 
 

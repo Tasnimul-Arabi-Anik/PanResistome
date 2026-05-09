@@ -184,13 +184,21 @@ DefenseFinder: available in PanR2 but not default until its environment is consi
 
 The standard comprehensive command is reliable but not yet fully optimized for wall time. PanResistome now owns the standard feature-runner stage through `--panr2_native_feature_runners true` and passes precomputed ABRicate, IntegronFinder, and MLST directories into PanR2. Large fragmented assemblies can still make IntegronFinder the longest substage; future performance work should split per-assembly execution into finer-grained Nextflow channels while keeping PanR2 focused on standardized analysis/reporting.
 
-An experimental parallel backend is available for validation:
+The parallel backend is validated for the committed Delftia and Klebsiella validations:
 
 ```bash
 --panr2_native_feature_runner_mode parallel --threads 16
 ```
 
-Parallel mode keeps the same output directories but runs one ABRicate database at a time with per-genome workers, then runs per-assembly IntegronFinder/MLST calls concurrently inside the native-runner stage. Keep `serial` as the stable fallback until the parallel Delftia and Klebsiella validations are documented.
+Parallel mode keeps the same output directories but runs one ABRicate database at a time with per-genome workers, then runs per-assembly IntegronFinder/MLST calls concurrently inside the native-runner stage. `serial` remains the conservative fallback.
+
+The validated desktop-scale profile is:
+
+```bash
+-profile conda,mamba,desktop_parallel
+```
+
+It sets `--threads 16`, `--checkm2_threads 2`, `--fetchm2_download_workers 2`, and `--panr2_native_feature_runner_mode parallel`.
 
 On desktops with 16 GB RAM or less, do not let CheckM2 inherit a high global thread count. Use a separate cap:
 
@@ -200,10 +208,12 @@ On desktops with 16 GB RAM or less, do not let CheckM2 inherit a high global thr
 
 CheckM2 defaults to `min(--threads,4)`, but `--checkm2_threads 2` is safer for 100-genome validations on modest machines.
 
-The 2026-05-08 native feature-runner validation is documented in:
+The native feature-runner validations are documented in:
 
 ```text
 validation/delftia_tsuruhatensis_current/NATIVE_FEATURE_RUNNER_VALIDATION_RESULTS.md
+validation/delftia_tsuruhatensis_current/NATIVE_PARALLEL_COMPARISON.md
+validation/klebsiella_pneumoniae_100/VALIDATION_RESULTS.md
 ```
 
 ## Documentation After A Passing Run
