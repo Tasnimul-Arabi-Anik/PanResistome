@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+No unreleased changes yet.
+
+## 0.3.0 - 2026-05-09
+
 ### Added
 - PanResistome-native PanR2 feature-runner stage controlled by `--panr2_native_feature_runners` for ABRicate, IntegronFinder, MLST, and opt-in MobileElementFinder execution before PanR2 reporting.
 - Experimental native feature-runner backend selection with `--panr2_native_feature_runner_mode serial|parallel`; parallel mode runs ABRicate one database at a time with per-genome workers, then runs IntegronFinder/MLST per assembly concurrently within the PanResistome native-runner stage.
