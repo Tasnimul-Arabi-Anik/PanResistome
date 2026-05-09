@@ -356,6 +356,7 @@ PanResistome/
 | `--checkm2_db`          | path  | -       | Optional CheckM2 database path                   |
 | `--checkm2_auto_download_db` | bool | true | Download the CheckM2 database automatically when no database path is provided |
 | `--checkm2_db_dir`      | path  | `<outdir>/databases/checkm2` | CheckM2 database download/cache directory |
+| `--checkm2_threads`     | int   | `min(--threads,4)` | Threads for CheckM2 only; keep low on desktops with limited RAM |
 | `--min_completeness`    | float | -       | Minimum CheckM2 completeness required to pass QC |
 | `--max_contamination`   | float | -       | Maximum CheckM2 contamination allowed to pass QC |
 | `--checkm2_lowmem`      | bool  | true    | Run CheckM2 in low-memory mode                   |
@@ -413,7 +414,7 @@ PanResistome/
 
 | Argument    | Type | Default | Description                             |
 | ----------- | ---- | ------- | --------------------------------------- |
-| `--threads` | int  | 8       | Number of threads for CheckM2, GTDB-Tk, QUAST, ANI, and abricate |
+| `--threads` | int  | 8       | General workflow threads for GTDB-Tk, QUAST, ANI, ABRicate, native PanR2 feature runners, and other tools. CheckM2 is capped separately by `--checkm2_threads`. |
 | `--db`      | str  | ./db    | Directory containing abricate databases |
 | `--help`    | flag | -       | Show help message and exit              |
 

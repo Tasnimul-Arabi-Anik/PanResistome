@@ -6,6 +6,7 @@
 - PanResistome-native PanR2 feature-runner stage controlled by `--panr2_native_feature_runners` for ABRicate, IntegronFinder, MLST, and opt-in MobileElementFinder execution before PanR2 reporting.
 - Experimental native feature-runner backend selection with `--panr2_native_feature_runner_mode serial|parallel`; parallel mode runs ABRicate one database at a time with per-genome workers, then runs IntegronFinder/MLST per assembly concurrently within the PanResistome native-runner stage.
 - Controlled 45-genome Delftia parallel-backend validation documented in `validation/delftia_tsuruhatensis_current/NATIVE_PARALLEL_COMPARISON.md`; the run completed 9/9 processes with 16 threads, produced 201 standardized feature rows, preserved the same core feature calls as the serial native-runner validation, and kept zero unmatched, invalid, or duplicate feature rows.
+- Separate `--checkm2_threads` parameter for CheckM2-only CPU control; it defaults to `min(--threads, 4)` so high native feature-runner parallelism does not automatically force high-memory CheckM2 DIAMOND runs.
 - `scripts/run_panr2_native_features.py` to run standard PanR2-compatible annotation helpers under PanResistome ownership and write module status rows.
 - Same-contig and coordinate-proximity cross-database outputs: `amr_mge_same_contig.tsv`, `amr_plasmid_same_contig.tsv`, `amr_integron_same_contig.tsv`, and `feature_proximity.tsv`.
 - Metadata interpretation outputs for `feature_metadata_associations.tsv`, `database_burden_metadata_associations.tsv`, `category_burden_by_sample.tsv`, and `category_metadata_associations.tsv`.
@@ -27,6 +28,7 @@
 - A 45-genome `Delftia tsuruhatensis` native feature-runner run completed all 20 Nextflow processes with GTDB-Tk disabled, CheckM2/QUAST/ANI/Mash enabled, AMRFinderPlus enabled, `--panr2_native_feature_runners true`, and 4 threads.
 - The native feature-runner validation produced PanResistome-owned ABRicate, IntegronFinder, and MLST raw outputs before PanR2 reporting, then generated clean PanR2 handoff outputs with 201 standardized feature rows and zero unmatched, invalid, or duplicate feature rows.
 - The same validation generated the v0.3.0 metadata interpretation, cross-database same-contig/proximity, feature matrix, handoff HTML, and top-level PanR2 report outputs.
+- A 100-record `Klebsiella pneumoniae` parallel validation completed with GTDB-Tk disabled, CheckM2 capped at 2 threads, QUAST/ANI/Mash enabled, AMRFinderPlus enabled, and the parallel native feature-runner backend. The run downloaded 99 genomes, produced 99 QC PASS calls, generated 12,838 standardized feature rows across AMR, AMRFinderPlus, VFDB, PlasmidFinder, IntegronFinder, and MLST, and kept zero unmatched, invalid, or duplicate feature rows.
 
 ## 0.2.2 - 2026-05-08
 

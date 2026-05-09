@@ -102,7 +102,7 @@ Validation target:
 
 Recommended order:
 
-1. Re-run the 45-genome `Delftia tsuruhatensis` native-runner validation with `--panr2_native_feature_runner_mode parallel --threads 16`.
+1. Re-run the 45-genome `Delftia tsuruhatensis` native-runner validation with `--panr2_native_feature_runner_mode parallel --threads 16`, and cap CheckM2 separately on low-memory desktops with `--checkm2_threads 2` or `4`.
 2. Compare serial and parallel outputs in `validation/delftia_tsuruhatensis_current/NATIVE_PARALLEL_COMPARISON.md`.
 3. Run the planned `Klebsiella pneumoniae` validation to test richer AMR, plasmid, VFDB, MLST, and metadata-feature associations.
 

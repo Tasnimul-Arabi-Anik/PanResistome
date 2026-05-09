@@ -45,8 +45,11 @@ nextflow run main.nf \
   --panr2_native_feature_runners true \
   --panr2_native_feature_runner_mode parallel \
   --threads 16 \
+  --checkm2_threads 2 \
   --fetchm2_download_workers 2
 ```
+
+Use `--checkm2_threads 2` on 16 GB desktops. The native PanR2 feature-runner layer can still use `--threads 16`, but CheckM2 DIAMOND can consume substantial RAM if it inherits the same high thread count.
 
 ## Expected Checks
 
@@ -90,3 +93,5 @@ validation_runs/klebsiella_100/validation_summary.md
 - Same-contig/proximity outputs are present, even if they contain zero rows for the selected dataset.
 
 For v0.3.0 development, run this validation after the 45-genome `Delftia tsuruhatensis` validation passes with `--panr2_native_feature_runner_mode parallel --threads 16` and preserves the same feature-contract outputs.
+
+Completed validation evidence is recorded in `VALIDATION_RESULTS.md`.

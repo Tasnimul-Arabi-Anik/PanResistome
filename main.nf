@@ -33,6 +33,7 @@ params.year_to = null
 params.input = "test.tsv"
 params.outdir = "results"
 params.threads = 8
+params.checkm2_threads = null
 params.db = "$baseDir/db"
 params.help = false
 params.format = "png"
@@ -263,6 +264,7 @@ def helpMessage() {
       --checkm2_auto_download_db Download CheckM2 database automatically when --checkm2_db is not provided [default: true]
       --checkm2_db_dir         Directory for automatic CheckM2 database download [default: <outdir>/databases/checkm2]
       --checkm2_db_download_retries Number of CheckM2 database download attempts [default: 3]
+      --checkm2_threads        Threads for CheckM2 only. Defaults to min(--threads, 4) to reduce desktop RAM pressure.
       --min_completeness       Minimum CheckM2 completeness required to pass QC
       --max_contamination      Maximum CheckM2 contamination allowed to pass QC
       --checkm2_lowmem         Run CheckM2 in low-memory mode [default: true]
@@ -323,6 +325,7 @@ def helpMessage() {
 
     🔧 Other options:
   --threads          Number of threads for CheckM2, GTDB-Tk, and abricate [default: 8]
+                     CheckM2 is capped separately by --checkm2_threads unless explicitly raised.
       --db               Directory containing abricate databases [default: ./db]
       --help             Show this help message and exit
 
@@ -995,6 +998,7 @@ process CHECKM2_QC {
     def checkm2DbPath = params.checkm2_db ? launchPath(params.checkm2_db) : ""
     def checkm2_db_arg = checkm2DbPath ? "--database_path ${checkm2DbPath}" : ""
     def checkm2_lowmem_arg = params.checkm2_lowmem ? "--lowmem" : ""
+    def checkm2Threads = params.checkm2_threads ? (params.checkm2_threads as int) : Math.min((params.threads as int), 4)
     def checkm2DownloadDir = params.checkm2_db_dir ? launchPath(params.checkm2_db_dir) : (params.outdir.toString().startsWith("/") ? "${params.outdir}/databases/checkm2" : "${launchDir}/${params.outdir}/databases/checkm2")
     """
     mkdir -p ${sample_dir}/checkm2
@@ -1037,7 +1041,7 @@ process CHECKM2_QC {
 
     if [ -d "\${sequence_dir}" ] && [ -n "\$(find \${sequence_dir} -name "*.fna" -print -quit)" ]; then
         checkm2 predict \\
-            --threads ${params.threads} \\
+            --threads ${checkm2Threads} \\
             --input \${sequence_dir} \\
             --output-directory ${sample_dir}/checkm2 \\
             -x fna --force ${checkm2_lowmem_arg} \${checkm2_db_arg}

@@ -192,6 +192,14 @@ An experimental parallel backend is available for validation:
 
 Parallel mode keeps the same output directories but runs one ABRicate database at a time with per-genome workers, then runs per-assembly IntegronFinder/MLST calls concurrently inside the native-runner stage. Keep `serial` as the stable fallback until the parallel Delftia and Klebsiella validations are documented.
 
+On desktops with 16 GB RAM or less, do not let CheckM2 inherit a high global thread count. Use a separate cap:
+
+```bash
+--threads 16 --checkm2_threads 2
+```
+
+CheckM2 defaults to `min(--threads,4)`, but `--checkm2_threads 2` is safer for 100-genome validations on modest machines.
+
 The 2026-05-08 native feature-runner validation is documented in:
 
 ```text
