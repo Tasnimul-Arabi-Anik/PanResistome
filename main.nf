@@ -2,6 +2,8 @@
 
 nextflow.enable.dsl=2
 
+def pipelineStartMillis = System.currentTimeMillis()
+
 // Parameters
 params.pipeline_version = '0.3.1'
 params.checkm = null
@@ -101,6 +103,8 @@ params.run_amrfinderplus = false
 params.amrfinderplus_dir = null
 params.amrfinderplus_organism = null
 params.amrfinderplus_update_db = true
+params.amrfinderplus_jobs = null
+params.amrfinderplus_threads_per_sample = 1
 params.run_mobsuite = false
 params.mobsuite_dir = null
 params.run_genomad = false
@@ -334,6 +338,8 @@ def helpMessage() {
       --amrfinderplus_dir      Existing AMRFinderPlus table directory to export under panr2_inputs/features
       --amrfinderplus_organism Optional AMRFinderPlus --organism value for mutation-aware calls
       --amrfinderplus_update_db Run amrfinder -u before AMRFinderPlus execution [default: true]
+      --amrfinderplus_jobs     Parallel AMRFinderPlus sample jobs [default: --threads]
+      --amrfinderplus_threads_per_sample Threads per AMRFinderPlus sample job [default: 1]
       --panr2_setup_abricate_db Run panr setup-db before comprehensive PanR2 analysis [default: true]
       --panr2_abricate_dbs     ABRicate databases for PanR2 comprehensive mode [default: ncbi,vfdb,plasmidfinder; add isfinder only if installed]
       --panr2_min_identity     Minimum identity for PanR2 integrated feature analysis [default: 90]
@@ -1912,6 +1918,8 @@ process AMRFINDERPLUS_ANALYSIS {
 
     script:
     def organismArg = params.amrfinderplus_organism ? "--organism ${shellQuote(params.amrfinderplus_organism)}" : ""
+    def jobs = params.amrfinderplus_jobs ? params.amrfinderplus_jobs as int : params.threads as int
+    def threadsPerSample = params.amrfinderplus_threads_per_sample ? params.amrfinderplus_threads_per_sample as int : 1
     """
     sequence_dir="${sample_dir}/sequence"
     if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
@@ -1920,38 +1928,15 @@ process AMRFINDERPLUS_ANALYSIS {
 
     mkdir -p ${sample_dir}/amrfinderplus/raw ${sample_dir}/amrfinderplus/tables
     status_file="${sample_dir}/amrfinderplus/tables/amrfinderplus_sample_status.tsv"
-    printf "sample_id\\tfasta_path\\toutput_path\\tstatus\\texit_code\\tmessage\\n" > "\${status_file}"
-    if command -v amrfinder >/dev/null 2>&1 && [ -d "\${sequence_dir}" ] && [ -n "\$(find "\${sequence_dir}" -name "*.fna" -print -quit)" ]; then
-        if [ "${params.amrfinderplus_update_db}" = "true" ]; then
-            amrfinder -u
-        fi
-        failed=0
-        processed=0
-        for fasta in \$(find "\${sequence_dir}" -name "*.fna" | sort); do
-            prefix=\$(basename "\${fasta}" .fna)
-            out="${sample_dir}/amrfinderplus/raw/\${prefix}.tsv"
-            log="${sample_dir}/amrfinderplus/raw/\${prefix}.log"
-            set +e
-            amrfinder -n "\${fasta}" --threads ${params.threads} ${organismArg} -o "\${out}" > "\${log}" 2>&1
-            exit_code=\$?
-            set -e
-            if [ "\${exit_code}" -eq 0 ]; then
-                printf "%s\\t%s\\t%s\\tPASS\\t%s\\t%s\\n" "\${prefix}" "\${fasta}" "\${out}" "\${exit_code}" "completed" >> "\${status_file}"
-                processed=\$((processed + 1))
-            else
-                printf "%s\\t%s\\t%s\\tFAIL\\t%s\\t%s\\n" "\${prefix}" "\${fasta}" "\${out}" "\${exit_code}" "see \${log}" >> "\${status_file}"
-                failed=\$((failed + 1))
-            fi
-        done
-        if [ "\${processed}" -eq 0 ] && [ "\${failed}" -gt 0 ]; then
-            echo "AMRFinderPlus failed for all samples. Check ${sample_dir}/amrfinderplus/tables/amrfinderplus_sample_status.tsv and raw/*.log. If the database is missing, keep --amrfinderplus_update_db true or pre-install the AMRFinderPlus database." >&2
-            exit 1
-        fi
-    else
-        echo "AMRFinderPlus executable amrfinder was not available or no sequence directory was found." > ${sample_dir}/amrfinderplus/tables/amrfinderplus_warning.txt
-        printf "all\\t%s\\t\\tFAIL\\t127\\tAMRFinderPlus executable missing or sequence directory empty\\n" "\${sequence_dir}" >> "\${status_file}"
-        exit 1
-    fi
+    echo "Running AMRFinderPlus with ${jobs} parallel sample job(s) and ${threadsPerSample} thread(s) per sample."
+    python ${baseDir}/scripts/run_amrfinderplus_parallel.py \\
+        --sequence-dir "\${sequence_dir}" \\
+        --raw-dir ${sample_dir}/amrfinderplus/raw \\
+        --status-file "\${status_file}" \\
+        --jobs ${jobs} \\
+        --threads-per-sample ${threadsPerSample} \\
+        --update-db ${params.amrfinderplus_update_db} \\
+        ${organismArg}
     python ${baseDir}/scripts/collect_optional_tool_tables.py \\
         --raw-dir ${sample_dir}/amrfinderplus/raw \\
         --out ${sample_dir}/amrfinderplus/tables/amrfinderplus.tsv \\
@@ -2534,4 +2519,36 @@ workflow {
     
     // Display completion message
     COLLECT_RESULTS.out.final_results.collect().view { "Pipeline completed. Results saved to: ${params.outdir}" }
+}
+
+workflow.onComplete {
+    def tracePath = "${launchDir}/pipeline_trace.txt"
+    def traceFile = file(tracePath)
+    if (!traceFile.exists() || traceFile.lastModified() < pipelineStartMillis) {
+        log.info "Runtime/resource summary skipped because no current-run Nextflow trace was found."
+        return
+    }
+    def summaryPath = "${params.outdir}/pipeline_runtime_summary.tsv"
+    def taskPath = "${params.outdir}/pipeline_runtime_tasks.tsv"
+    def command = [
+        "python",
+        "${baseDir}/scripts/summarize_nextflow_trace.py",
+        "--trace",
+        tracePath,
+        "--out",
+        summaryPath,
+        "--tasks-out",
+        taskPath,
+    ]
+    try {
+        def process = command.execute()
+        process.waitFor()
+        if (process.exitValue() == 0) {
+            log.info "Runtime/resource summary saved to: ${summaryPath}"
+        } else {
+            log.warn "Runtime/resource summary failed: ${process.err.text}"
+        }
+    } catch (Exception error) {
+        log.warn "Runtime/resource summary could not be generated: ${error.message}"
+    }
 }

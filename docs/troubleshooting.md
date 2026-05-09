@@ -36,6 +36,27 @@ The standard comprehensive profile requires `ncbi`, `vfdb`, and `plasmidfinder`.
 
 Do not add `isfinder` to `--panr2_abricate_dbs` unless that database is installed and licensed for your use.
 
+## AMRFinderPlus Is Slow
+
+AMRFinderPlus runs one independent job per assembly. By default, PanResistome uses:
+
+```bash
+--amrfinderplus_jobs <threads> --amrfinderplus_threads_per_sample 1
+```
+
+For a 16-core desktop, this usually gives better throughput than one serial AMRFinderPlus loop. If memory or disk pressure is high, reduce the job count:
+
+```bash
+--amrfinderplus_jobs 4
+```
+
+Per-sample status and logs are written under:
+
+```text
+<sample>/amrfinderplus/tables/amrfinderplus_sample_status.tsv
+<sample>/amrfinderplus/raw/*.log
+```
+
 ## One Genome Fails Download
 
 NCBI records can change or temporarily disappear. The pipeline records failed accessions and continues with downloaded genomes:

@@ -7,9 +7,12 @@
 - A `large` profile that enables compact report mode, report-facing feature caps, and large-dataset safeguards while preserving complete TSV exports.
 - Draft HPC and container execution notes under `docs/hpc.md` and `docs/containers.md`.
 - Large-mode validation evidence for the existing 100-record `Klebsiella pneumoniae` input under `validation/klebsiella_pneumoniae_100/LARGE_MODE_VALIDATION_RESULTS.md`.
+- Parallel AMRFinderPlus sample execution through `--amrfinderplus_jobs` and `--amrfinderplus_threads_per_sample`, with per-sample status preserved in `amrfinderplus_sample_status.tsv`.
+- Runtime/resource summary tables generated from the Nextflow trace as `pipeline_runtime_summary.tsv` and `pipeline_runtime_tasks.tsv`.
 
 ### Changed
 - PanR2 handoff export now applies configured feature caps to presence/absence matrices and co-occurrence/proximity summaries, preserves complete proximity evidence as `feature_proximity_all.tsv`, and surfaces report-control settings in `panr2_inputs/report/report_controls.html`.
+- AMRFinderPlus now runs independent assemblies concurrently by default using `--threads` as the sample-job count and one AMRFinderPlus thread per sample, avoiding the previous serial per-genome bottleneck.
 
 ### Validated
 - The 100-record `Klebsiella pneumoniae` input completed with `-profile conda,mamba,desktop_parallel,large`, GTDB-Tk disabled, CheckM2 capped, AMRFinderPlus enabled, and parallel native feature runners. The run produced 12,838 complete standardized feature rows, 99 QC PASS calls, zero unmatched/invalid/duplicate feature rows, capped report-facing matrices/summaries, and the expected HTML report set.

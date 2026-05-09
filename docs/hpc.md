@@ -33,6 +33,7 @@ nextflow run main.nf \
 - Keep `--checkm2_threads` lower than global `--threads`; CheckM2/DIAMOND can be memory-heavy.
 - Keep GTDB-Tk disabled unless the reference database is installed on shared storage and the process has enough memory.
 - Use `--large_dataset true` or `-profile large` for large feature matrices. Complete TSVs are still exported, but HTML/report-facing summaries are capped.
+- AMRFinderPlus uses per-assembly parallel jobs. Tune `--amrfinderplus_jobs` separately from `--amrfinderplus_threads_per_sample` if a scheduler node has many cores but limited memory.
 - Put large databases under stable shared paths rather than inside transient Nextflow work directories.
 - Use `-resume` after transient scheduler or network failures.
 
@@ -50,5 +51,6 @@ After a run, start with:
 <outdir>/<organism>/panr2_inputs/manifest/report_controls.tsv
 <outdir>/<organism>/panr2_inputs/manifest/database_setup_status.tsv
 <outdir>/<organism>/panr2_inputs/manifest/schema_validation_summary.txt
+<outdir>/pipeline_runtime_summary.tsv
+<outdir>/pipeline_runtime_tasks.tsv
 ```
-

@@ -51,7 +51,12 @@ PanResistome integrates several state-of-the-art tools including:
 Optional: add `--run_gtdbtk true`, `--run_quast true`, `--run_ani true`, or `--run_mash true` to insert heavier comparative-genomics checks before ABRicate and PanR2.
 ```
 
-Each run also writes Conda environment version reports under `pipeline_versions/` so analyses can be traced back to the exact tool versions used.
+Each run also writes Conda environment version reports under `pipeline_versions/` so analyses can be traced back to the exact tool versions used. Completed runs also write compact runtime/resource summaries from the Nextflow trace:
+
+```text
+pipeline_runtime_summary.tsv
+pipeline_runtime_tasks.tsv
+```
 
 Sequence QC filtering is optional. By default, the pipeline reports QC metrics but keeps all assemblies for downstream analysis. Add `--qc_filter true` with one or more thresholds to exclude failed assemblies from ABRicate, PanR2, and later tools.
 
@@ -413,6 +418,8 @@ PanResistome/
 | `--amrfinderplus_dir` | path | - | Existing AMRFinderPlus table directory to include in PanR2 contract exports |
 | `--amrfinderplus_organism` | str | - | Optional AMRFinderPlus `--organism` value |
 | `--amrfinderplus_update_db` | bool | true | Run `amrfinder -u` before AMRFinderPlus execution so fresh installs fetch the AMRFinderPlus database |
+| `--amrfinderplus_jobs` | int | `--threads` | Parallel AMRFinderPlus sample jobs |
+| `--amrfinderplus_threads_per_sample` | int | 1 | Threads used by each AMRFinderPlus sample job |
 | `--panr2_min_identity` | float | 90 | Minimum identity threshold for PanR2 feature calls |
 | `--panr2_plot_style` | str | publication | PanR2 plot preset: `publication`, `dashboard`, or `compact` |
 | `--panr2_label_max_length` | int | 40 | Maximum feature label length in crowded plots |
