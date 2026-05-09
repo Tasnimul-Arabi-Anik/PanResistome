@@ -1,6 +1,6 @@
 # PanResistome: Scalable Pipeline for Global Antimicrobial Resistance Analysis
 
-Current pipeline version: `0.3.0`
+Current pipeline version: `0.3.1`
 
 ## Overview
 

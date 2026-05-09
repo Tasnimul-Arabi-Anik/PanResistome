@@ -59,10 +59,26 @@ Metadata interpretation:
 
 ```text
 panr2_inputs/metadata_feature_analysis/top_findings.tsv
+panr2_inputs/metadata_feature_analysis/metadata_usability_summary.tsv
 panr2_inputs/metadata_feature_analysis/metadata_column_eligibility.tsv
 panr2_inputs/metadata_feature_analysis/feature_metadata_associations.tsv
 panr2_inputs/metadata_feature_analysis/database_burden_metadata_associations.tsv
+panr2_inputs/metadata_feature_analysis/bioproject_bias_report.tsv
 ```
+
+Start with `metadata_usability_summary.tsv` before interpreting top findings. It lists missingness, cardinality, largest-group dominance, and whether a metadata column is recommended for comparative analysis.
+
+`top_findings.tsv` includes interpretation-safety columns:
+
+```text
+supporting_samples
+largest_bioproject
+largest_bioproject_fraction
+warning_flags
+interpretation_label
+```
+
+Treat findings labeled `bioproject_bias_warning`, `low_sample_warning`, or `sparse_metadata_warning` as exploratory. A high `largest_bioproject_fraction` means one study may be driving the signal.
 
 Cross-database interpretation:
 
@@ -74,6 +90,37 @@ panr2_inputs/cross_database/amrfinder_abricate_concordance.tsv
 panr2_inputs/cross_database/feature_proximity.tsv
 ```
 
+`amrfinder_abricate_concordance.tsv` classifies AMR calls as:
+
+```text
+called_by_both
+abricate_only
+amrfinderplus_only
+same_symbol_different_samples
+possible_class_match
+```
+
+`possible_class_match` means both tools reported an AMR feature in the same sample with a shared class label, but not the same normalized gene symbol.
+
+`feature_proximity.tsv` and the AMR context tables include:
+
+```text
+evidence_level
+interpretation_warning
+```
+
+Use `evidence_level` to distinguish same-contig coordinate context from weaker same-genome co-occurrence. Same-contig or within-10-kb evidence is stronger than sample-level co-occurrence, but it still does not prove transfer, expression, phenotype, or plasmid localization.
+
+HTML interpretation pages:
+
+```text
+panr2_inputs/report/top_findings.html
+panr2_inputs/report/metadata_quality_and_bias.html
+panr2_inputs/report/bioproject_bias.html
+panr2_inputs/report/cross_database_interpretation.html
+panr2_inputs/report/amrfinder_abricate_concordance.html
+```
+
 ## Interpretation Limits
 
 - Sample-level co-occurrence means features occur in the same genome, not necessarily on the same DNA molecule.
@@ -81,6 +128,7 @@ panr2_inputs/cross_database/feature_proximity.tsv
 - Proximity evidence does not prove transfer, expression, phenotype, or plasmid localization.
 - Metadata associations are exploratory unless group sizes, missingness, and BioProject/study bias are acceptable.
 - AMRFinderPlus and ABRicate can disagree because they use different detection strategies and naming conventions.
+- Concordance rows based on normalized symbols or class labels are screening summaries; inspect raw ABRicate and AMRFinderPlus tables before resolving disagreements.
 
 ## Practical Use
 
@@ -89,5 +137,6 @@ For manuscript-style interpretation, start with:
 1. QC status and failed downloads.
 2. Feature-contract validation.
 3. Top AMR, VFDB, plasmid, integron, and MLST features.
-4. Metadata column eligibility and top findings.
-5. Same-contig/proximity context for AMR-plasmid, AMR-MGE, and AMR-integron questions.
+4. Metadata usability, BioProject bias, and top findings.
+5. AMRFinderPlus-vs-ABRicate concordance.
+6. Same-contig/proximity context for AMR-plasmid, AMR-MGE, and AMR-integron questions.

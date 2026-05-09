@@ -3,7 +3,7 @@
 nextflow.enable.dsl=2
 
 // Parameters
-params.pipeline_version = '0.3.0'
+params.pipeline_version = '0.3.1'
 params.checkm = null
 params.ani = 'all'
 params.sleep = 0.5
