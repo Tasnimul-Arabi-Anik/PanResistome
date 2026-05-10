@@ -207,6 +207,39 @@ class FetchM2AdapterTests(unittest.TestCase):
             present = audit[audit["database"].isin(expected_databases)]
             self.assertEqual(set(present["status"]), {"PASS"})
 
+    def test_optional_runner_empty_tables_create_header_only_feature_tables(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_dir = Path(tmpdir) / "Klebsiella_pneumoniae"
+            metadata_dir = sample_dir / "metadata_output"
+            metadata_dir.mkdir(parents=True)
+            pd.DataFrame(
+                [{"Assembly Accession": "GCF_000000001.1", "Organism Name": "Klebsiella pneumoniae"}]
+            ).to_csv(metadata_dir / "ncbi_clean.csv", index=False)
+
+            empty_tables = [
+                ("mobsuite/tables", "mobsuite.tsv"),
+                ("prophage/tables", "prophage.tsv"),
+                ("kleborate/tables", "kleborate.tsv"),
+                ("kaptive/tables", "kaptive.tsv"),
+                ("ectyper/tables", "ectyper.tsv"),
+            ]
+            for directory, filename in empty_tables:
+                out_dir = sample_dir / directory
+                out_dir.mkdir(parents=True)
+                (out_dir / filename).write_text("sample_id\tstatus\n", encoding="utf-8")
+
+            outputs = export_contract(sample_dir, sample_dir / "panr2_inputs")
+            expected_databases = {"mobsuite", "prophage", "kleborate", "kaptive", "ectyper"}
+            self.assertTrue(expected_databases.issubset(outputs.keys()))
+            for database in expected_databases:
+                table = pd.read_csv(outputs[database], sep="\t")
+                self.assertEqual(len(table), 0)
+
+            audit = pd.read_csv(outputs["feature_completeness_audit"], sep="\t")
+            present = audit[audit["database"].isin(expected_databases)]
+            self.assertEqual(set(present["status"]), {"WARNING_EMPTY"})
+            self.assertEqual(set(present["feature_table_found"]), {True})
+
     def test_large_dataset_export_controls_limit_matrices_and_top_features(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             sample_dir = Path(tmpdir) / "Klebsiella_pneumoniae"

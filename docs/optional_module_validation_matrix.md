@@ -32,13 +32,13 @@ and at least one documented validation route.
 | IntegronFinder | Stable in native runner | Stable | Tool environment | Delftia/Klebsiella native runner validation | `integronfinder.features.tsv` | Comprehensive mode | Runtime can grow with fragmented assemblies. |
 | MLST | Stable in native runner | Stable | Tool schemes bundled by `mlst` | Delftia/Klebsiella native runner validation | `mlst.features.tsv` | Comprehensive mode | Unsupported organisms produce header-only/no-call feature tables. |
 | MobileElementFinder | Experimental runner | Stable table input | CGE tool/database environment | Synthetic PanR2 contract test; runner kept opt-in | `mobileelementfinder.features.tsv` | No | Upstream parser failures were observed on valid assemblies. |
-| ISfinder-compatible BLAST | Restricted runner | Stable table input | User-supplied authorized FASTA | Unit test for BLAST converter; synthetic PanR2 contract test | `isfinder.features.tsv` | No | PanResistome does not download or redistribute ISfinder. |
-| MOB-suite | Experimental runner | Stable table input | MOB-suite environment/database | Synthetic PanR2 contract test | `mobsuite.features.tsv` | No | Use for plasmid reconstruction only when dependencies are stable. |
-| geNomad/prophage | Experimental runner | Stable table input | User-supplied geNomad DB for runner | Synthetic PanR2 contract test | `prophage.features.tsv` | No | Table-input route is preferred until DB setup is validated. |
+| ISfinder-compatible BLAST | Restricted runner | Stable table input | User-supplied authorized FASTA | Unit test for BLAST converter; optional-runner smoke with synthetic local FASTA | `isfinder.features.tsv` | No | PanResistome does not download or redistribute ISfinder. Smoke validates orchestration, not biological ISfinder calls. |
+| MOB-suite | Experimental runner | Stable table input | MOB-suite environment/database | Synthetic PanR2 contract test; optional-runner smoke without installed tool | `mobsuite.features.tsv` | No | Smoke writes auditable header-only features when `mob_recon` is unavailable. Full runner validation still needs a working environment. |
+| geNomad/prophage | Experimental runner | Stable table input | User-supplied geNomad DB for runner | Synthetic PanR2 contract test; optional-runner smoke without DB | `prophage.features.tsv` | No | Smoke writes auditable header-only features when `--genomad_db` is absent. Full runner validation still needs a local DB. |
 | DefenseFinder | Experimental runner through PanR2 | Stable table input | DefenseFinder environment/database | Synthetic PanR2 contract test | `defensefinder.features.tsv` | No | Not part of default comprehensive mode until dependency stack is stable. |
-| Kleborate | Experimental runner | Stable table input | Kleborate environment | Synthetic PanR2 contract test | `kleborate.features.tsv` | No | Relevant mainly for Klebsiella; keep opt-in. |
-| Kaptive | Experimental runner | Stable table input | User-supplied Kaptive DB | Synthetic PanR2 contract test | `kaptive.features.tsv` | No | Requires explicit `--kaptive_db` for runner mode. |
-| ECTyper | Experimental runner | Stable table input | ECTyper environment/database | Synthetic PanR2 contract test | `ectyper.features.tsv` | No | Relevant mainly for E. coli validation. |
+| Kleborate | Experimental runner | Stable table input | Kleborate environment | Synthetic PanR2 contract test; optional-runner smoke without installed tool | `kleborate.features.tsv` | No | Relevant mainly for Klebsiella; full runner validation still needs a working tool install. |
+| Kaptive | Experimental runner | Stable table input | User-supplied Kaptive DB | Synthetic PanR2 contract test; optional-runner smoke without DB | `kaptive.features.tsv` | No | Requires explicit `--kaptive_db` for runner mode. |
+| ECTyper | Experimental runner | Stable table input | ECTyper environment/database | Synthetic PanR2 contract test; optional-runner smoke without installed tool | `ectyper.features.tsv` | No | Relevant mainly for E. coli validation. |
 | SerotypeFinder | Planned runner | Stable table input | CGE database if runner is added later | Synthetic PanR2 contract test | `serotypefinder.features.tsv` | No | Table-input only for now. |
 | SCCmecFinder | Planned runner | Stable table input | CGE database if runner is added later | Synthetic PanR2 contract test | `sccmecfinder.features.tsv` | No | Table-input only for now. |
 | GTDB-Tk | Stable heavy optional | Metric/taxonomy output | User-supplied GTDB-Tk DB | Partial/local validation only | Metrics/handoff, not feature-like by default | No | Remains disabled by default because of database size. |
@@ -57,3 +57,5 @@ The next practical validation work should focus on targeted small real runs, not
 5. **ECTyper targeted E. coli subset:** table-input first, runner mode later.
 
 Large organism validations should use these modules only after small targeted smoke tests pass.
+
+The current optional-runner smoke result is documented at `validation/optional_runner_smoke/OPTIONAL_RUNNER_SMOKE_RESULTS.md`.

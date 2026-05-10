@@ -19,10 +19,12 @@ Theme: large-dataset scalability and deployment groundwork.
 - AMRFinderPlus resumed runs now reuse existing per-sample TSV outputs and print bounded progress updates.
 - `docs/optional_module_validation_matrix.md` now separates stable default modules, stable table-input paths, experimental runners, and restricted database workflows.
 - Synthetic PanR2 contract tests cover optional table-input exports for MobileElementFinder, ISfinder, MOB-suite, prophage/geNomad, DefenseFinder, Kleborate, Kaptive, ECTyper, SerotypeFinder, and SCCmecFinder.
+- A fast optional-runner smoke test passed with CheckM2, GTDB-Tk, QUAST, ANI, Mash, AMRFinderPlus, PanR2 comprehensive mode, and legacy ABRicate/PanR disabled; see `validation/optional_runner_smoke/OPTIONAL_RUNNER_SMOKE_RESULTS.md`.
+- `--run_abricate false` now allows optional-runner/table-input validation without launching the legacy ABRicate/PanR branch when PanR2 comprehensive mode is disabled.
 
 ## Near-term targets
 
-1. Run targeted 2-10 genome smoke validations for optional runners before using them in large organism runs: MobileElementFinder, MOB-suite, geNomad, Kleborate/Kaptive, and ECTyper.
+1. Run targeted 2-10 genome smoke validations with real installed optional tools/databases before using them in large organism runs: MobileElementFinder, MOB-suite, geNomad, Kleborate/Kaptive, and ECTyper.
 2. Add a faster full ANI strategy for 300+ genomes: chunked FastANI, skani, Mash-prescreened pairs, or representative-only ANI.
 3. Treat AMRFinderPlus at 300+ genomes as a separate workstation/HPC benchmark unless nucleotide `tblastn` runtime is acceptable.
 4. Further split or chunk native feature runners if ABRicate/IntegronFinder wall time becomes limiting above 300 genomes.

@@ -130,6 +130,19 @@ ABRICATE_DATABASE_MAP = {
 
 ABRICATE_NATIVE_DATABASES = {"amr", "vfdb", "plasmidfinder"}
 
+OPTIONAL_TABLE_DATABASES = {
+    "mobileelementfinder",
+    "isfinder",
+    "mobsuite",
+    "defensefinder",
+    "prophage",
+    "kleborate",
+    "kaptive",
+    "ectyper",
+    "serotypefinder",
+    "sccmecfinder",
+}
+
 
 AMRFINDER_FEATURE_COLUMNS = [
     "Gene symbol",
@@ -601,7 +614,44 @@ def discover_raw_feature_databases(sample_dir: Path) -> set[str]:
     ]
     if any(path.exists() and any(child.is_file() for child in path.rglob("*")) for path in mlst_dirs):
         raw_databases.add("mlst")
+    for database in OPTIONAL_TABLE_DATABASES:
+        dirs = [
+            sample_dir / database,
+            sample_dir / database / "tables",
+            sample_dir / "tool_results" / database,
+        ]
+        for directory in dirs:
+            if directory.exists() and any(path.is_file() for path in directory.rglob("*")):
+                raw_databases.add(database)
+                break
     return raw_databases
+
+
+def optional_table_paths(sample_dir: Path) -> list[Path]:
+    paths: list[Path] = []
+    skip_suffixes = {
+        "_collection_status.tsv",
+        "_warning.txt",
+        "module_status.tsv",
+        "all_features.tsv",
+    }
+    for database in OPTIONAL_TABLE_DATABASES:
+        for directory in [
+            sample_dir / database,
+            sample_dir / database / "tables",
+            sample_dir / "tool_results" / database,
+        ]:
+            if not directory.exists():
+                continue
+            for path in sorted(directory.rglob("*")):
+                if not path.is_file() or path.suffix.lower() not in {".tsv", ".tab", ".csv"}:
+                    continue
+                if any(path.name.endswith(suffix) for suffix in skip_suffixes):
+                    continue
+                if path.name.endswith(".features.tsv"):
+                    continue
+                paths.append(path)
+    return paths
 
 
 def discover_feature_rows(sample_dir: Path) -> list[dict[str, str]]:
@@ -614,6 +664,13 @@ def discover_feature_rows(sample_dir: Path) -> list[dict[str, str]]:
             continue
         if "panr2_inputs" in path.parts and "features" in path.parts:
             continue
+        resolved = path.resolve()
+        if resolved in seen_paths:
+            continue
+        seen_paths.add(resolved)
+        rows.extend(parse_abricate_results(path, sample_dir, sample_map))
+
+    for path in optional_table_paths(sample_dir):
         resolved = path.resolve()
         if resolved in seen_paths:
             continue

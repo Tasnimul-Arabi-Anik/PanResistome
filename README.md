@@ -173,7 +173,7 @@ Fresh-clone validation of this command on 2026-05-08 completed all 19 Nextflow p
 
 For the fresh-user validation path, see [`docs/remote_user_validation.md`](docs/remote_user_validation.md). For the 20 release gates used to judge whether the public comprehensive workflow is reliable, see [`docs/release_reliability_checklist.md`](docs/release_reliability_checklist.md).
 
-For v0.3.0 validation status, see [`docs/validation_matrix.md`](docs/validation_matrix.md), [`docs/release_checklist_v0.3.0.md`](docs/release_checklist_v0.3.0.md), [`docs/troubleshooting.md`](docs/troubleshooting.md), and [`docs/example_klebsiella_interpretation.md`](docs/example_klebsiella_interpretation.md). For v0.4.0 large-dataset and deployment planning, see [`docs/roadmap_v0.4.0.md`](docs/roadmap_v0.4.0.md), [`validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md`](validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md), [`docs/hpc.md`](docs/hpc.md), and [`docs/containers.md`](docs/containers.md). For optional module runner/table-input status, see [`docs/optional_module_validation_matrix.md`](docs/optional_module_validation_matrix.md).
+For v0.3.0 validation status, see [`docs/validation_matrix.md`](docs/validation_matrix.md), [`docs/release_checklist_v0.3.0.md`](docs/release_checklist_v0.3.0.md), [`docs/troubleshooting.md`](docs/troubleshooting.md), and [`docs/example_klebsiella_interpretation.md`](docs/example_klebsiella_interpretation.md). For v0.4.0 large-dataset and deployment planning, see [`docs/roadmap_v0.4.0.md`](docs/roadmap_v0.4.0.md), [`validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md`](validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md), [`docs/hpc.md`](docs/hpc.md), and [`docs/containers.md`](docs/containers.md). For optional module runner/table-input status, see [`docs/optional_module_validation_matrix.md`](docs/optional_module_validation_matrix.md) and [`validation/optional_runner_smoke/OPTIONAL_RUNNER_SMOKE_RESULTS.md`](validation/optional_runner_smoke/OPTIONAL_RUNNER_SMOKE_RESULTS.md).
 
 ### Module Stability
 
@@ -404,6 +404,7 @@ PanResistome/
 | `--run_mash`            | bool  | false   | Enable Mash sketch/distance pre-screening        |
 | `--representative_only` | bool  | false   | Keep one representative per near-duplicate ANI cluster when filtering |
 | `--analysis_profile`    | str   | custom  | Preset mode: `custom`, `qc_only`, `amr_basic`, `amr_vp`, `amr_vp_mge`, or `comprehensive` |
+| `--run_abricate` | bool | true | Run the legacy ABRicate/PanR branch when PanR2 comprehensive mode is disabled; set false for optional-runner/table-input smoke validation |
 | `--export_panr2_inputs` | bool  | true    | Export standardized `panr2_inputs/` handoff directory |
 | `--run_panr2_comprehensive` | bool | false | Run comprehensive PanR2 analysis; PanResistome runs standard feature runners first by default |
 | `--panr2_setup_abricate_db` | bool | true | Run `panr setup-db` before comprehensive analysis |

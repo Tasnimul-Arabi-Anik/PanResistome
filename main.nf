@@ -72,6 +72,7 @@ params.ani_large_run_strategy = 'auto'
 params.ani_max_all_vs_all_genomes = 200
 params.run_mash = false
 params.representative_only = false
+params.run_abricate = true
 params.export_panr2_inputs = true
 params.run_panr2_comprehensive = false
 params.panr2_setup_abricate_db = true
@@ -335,6 +336,7 @@ def helpMessage() {
       --ani_max_all_vs_all_genomes Maximum genomes for automatic all-vs-all ANI in large-dataset mode [default: 200]
       --run_mash               Enable Mash sketch/distance pre-screen [default: false]
       --representative_only    Keep one representative per near-duplicate ANI cluster for PanR2 when --qc_filter true [default: false]
+      --run_abricate           Run legacy ABRicate/PanR branch when PanR2 comprehensive mode is disabled [default: true]
       --export_panr2_inputs    Export standardized panr2_inputs handoff directory [default: true]
       --analysis_profile       Optional mode: custom, qc_only, amr_basic, amr_vp, amr_vp_mge, comprehensive [default: custom]
       --run_panr2_comprehensive Run comprehensive PanR2 analysis; PanResistome runs standard feature runners first when --panr2_native_feature_runners true [default: false]
@@ -1919,7 +1921,7 @@ process ORGANISM_SPECIFIC_TYPING {
         if command -v kleborate >/dev/null 2>&1 && [ -n "\${fasta_files}" ]; then
             kleborate -a \${fasta_files} -o ${sample_dir}/kleborate/tables/kleborate.tsv || true
         else
-            echo "sample_id\\tstatus" > ${sample_dir}/kleborate/tables/kleborate.tsv
+            printf "sample_id\\tstatus\\n" > ${sample_dir}/kleborate/tables/kleborate.tsv
         fi
     fi
 
@@ -1932,7 +1934,7 @@ process ORGANISM_SPECIFIC_TYPING {
             done
             python ${baseDir}/scripts/collect_optional_tool_tables.py --raw-dir ${sample_dir}/kaptive/raw --out ${sample_dir}/kaptive/tables/kaptive.tsv --tool kaptive
         else
-            echo "sample_id\\tstatus" > ${sample_dir}/kaptive/tables/kaptive.tsv
+            printf "sample_id\\tstatus\\n" > ${sample_dir}/kaptive/tables/kaptive.tsv
         fi
     fi
 
@@ -1942,7 +1944,7 @@ process ORGANISM_SPECIFIC_TYPING {
             ectyper -i \${fasta_files} -o ${sample_dir}/ectyper/raw --cores ${params.threads} || true
             python ${baseDir}/scripts/collect_optional_tool_tables.py --raw-dir ${sample_dir}/ectyper/raw --out ${sample_dir}/ectyper/tables/ectyper.tsv --tool ectyper
         else
-            echo "sample_id\\tstatus" > ${sample_dir}/ectyper/tables/ectyper.tsv
+            printf "sample_id\\tstatus\\n" > ${sample_dir}/ectyper/tables/ectyper.tsv
         fi
     fi
     """
@@ -2547,16 +2549,22 @@ workflow {
             EXPORT_PANR2_INPUTS(PANR2_COMPREHENSIVE.out.panr2_comprehensive_results)
             COLLECT_RESULTS(EXPORT_PANR2_INPUTS.out.panr2_inputs_results)
         } else {
-            // Run abricate on each sample directory
-            ABRICATE(qc_ready_ch)
+            if (params.run_abricate) {
+                // Run abricate on each sample directory
+                ABRICATE(qc_ready_ch)
 
-            EXPORT_PANR2_INPUTS(ABRICATE.out.abricate_results)
-            
-            // Run panR on each sample directory after abricate
-            PANR(EXPORT_PANR2_INPUTS.out.panr2_inputs_results)
-            
-            // Collect final results to output directory
-            COLLECT_RESULTS(PANR.out.panr_results)
+                EXPORT_PANR2_INPUTS(ABRICATE.out.abricate_results)
+
+                // Run panR on each sample directory after abricate
+                PANR(EXPORT_PANR2_INPUTS.out.panr2_inputs_results)
+
+                // Collect final results to output directory
+                COLLECT_RESULTS(PANR.out.panr_results)
+            } else {
+                // Optional-runner/table-input validation path: export current standardized outputs without legacy ABRicate/PanR.
+                EXPORT_PANR2_INPUTS(qc_ready_ch)
+                COLLECT_RESULTS(EXPORT_PANR2_INPUTS.out.panr2_inputs_results)
+            }
         }
     }
     
