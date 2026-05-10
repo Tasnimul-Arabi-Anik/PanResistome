@@ -146,6 +146,67 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue(Path(outputs["report_controls"]).exists())
             self.assertTrue(Path(outputs["report_controls_html"]).exists())
 
+    def test_optional_table_inputs_export_contract_features(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_dir = Path(tmpdir) / "Klebsiella_pneumoniae"
+            metadata_dir = sample_dir / "metadata_output"
+            metadata_dir.mkdir(parents=True)
+            pd.DataFrame(
+                [
+                    {"Assembly Accession": "GCF_000000001.1", "Organism Name": "Klebsiella pneumoniae"},
+                    {"Assembly Accession": "GCF_000000002.1", "Organism Name": "Klebsiella pneumoniae"},
+                ]
+            ).to_csv(metadata_dir / "ncbi_clean.csv", index=False)
+
+            header = "#FILE\tSEQUENCE\tSTART\tEND\tGENE\t%COVERAGE\t%IDENTITY\tDATABASE\tACCESSION\tPRODUCT\tRESISTANCE\n"
+            optional_tables = [
+                ("mobileelementfinder", "mobileelementfinder_results.tab", "IS26", "mobile_element"),
+                ("isfinder/tables", "isfinder_results.tab", "ISEcp1", "insertion_sequence"),
+                ("mobsuite/tables", "mobsuite_results.tab", "IncFIB", "replicon"),
+                ("prophage/tables", "prophage_results.tab", "region_1", "prophage"),
+                ("defensefinder/tables", "defensefinder_results.tab", "RM_Type_I", "defense_system"),
+                ("kleborate/tables", "kleborate_results.tab", "K_locus_KL1", "capsule_locus"),
+                ("kaptive/tables", "kaptive_results.tab", "KL1", "locus_type"),
+                ("ectyper/tables", "ectyper_results.tab", "O1:H7", "serotype"),
+                ("serotypefinder/tables", "serotypefinder_results.tab", "O2", "serotype"),
+                ("sccmecfinder/tables", "sccmecfinder_results.tab", "SCCmec_IV", "cassette_type"),
+            ]
+            for index, (directory, filename, feature_id, category) in enumerate(optional_tables, start=1):
+                out_dir = sample_dir / directory
+                out_dir.mkdir(parents=True)
+                sample = "GCF_000000001.1" if index % 2 else "GCF_000000002.1"
+                database = directory.split("/")[0]
+                (out_dir / filename).write_text(
+                    header
+                    + f"{sample}.fna\tcontig{index}\t{index * 10}\t{index * 10 + 50}\t{feature_id}\t100\t99\t{database}\tACC{index}\t{category}\t{category}\n",
+                    encoding="utf-8",
+                )
+
+            outputs = export_contract(sample_dir, sample_dir / "panr2_inputs")
+            all_features = pd.read_csv(outputs["all_features"], sep="\t")
+            expected_databases = {
+                "mobileelementfinder",
+                "isfinder",
+                "mobsuite",
+                "prophage",
+                "defensefinder",
+                "kleborate",
+                "kaptive",
+                "ectyper",
+                "serotypefinder",
+                "sccmecfinder",
+            }
+            self.assertEqual(set(all_features["database"]), expected_databases)
+            for database in expected_databases:
+                self.assertTrue(Path(outputs[database]).exists())
+                tool_values = set(all_features.loc[all_features["database"] == database, "tool"])
+                self.assertEqual(tool_values, {database})
+            self.assertEqual(len(pd.read_csv(outputs["unmatched_features"])), 0)
+            self.assertEqual(len(pd.read_csv(outputs["invalid_feature_rows"])), 0)
+            audit = pd.read_csv(outputs["feature_completeness_audit"], sep="\t")
+            present = audit[audit["database"].isin(expected_databases)]
+            self.assertEqual(set(present["status"]), {"PASS"})
+
     def test_large_dataset_export_controls_limit_matrices_and_top_features(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             sample_dir = Path(tmpdir) / "Klebsiella_pneumoniae"

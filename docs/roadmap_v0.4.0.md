@@ -17,15 +17,18 @@ Theme: large-dataset scalability and deployment groundwork.
 - The 300-record validation produced 299 downloaded genomes, 299 QC PASS calls, 36,638 standardized feature rows, zero unmatched/invalid/duplicate feature rows, and a compact large-mode report.
 - `--ani_large_run_strategy auto|all|skip` and `--ani_max_all_vs_all_genomes` now protect large-dataset runs from accidental all-vs-all ANI launches while preserving ANI audit/status outputs.
 - AMRFinderPlus resumed runs now reuse existing per-sample TSV outputs and print bounded progress updates.
+- `docs/optional_module_validation_matrix.md` now separates stable default modules, stable table-input paths, experimental runners, and restricted database workflows.
+- Synthetic PanR2 contract tests cover optional table-input exports for MobileElementFinder, ISfinder, MOB-suite, prophage/geNomad, DefenseFinder, Kleborate, Kaptive, ECTyper, SerotypeFinder, and SCCmecFinder.
 
 ## Near-term targets
 
-1. Add a faster full ANI strategy for 300+ genomes: chunked FastANI, skani, Mash-prescreened pairs, or representative-only ANI.
-2. Treat AMRFinderPlus at 300+ genomes as a separate workstation/HPC benchmark unless nucleotide `tblastn` runtime is acceptable.
-3. Further split or chunk native feature runners if ABRicate/IntegronFinder wall time becomes limiting above 300 genomes.
-4. Validate large-dataset mode with a synthetic enlarged feature table if a faster regression fixture is needed.
-5. Improve report navigation for compact/publication/exploratory modes.
-6. Draft experimental Docker/Apptainer/SLURM profiles only after a container smoke test.
+1. Run targeted 2-10 genome smoke validations for optional runners before using them in large organism runs: MobileElementFinder, MOB-suite, geNomad, Kleborate/Kaptive, and ECTyper.
+2. Add a faster full ANI strategy for 300+ genomes: chunked FastANI, skani, Mash-prescreened pairs, or representative-only ANI.
+3. Treat AMRFinderPlus at 300+ genomes as a separate workstation/HPC benchmark unless nucleotide `tblastn` runtime is acceptable.
+4. Further split or chunk native feature runners if ABRicate/IntegronFinder wall time becomes limiting above 300 genomes.
+5. Validate large-dataset mode with a synthetic enlarged feature table if a faster regression fixture is needed.
+6. Improve report navigation for compact/publication/exploratory modes.
+7. Draft experimental Docker/Apptainer/SLURM profiles only after a container smoke test.
 
 ## Not v0.4.0 blockers
 

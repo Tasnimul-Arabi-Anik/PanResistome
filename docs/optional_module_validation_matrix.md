@@ -1,0 +1,59 @@
+# Optional Module Validation Matrix
+
+This matrix separates validated default behavior from optional and experimental modules. The rule for optional modules is:
+
+```text
+No module should be advertised as stable runner mode until it has:
+raw output preservation,
+module status or audit reporting,
+PanR2-compatible feature export,
+feature-completeness audit coverage,
+and at least one documented validation route.
+```
+
+## Status Key
+
+| Status | Meaning |
+| --- | --- |
+| Stable | Validated in real or release-gate runs and suitable for normal use. |
+| Stable table input | Precomputed tables are accepted and exported into the PanR2 contract. Runner mode may still be experimental. |
+| Experimental runner | Runner exists but dependency/database setup or upstream behavior is not yet validated enough for default use. |
+| Restricted | Requires user-supplied authorized data or database paths; PanResistome must not download or redistribute the database. |
+| Planned | Documented roadmap item, not a supported run path yet. |
+
+## Validation Matrix
+
+| Module | Runner status | Table-input status | Database required | Validated route | PanR2 feature export | Default? | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| ABRicate NCBI AMR | Stable | Stable | Bundled/setup ABRicate DB | Delftia fresh-clone, native runner, Klebsiella 100/300 | `amr.features.tsv` | Comprehensive mode | Primary assembled-genome AMR screen. |
+| ABRicate VFDB | Stable | Stable | Bundled/setup ABRicate DB | Delftia/Klebsiella validation | `vfdb.features.tsv` | Comprehensive mode | Main virulence feature screen. |
+| ABRicate PlasmidFinder | Stable | Stable | Bundled/setup ABRicate DB | Delftia/Klebsiella validation | `plasmidfinder.features.tsv` | Comprehensive mode | Replicon screen, not plasmid reconstruction. |
+| AMRFinderPlus | Stable optional | Stable | Auto-updated AMRFinderPlus DB | Delftia/Klebsiella validation; 300-genome run documents runtime limit | `amrfinderplus.features.tsv` | No | Strong AMR module, but nucleotide mode can be slow on 300+ genomes. |
+| IntegronFinder | Stable in native runner | Stable | Tool environment | Delftia/Klebsiella native runner validation | `integronfinder.features.tsv` | Comprehensive mode | Runtime can grow with fragmented assemblies. |
+| MLST | Stable in native runner | Stable | Tool schemes bundled by `mlst` | Delftia/Klebsiella native runner validation | `mlst.features.tsv` | Comprehensive mode | Unsupported organisms produce header-only/no-call feature tables. |
+| MobileElementFinder | Experimental runner | Stable table input | CGE tool/database environment | Synthetic PanR2 contract test; runner kept opt-in | `mobileelementfinder.features.tsv` | No | Upstream parser failures were observed on valid assemblies. |
+| ISfinder-compatible BLAST | Restricted runner | Stable table input | User-supplied authorized FASTA | Unit test for BLAST converter; synthetic PanR2 contract test | `isfinder.features.tsv` | No | PanResistome does not download or redistribute ISfinder. |
+| MOB-suite | Experimental runner | Stable table input | MOB-suite environment/database | Synthetic PanR2 contract test | `mobsuite.features.tsv` | No | Use for plasmid reconstruction only when dependencies are stable. |
+| geNomad/prophage | Experimental runner | Stable table input | User-supplied geNomad DB for runner | Synthetic PanR2 contract test | `prophage.features.tsv` | No | Table-input route is preferred until DB setup is validated. |
+| DefenseFinder | Experimental runner through PanR2 | Stable table input | DefenseFinder environment/database | Synthetic PanR2 contract test | `defensefinder.features.tsv` | No | Not part of default comprehensive mode until dependency stack is stable. |
+| Kleborate | Experimental runner | Stable table input | Kleborate environment | Synthetic PanR2 contract test | `kleborate.features.tsv` | No | Relevant mainly for Klebsiella; keep opt-in. |
+| Kaptive | Experimental runner | Stable table input | User-supplied Kaptive DB | Synthetic PanR2 contract test | `kaptive.features.tsv` | No | Requires explicit `--kaptive_db` for runner mode. |
+| ECTyper | Experimental runner | Stable table input | ECTyper environment/database | Synthetic PanR2 contract test | `ectyper.features.tsv` | No | Relevant mainly for E. coli validation. |
+| SerotypeFinder | Planned runner | Stable table input | CGE database if runner is added later | Synthetic PanR2 contract test | `serotypefinder.features.tsv` | No | Table-input only for now. |
+| SCCmecFinder | Planned runner | Stable table input | CGE database if runner is added later | Synthetic PanR2 contract test | `sccmecfinder.features.tsv` | No | Table-input only for now. |
+| GTDB-Tk | Stable heavy optional | Metric/taxonomy output | User-supplied GTDB-Tk DB | Partial/local validation only | Metrics/handoff, not feature-like by default | No | Remains disabled by default because of database size. |
+| QUAST | Stable optional | Metrics | None or optional reference | Delftia/Klebsiella validation | `assembly_metrics.tsv` | No | Assembly structure QC. |
+| ANI/skani/FastANI | Stable optional with large-run guard | Metrics/features | Tool environment | Delftia/Klebsiella validation; 300-run guard | `ani.features.tsv`/metrics | No | All-vs-all ANI is skipped automatically in large mode above threshold unless forced. |
+| Mash | Stable optional | Metrics | Tool environment | Delftia/Klebsiella validation | `mash_metrics.tsv` | No | Fast screening layer, not final taxonomy. |
+
+## Current Validation Gaps
+
+The next practical validation work should focus on targeted small real runs, not new modules:
+
+1. **MobileElementFinder runner retry:** run on a small, controlled 5-10 genome subset and document parser behavior.
+2. **MOB-suite runner smoke:** run on 2-5 assemblies with a working environment; verify plasmid-level outputs and PanR2 feature rows.
+3. **geNomad runner smoke:** run only when a local geNomad database path is available; verify prophage feature export.
+4. **Kleborate/Kaptive targeted Klebsiella subset:** table-input first, then runner mode if databases are available.
+5. **ECTyper targeted E. coli subset:** table-input first, runner mode later.
+
+Large organism validations should use these modules only after small targeted smoke tests pass.

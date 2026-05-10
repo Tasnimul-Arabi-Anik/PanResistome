@@ -11,6 +11,7 @@
 - Runtime/resource summary tables generated from the Nextflow trace as `pipeline_runtime_summary.tsv` and `pipeline_runtime_tasks.tsv`.
 - A 300-record BioProject-diverse `Klebsiella pneumoniae` validation input and desktop-safe large-mode validation report under `validation/klebsiella_pneumoniae_300/`.
 - Large-run ANI controls through `--ani_large_run_strategy auto|all|skip` and `--ani_max_all_vs_all_genomes`, with `ani/analysis/ani_run_status.tsv` documenting whether all-vs-all ANI ran or was skipped.
+- An optional module validation matrix at `docs/optional_module_validation_matrix.md`, separating stable default modules, stable table-input paths, experimental runners, restricted database workflows, and remaining validation gaps.
 
 ### Changed
 - PanR2 handoff export now applies configured feature caps to presence/absence matrices and co-occurrence/proximity summaries, preserves complete proximity evidence as `feature_proximity_all.tsv`, and surfaces report-control settings in `panr2_inputs/report/report_controls.html`.
@@ -18,6 +19,10 @@
 - AMRFinderPlus per-sample execution now reuses existing non-empty TSV outputs, making interrupted large runs safer to resume without recomputing completed assemblies.
 - AMRFinderPlus now prints periodic per-sample progress and records per-sample runtime in `amrfinderplus_sample_status.tsv`.
 - In large-dataset mode, ANI `auto` strategy skips all-vs-all ANI above 200 genomes by default instead of silently launching a long FastANI/skani all-vs-all run; users can force full ANI with `--ani_large_run_strategy all`.
+- PanR2 contract export now preserves non-ABRicate tool names for optional ABRicate-style table inputs such as ISfinder, MOB-suite, prophage/geNomad, DefenseFinder, and organism-specific typing tables.
+
+### Tested
+- Synthetic PanR2 contract tests now cover optional table-input exports for MobileElementFinder, ISfinder, MOB-suite, prophage/geNomad, DefenseFinder, Kleborate, Kaptive, ECTyper, SerotypeFinder, and SCCmecFinder.
 
 ### Validated
 - The 100-record `Klebsiella pneumoniae` input completed with `-profile conda,mamba,desktop_parallel,large`, GTDB-Tk disabled, CheckM2 capped, AMRFinderPlus enabled, and parallel native feature runners. The run produced 12,838 complete standardized feature rows, 99 QC PASS calls, zero unmatched/invalid/duplicate feature rows, capped report-facing matrices/summaries, and the expected HTML report set.

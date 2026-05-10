@@ -173,7 +173,7 @@ Fresh-clone validation of this command on 2026-05-08 completed all 19 Nextflow p
 
 For the fresh-user validation path, see [`docs/remote_user_validation.md`](docs/remote_user_validation.md). For the 20 release gates used to judge whether the public comprehensive workflow is reliable, see [`docs/release_reliability_checklist.md`](docs/release_reliability_checklist.md).
 
-For v0.3.0 validation status, see [`docs/validation_matrix.md`](docs/validation_matrix.md), [`docs/release_checklist_v0.3.0.md`](docs/release_checklist_v0.3.0.md), [`docs/troubleshooting.md`](docs/troubleshooting.md), and [`docs/example_klebsiella_interpretation.md`](docs/example_klebsiella_interpretation.md). For v0.4.0 large-dataset and deployment planning, see [`docs/roadmap_v0.4.0.md`](docs/roadmap_v0.4.0.md), [`validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md`](validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md), [`docs/hpc.md`](docs/hpc.md), and [`docs/containers.md`](docs/containers.md).
+For v0.3.0 validation status, see [`docs/validation_matrix.md`](docs/validation_matrix.md), [`docs/release_checklist_v0.3.0.md`](docs/release_checklist_v0.3.0.md), [`docs/troubleshooting.md`](docs/troubleshooting.md), and [`docs/example_klebsiella_interpretation.md`](docs/example_klebsiella_interpretation.md). For v0.4.0 large-dataset and deployment planning, see [`docs/roadmap_v0.4.0.md`](docs/roadmap_v0.4.0.md), [`validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md`](validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md), [`docs/hpc.md`](docs/hpc.md), and [`docs/containers.md`](docs/containers.md). For optional module runner/table-input status, see [`docs/optional_module_validation_matrix.md`](docs/optional_module_validation_matrix.md).
 
 ### Module Stability
 
@@ -190,7 +190,7 @@ For v0.3.0 validation status, see [`docs/validation_matrix.md`](docs/validation_
 | AMRFinderPlus | Stable optional | No | Remote-style Delftia run | Auto-fetches the AMRFinderPlus database by default and exports PanR2 feature tables |
 | MobileElementFinder | Active development, opt-in | No | Real-data parser failure observed | Use `--panr2_run_mobileelementfinder true` when needed; upstream JSON parser can fail on some assemblies |
 | IntegronFinder/MLST | Active development | No | Native-runner validation | Run by PanResistome native feature-runner stage by default, then passed to PanR2; MLST can be header-only for unsupported organisms |
-| MOB-suite/geNomad/typing tools | Experimental runners, stable table passthrough | No | Syntax/export path | Prefer precomputed tables for difficult DB setups |
+| MOB-suite/geNomad/typing tools | Experimental runners, stable table passthrough | No | Synthetic PanR2 contract export path | Prefer precomputed tables for difficult DB setups; see the optional module validation matrix |
 | Database/tool preflight audit | Stable | Comprehensive profile | Unit test + comprehensive path | Writes `panr2_inputs/manifest/database_setup_status.tsv` and fails required missing databases/tools |
 | Native runner merge audit | Stable | Native feature runners | Delftia/Klebsiella validation | Writes `panr2_inputs/manifest/native_runner_merge_audit.tsv` with expected vs observed raw table counts |
 

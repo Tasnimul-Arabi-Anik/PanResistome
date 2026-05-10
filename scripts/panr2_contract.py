@@ -128,6 +128,8 @@ ABRICATE_DATABASE_MAP = {
     "sccmecfinder": "sccmecfinder",
 }
 
+ABRICATE_NATIVE_DATABASES = {"amr", "vfdb", "plasmidfinder"}
+
 
 AMRFINDER_FEATURE_COLUMNS = [
     "Gene symbol",
@@ -339,6 +341,13 @@ def database_from_abricate_path(path: Path, sample_dir: Path) -> str:
     return "feature"
 
 
+def tool_for_feature_table(database: str, row: dict[str, str]) -> str:
+    explicit_tool = first_value(row, ["tool", "Tool", "TOOL"], "")
+    if explicit_tool:
+        return explicit_tool
+    return "abricate" if database in ABRICATE_NATIVE_DATABASES else database
+
+
 def parse_abricate_results(path: Path, sample_dir: Path, sample_map: dict[str, str]) -> list[dict[str, str]]:
     rows = []
     database = database_from_abricate_path(path, sample_dir)
@@ -358,7 +367,7 @@ def parse_abricate_results(path: Path, sample_dir: Path, sample_map: dict[str, s
                 contig=first_value(row, ["SEQUENCE", "contig", "sequence"], ""),
                 start=first_value(row, ["START", "start"], ""),
                 end=first_value(row, ["END", "end"], ""),
-                tool="abricate" if database not in {"mobsuite", "prophage", "defensefinder", "kleborate", "kaptive", "ectyper", "serotypefinder", "sccmecfinder"} else database,
+                tool=tool_for_feature_table(database, row),
                 sample_map=sample_map,
                 product=first_value(row, ["PRODUCT", "product"], ""),
                 drug_class=first_value(row, ["RESISTANCE", "resistance"], ""),
