@@ -606,6 +606,94 @@ def parse_mlst_raw_table(path: Path, sample_map: dict[str, str]) -> list[dict[st
     return rows
 
 
+def _find_suffix_value(row: dict[str, str], suffixes: list[str]) -> str:
+    for key, value in row.items():
+        lowered = key.lower()
+        if any(lowered.endswith(suffix.lower()) for suffix in suffixes):
+            text = str(value or "").strip()
+            if not is_missing_value(text):
+                return text
+    return ""
+
+
+def parse_kleborate_tables(path: Path, sample_map: dict[str, str]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for row in read_table(path):
+        sample = first_value(row, ["strain", "Input_file_name", "sample_id"], path.stem)
+        if not sample:
+            continue
+
+        st_value = _find_suffix_value(row, ["__mlst__ST"]) or first_value(row, ["ST"], "")
+        st_template = "{}" if str(st_value).upper().startswith("ST") else "ST_{}"
+        feature_specs = [
+            ("sequence_type", st_value, st_template),
+            ("virulence_score", _find_suffix_value(row, ["__virulence_score__virulence_score"]) or first_value(row, ["virulence_score"], ""), "virulence_score_{}"),
+            ("resistance_score", _find_suffix_value(row, ["__resistance_score__resistance_score"]) or first_value(row, ["resistance_score"], ""), "resistance_score_{}"),
+            ("resistance_class_count", _find_suffix_value(row, ["__resistance_class_count__num_resistance_classes"]) or first_value(row, ["num_resistance_classes"], ""), "resistance_classes_{}"),
+            ("k_locus", _find_suffix_value(row, ["__kaptive__K_locus"]), "{}"),
+            ("k_type", _find_suffix_value(row, ["__kaptive__K_type"]), "{}"),
+            ("o_locus", _find_suffix_value(row, ["__kaptive__O_locus"]), "{}"),
+            ("o_type", _find_suffix_value(row, ["__kaptive__O_type"]), "{}"),
+            ("yersiniabactin", _find_suffix_value(row, ["__ybst__Yersiniabactin"]), "yersiniabactin_{}"),
+            ("colibactin", _find_suffix_value(row, ["__cbst__Colibactin"]), "colibactin_{}"),
+            ("aerobactin", _find_suffix_value(row, ["__abst__Aerobactin"]), "aerobactin_{}"),
+            ("salmochelin", _find_suffix_value(row, ["__smst__Salmochelin"]), "salmochelin_{}"),
+            ("rmpadc", _find_suffix_value(row, ["__rmst__RmpADC"]), "rmpadc_{}"),
+            ("wzi", _find_suffix_value(row, ["__wzi__wzi"]), "wzi_{}"),
+        ]
+        for category, value, template in feature_specs:
+            if is_missing_value(value):
+                continue
+            clean_value = str(value).split(";")[0].strip()
+            if is_missing_value(clean_value):
+                continue
+            feature_id = template.format(clean_value.replace(" ", "_"))
+            if is_placeholder_mlst_feature(feature_id):
+                continue
+            rows.append(
+                contract_row(
+                    sample,
+                    "kleborate",
+                    feature_id,
+                    feature_category=category,
+                    tool="kleborate",
+                    sample_map=sample_map,
+                    feature_name=feature_id,
+                    feature_subcategory=category,
+                    source_table=str(path),
+                    source_file=sample,
+                    raw_feature_id=value,
+                    raw_category=category,
+                    evidence_type="kleborate_call",
+                )
+            )
+
+        for key, value in row.items():
+            if not key.endswith("__amr__Bla_chr") and not key.endswith("__amr__Bla_acquired"):
+                continue
+            for gene in re.split(r"[;,]", str(value or "")):
+                gene = gene.strip().replace("^", "")
+                if is_missing_value(gene):
+                    continue
+                rows.append(
+                    contract_row(
+                        sample,
+                        "kleborate",
+                        gene,
+                        feature_category="amr_marker",
+                        tool="kleborate",
+                        sample_map=sample_map,
+                        feature_name=gene,
+                        source_table=str(path),
+                        source_file=sample,
+                        raw_feature_id=gene,
+                        raw_category=key,
+                        evidence_type="kleborate_amr_marker",
+                    )
+                )
+    return rows
+
+
 def discover_raw_feature_databases(sample_dir: Path) -> set[str]:
     raw_databases: set[str] = set()
     mlst_dirs = [
@@ -675,7 +763,10 @@ def discover_feature_rows(sample_dir: Path) -> list[dict[str, str]]:
         if resolved in seen_paths:
             continue
         seen_paths.add(resolved)
-        rows.extend(parse_abricate_results(path, sample_dir, sample_map))
+        if "kleborate" in path.parts:
+            rows.extend(parse_kleborate_tables(path, sample_map))
+        else:
+            rows.extend(parse_abricate_results(path, sample_dir, sample_map))
 
     for path in sorted((sample_dir / "amrfinderplus").rglob("*")):
         if path.is_file() and path.suffix.lower() in {".tsv", ".tab", ".csv"}:

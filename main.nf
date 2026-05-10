@@ -1767,11 +1767,22 @@ process MOBSUITE_ANALYSIS {
     fi
 
     mkdir -p ${sample_dir}/mobsuite/raw ${sample_dir}/mobsuite/tables
+    status_file=${sample_dir}/mobsuite/module_status.tsv
+    printf "module\\tenabled\\tstarted\\tcompleted\\tstatus\\tsamples_input\\tsamples_processed\\tsamples_failed\\traw_tables_created\\tfeature_rows_created\\tunique_features_created\\toutput_dir\\tmessage\\n" > "\${status_file}"
+    started=\$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    samples_input=0
+    samples_processed=0
+    samples_failed=0
     if command -v mob_recon >/dev/null 2>&1 && [ -d "\${sequence_dir}" ]; then
         for fasta in \$(find "\${sequence_dir}" -name "*.fna" | sort); do
+            samples_input=\$((samples_input + 1))
             prefix=\$(basename "\${fasta}" .fna)
             mkdir -p "${sample_dir}/mobsuite/raw/\${prefix}"
-            mob_recon --infile "\${fasta}" --outdir "${sample_dir}/mobsuite/raw/\${prefix}" --num_threads ${params.threads} || true
+            if mob_recon --infile "\${fasta}" --outdir "${sample_dir}/mobsuite/raw/\${prefix}" --num_threads ${params.threads} > "${sample_dir}/mobsuite/raw/\${prefix}/mob_recon.stdout" 2> "${sample_dir}/mobsuite/raw/\${prefix}/mob_recon.stderr"; then
+                samples_processed=\$((samples_processed + 1))
+            else
+                samples_failed=\$((samples_failed + 1))
+            fi
         done
     else
         echo "MOB-suite executable mob_recon was not available or no sequence directory was found." > ${sample_dir}/mobsuite/tables/mobsuite_warning.txt
@@ -1780,6 +1791,23 @@ process MOBSUITE_ANALYSIS {
         --raw-dir ${sample_dir}/mobsuite/raw \\
         --out ${sample_dir}/mobsuite/tables/mobsuite.tsv \\
         --tool mobsuite
+    feature_rows=\$(awk 'NR > 1 {count++} END {print count + 0}' ${sample_dir}/mobsuite/tables/mobsuite.tsv 2>/dev/null || echo 0)
+    unique_features=\$(awk -F '\\t' 'NR > 1 {for (i=1; i<=NF; i++) if (\$i != "") seen[\$i]=1} END {print length(seen)}' ${sample_dir}/mobsuite/tables/mobsuite.tsv 2>/dev/null || echo 0)
+    status=PASS
+    message="MOB-suite completed and parseable tables were collected."
+    if [ "\${samples_input}" -eq 0 ]; then
+        status=WARNING_EMPTY
+        message="No FASTA files found for MOB-suite."
+    elif [ "\${samples_failed}" -gt 0 ]; then
+        status=WARNING_PARTIAL
+        message="MOB-suite had sample failures; inspect mobsuite/raw/*/mob_recon.stderr."
+    fi
+    if [ "\${feature_rows}" -eq 0 ]; then
+        status=WARNING_EMPTY
+        message="\${message} No MOB-suite feature rows were collected."
+    fi
+    printf "mobsuite\\ttrue\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n" \\
+        "\${started}" "\$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "\${status}" "\${samples_input}" "\${samples_processed}" "\${samples_failed}" "\${samples_processed}" "\${feature_rows}" "\${unique_features}" "${sample_dir}/mobsuite" "\${message}" >> "\${status_file}"
     """
 }
 
@@ -1917,9 +1945,10 @@ process ORGANISM_SPECIFIC_TYPING {
     fasta_files=\$(find "\${sequence_dir}" -name "*.fna" | sort 2>/dev/null || true)
 
     if [ "${runKleborate}" = "true" ]; then
-        mkdir -p ${sample_dir}/kleborate/tables
+        mkdir -p ${sample_dir}/kleborate/raw ${sample_dir}/kleborate/tables
         if command -v kleborate >/dev/null 2>&1 && [ -n "\${fasta_files}" ]; then
-            kleborate -a \${fasta_files} -o ${sample_dir}/kleborate/tables/kleborate.tsv || true
+            kleborate -a \${fasta_files} -o ${sample_dir}/kleborate/raw --preset kpsc || true
+            python ${baseDir}/scripts/collect_optional_tool_tables.py --raw-dir ${sample_dir}/kleborate/raw --out ${sample_dir}/kleborate/tables/kleborate.tsv --tool kleborate
         else
             printf "sample_id\\tstatus\\n" > ${sample_dir}/kleborate/tables/kleborate.tsv
         fi

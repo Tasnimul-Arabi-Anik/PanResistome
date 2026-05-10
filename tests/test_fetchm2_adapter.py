@@ -240,6 +240,41 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertEqual(set(present["status"]), {"WARNING_EMPTY"})
             self.assertEqual(set(present["feature_table_found"]), {True})
 
+    def test_kleborate_real_output_exports_biological_features(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_dir = Path(tmpdir) / "Klebsiella_pneumoniae"
+            metadata_dir = sample_dir / "metadata_output"
+            kleborate_dir = sample_dir / "kleborate" / "tables"
+            metadata_dir.mkdir(parents=True)
+            kleborate_dir.mkdir(parents=True)
+            pd.DataFrame(
+                [{"Assembly Accession": "GCA_041085125.2", "Organism Name": "Klebsiella pneumoniae"}]
+            ).to_csv(metadata_dir / "ncbi_clean.csv", index=False)
+            (metadata_dir / "sample_map.csv").write_text(
+                "sample_id,Assembly Accession\nGCA_041085125.2_ASM4108512v2_genomic,GCA_041085125.2\n",
+                encoding="utf-8",
+            )
+            (kleborate_dir / "kleborate.tsv").write_text(
+                "sample_id\ttool\tstrain\tklebsiella_pneumo_complex__mlst__ST\t"
+                "klebsiella_pneumo_complex__virulence_score__virulence_score\t"
+                "klebsiella_pneumo_complex__resistance_score__resistance_score\t"
+                "klebsiella__ybst__Yersiniabactin\t"
+                "klebsiella_pneumo_complex__kaptive__K_locus\t"
+                "klebsiella_pneumo_complex__kaptive__O_type\t"
+                "klebsiella_pneumo_complex__amr__Bla_chr\n"
+                "GCA_041085125.2_ASM4108512v2_genomic\tkleborate\t"
+                "GCA_041085125.2_ASM4108512v2_genomic\tST147\t1\t0\tybt 9; ICEKp?\tKL64\tO2α\tSHV-11^\n",
+                encoding="utf-8",
+            )
+
+            outputs = export_contract(sample_dir, sample_dir / "panr2_inputs")
+            features = pd.read_csv(outputs["kleborate"], sep="\t")
+            feature_ids = set(features["feature_id"])
+            self.assertTrue({"ST147", "virulence_score_1", "resistance_score_0", "KL64", "O2α", "SHV-11"}.issubset(feature_ids))
+            self.assertIn("yersiniabactin_ybt_9", ";".join(feature_ids))
+            self.assertEqual(set(features["tool"]), {"kleborate"})
+            self.assertEqual(set(features["assembly_accession"]), {"GCA_041085125.2"})
+
     def test_large_dataset_export_controls_limit_matrices_and_top_features(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             sample_dir = Path(tmpdir) / "Klebsiella_pneumoniae"

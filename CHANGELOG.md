@@ -13,6 +13,7 @@
 - Large-run ANI controls through `--ani_large_run_strategy auto|all|skip` and `--ani_max_all_vs_all_genomes`, with `ani/analysis/ani_run_status.tsv` documenting whether all-vs-all ANI ran or was skipped.
 - An optional module validation matrix at `docs/optional_module_validation_matrix.md`, separating stable default modules, stable table-input paths, experimental runners, restricted database workflows, and remaining validation gaps.
 - Fast optional-runner smoke validation evidence under `validation/optional_runner_smoke/`, using local fixtures and unrelated heavy/default modules disabled.
+- First real biological optional-runner validation evidence under `validation/optional_runner_biological/`, using two complete Klebsiella genomes with Kleborate and MOB-suite enabled.
 
 ### Changed
 - PanR2 handoff export now applies configured feature caps to presence/absence matrices and co-occurrence/proximity summaries, preserves complete proximity evidence as `feature_proximity_all.tsv`, and surfaces report-control settings in `panr2_inputs/report/report_controls.html`.
@@ -25,10 +26,15 @@
 - `--run_abricate false` can now bypass the legacy ABRicate/PanR branch when PanR2 comprehensive mode is disabled, allowing optional-runner/table-input smoke validation to export PanR2 inputs directly.
 - PanR2 contract export now creates header-only feature tables with `WARNING_EMPTY` audit status for enabled optional modules that produced raw output but no biological feature rows.
 - Kleborate, Kaptive, and ECTyper placeholder outputs now use valid tab-separated headers.
+- Kleborate runner mode now uses the required `--preset kpsc` argument for Kleborate v3 and collects output tables from the Kleborate output directory.
+- PanR2 contract export now converts real Kleborate output into standardized features for ST, virulence/resistance scores, K/O loci, siderophore markers, wzi, and AMR markers.
+- MOB-suite runner mode now preserves per-sample stdout/stderr and writes `mobsuite/module_status.tsv`, making broken local installations visible in the PanR2 module status summary.
 
 ### Tested
 - Synthetic PanR2 contract tests now cover optional table-input exports for MobileElementFinder, ISfinder, MOB-suite, prophage/geNomad, DefenseFinder, Kleborate, Kaptive, ECTyper, SerotypeFinder, and SCCmecFinder.
 - Optional-runner smoke validation completed on two local fixture assemblies with ISfinder-compatible BLAST, MOB-suite, geNomad/prophage, Kleborate, Kaptive, ECTyper, PanR2 export, and result collection enabled while CheckM2, GTDB-Tk, QUAST, ANI, Mash, AMRFinderPlus, PanR2 comprehensive mode, and legacy ABRicate/PanR were disabled.
+- Kleborate biological validation completed on two complete `Klebsiella pneumoniae` assemblies, producing 25 standardized `kleborate.features.tsv` rows with zero unmatched, invalid, or duplicate feature rows.
+- MOB-suite biological validation was attempted on the same two assemblies; orchestration completed, but the cached local MOB-suite environment failed with `ModuleNotFoundError: mob_suite.mob_recon`, now recorded in module status and per-sample stderr logs.
 
 ### Validated
 - The 100-record `Klebsiella pneumoniae` input completed with `-profile conda,mamba,desktop_parallel,large`, GTDB-Tk disabled, CheckM2 capped, AMRFinderPlus enabled, and parallel native feature runners. The run produced 12,838 complete standardized feature rows, 99 QC PASS calls, zero unmatched/invalid/duplicate feature rows, capped report-facing matrices/summaries, and the expected HTML report set.
