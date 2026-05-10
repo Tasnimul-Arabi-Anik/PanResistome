@@ -33,7 +33,7 @@ and at least one documented validation route.
 | MLST | Stable in native runner | Stable | Tool schemes bundled by `mlst` | Delftia/Klebsiella native runner validation | `mlst.features.tsv` | Comprehensive mode | Unsupported organisms produce header-only/no-call feature tables. |
 | MobileElementFinder | Experimental runner | Stable table input | CGE tool/database environment | Synthetic PanR2 contract test; runner kept opt-in | `mobileelementfinder.features.tsv` | No | Upstream parser failures were observed on valid assemblies. |
 | ISfinder-compatible BLAST | Restricted runner | Stable table input | User-supplied authorized FASTA | Unit test for BLAST converter; optional-runner smoke with synthetic local FASTA | `isfinder.features.tsv` | No | PanResistome does not download or redistribute ISfinder. Smoke validates orchestration, not biological ISfinder calls. |
-| MOB-suite | Experimental runner, local env currently broken | Stable table input | MOB-suite environment/database | Synthetic PanR2 contract test; optional-runner smoke; Klebsiella 2-genome biological attempt | `mobsuite.features.tsv` | No | Biological attempt preserved `mob_recon` failure logs and module status, but local cached env failed with `ModuleNotFoundError: mob_suite.mob_recon`. |
+| MOB-suite | Experimental runner, environment repair validated; DB still required | Stable table input | MOB-suite environment/database | Synthetic PanR2 contract test; optional-runner smoke; Klebsiella 2-genome biological attempt | `mobsuite.features.tsv` | No | The repo env now installs `mob-suite` through pip to avoid Bioconda post-link fragility. A clean env exposes `mob_recon 3.1.9`; biological feature validation still needs a preinitialized MOB-suite DB or successful runtime DB download. |
 | geNomad/prophage | Experimental runner | Stable table input | User-supplied geNomad DB for runner | Synthetic PanR2 contract test; optional-runner smoke without DB | `prophage.features.tsv` | No | Smoke writes auditable header-only features when `--genomad_db` is absent. Full runner validation still needs a local DB. |
 | DefenseFinder | Experimental runner through PanR2 | Stable table input | DefenseFinder environment/database | Synthetic PanR2 contract test | `defensefinder.features.tsv` | No | Not part of default comprehensive mode until dependency stack is stable. |
 | Kleborate | Biologically validated small-run runner | Stable table input | Kleborate environment | Synthetic PanR2 contract test; Klebsiella 2-genome biological validation | `kleborate.features.tsv` | No | Kleborate v3.2.4 produced 25 PanR2 features across two real Klebsiella genomes with clean schema validation. |
@@ -51,7 +51,7 @@ and at least one documented validation route.
 The next practical validation work should focus on targeted small real runs, not new modules:
 
 1. **MobileElementFinder runner retry:** run on a small, controlled 5-10 genome subset and document parser behavior.
-2. **MOB-suite runner smoke:** run on 2-5 assemblies with a working environment; verify plasmid-level outputs and PanR2 feature rows.
+2. **MOB-suite runner smoke:** run on 2-5 assemblies with a preinitialized `--mobsuite_db`; verify plasmid-level outputs and PanR2 feature rows.
 3. **geNomad runner smoke:** run only when a local geNomad database path is available; verify prophage feature export.
 4. **Kleborate/Kaptive targeted Klebsiella subset:** table-input first, then runner mode if databases are available.
 5. **ECTyper targeted E. coli subset:** table-input first, runner mode later.

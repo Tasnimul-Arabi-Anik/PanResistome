@@ -5,5 +5,15 @@ channels:
   - defaults
 dependencies:
   - python=3.9
+  - pip
+  - blast
+  - mash
+  - biopython
+  - numpy=1.23
   - pandas=1.5
-  - mob_suite=3.1.9
+  - pycurl
+  - pytables
+  - scipy
+  - six
+  - pip:
+      - mob-suite==3.1.9

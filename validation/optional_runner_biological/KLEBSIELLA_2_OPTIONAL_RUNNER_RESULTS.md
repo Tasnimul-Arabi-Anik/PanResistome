@@ -137,6 +137,41 @@ feature_rows_created=0
 
 This means MOB-suite orchestration and failure reporting are working, but the local MOB-suite installation must be repaired before biological MOB-suite validation can pass.
 
+## MOB-suite Environment Repair Follow-up
+
+After the initial biological attempt, a clean disposable environment was tested. Installing `bioconda::mob_suite=3.1.9` exposed a working `mob_recon` module during installation, but the Conda post-link script ran `mob_init` and stalled during database initialization. This explains why interrupted or partially rolled-back cached environments can leave `mob_recon` entry points without the expected Python modules.
+
+The repository MOB-suite environment was changed to install the heavy dependencies with Conda and `mob-suite==3.1.9` with pip. A disposable environment created from `envs/mobsuite.yaml` passed:
+
+```text
+import mob_suite.mob_recon
+mob_recon 3.1.9
+```
+
+The two-genome run was repeated with that repaired environment. MOB-suite launched successfully and found `blastn`, `makeblastdb`, and `tblastn`, but it could not initialize/download its database in the current restricted environment:
+
+```text
+MOB-databases need to be initialized
+ERROR: Something went wrong with database download or unpacking
+```
+
+The current status is therefore:
+
+```text
+MOB-suite executable/environment: fixed
+PanResistome orchestration and logging: working
+PanR2 header-only empty export: working
+Biological MOB-suite feature validation: still blocked until a preinitialized MOB-suite database is supplied with --mobsuite_db or runtime database download succeeds
+```
+
+PanResistome now supports:
+
+```text
+--mobsuite_db /path/to/mob_suite/databases
+```
+
+which is passed to `mob_recon --database_directory`.
+
 ## Fixes Added From This Validation
 
 1. Kleborate runner now uses `--preset kpsc`, required by Kleborate v3.
@@ -144,10 +179,12 @@ This means MOB-suite orchestration and failure reporting are working, but the lo
 3. PanR2 contract export now converts real Kleborate output into feature rows for ST, virulence/resistance scores, K/O loci, siderophore loci, wzi, and AMR markers.
 4. Kleborate sample mapping now prefers the `strain` column so assembly accessions match metadata.
 5. MOB-suite now writes per-sample stdout/stderr and a `module_status.tsv` instead of hiding runtime failures behind an empty table.
+6. MOB-suite environment creation now avoids the fragile Bioconda `mob_init` post-link by installing `mob-suite==3.1.9` with pip inside a Conda-managed environment.
+7. MOB-suite runner mode now accepts `--mobsuite_db` for a preinitialized MOB-suite database directory.
 
 ## Next Biological Optional-Runner Targets
 
-1. Repair/recreate MOB-suite environment, then rerun this same two-genome validation.
+1. Supply a preinitialized MOB-suite database with `--mobsuite_db`, then rerun this same two-genome validation.
 2. Add a Kaptive database path and run Kaptive on the same Klebsiella subset.
 3. Add geNomad DB path and run geNomad on the same subset.
 4. Use an E. coli two-genome subset for ECTyper validation.

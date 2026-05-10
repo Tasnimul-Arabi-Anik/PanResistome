@@ -112,6 +112,7 @@ params.amrfinderplus_reuse_existing = true
 params.amrfinderplus_progress_every = 10
 params.run_mobsuite = false
 params.mobsuite_dir = null
+params.mobsuite_db = null
 params.run_genomad = false
 params.prophage_dir = null
 params.genomad_db = null
@@ -378,6 +379,7 @@ def helpMessage() {
       --isfinder_min_coverage  Minimum ISfinder BLAST subject coverage percentage [default: 80]
       --run_mobsuite           Run MOB-suite plasmid reconstruction/typing and pass outputs to PanR2 [default: false]
       --mobsuite_dir           Existing MOB-suite table directory to pass into PanR2
+      --mobsuite_db            Existing MOB-suite database directory for mob_recon --database_directory
       --run_genomad            Run geNomad viral/prophage annotation and pass outputs to PanR2 [default: false]
       --prophage_dir           Existing prophage/viral-region table directory to pass into PanR2
       --genomad_db             geNomad database directory, required when --run_genomad true
@@ -1760,6 +1762,8 @@ process MOBSUITE_ANALYSIS {
     path "${sample_dir}", emit: mobsuite_results
 
     script:
+    def mobsuiteDbPath = params.mobsuite_db ? launchPath(params.mobsuite_db) : null
+    def mobsuiteDbArg = mobsuiteDbPath ? "--database_directory ${shellQuote(mobsuiteDbPath)}" : ""
     """
     sequence_dir="${sample_dir}/sequence"
     if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
@@ -1778,7 +1782,7 @@ process MOBSUITE_ANALYSIS {
             samples_input=\$((samples_input + 1))
             prefix=\$(basename "\${fasta}" .fna)
             mkdir -p "${sample_dir}/mobsuite/raw/\${prefix}"
-            if mob_recon --infile "\${fasta}" --outdir "${sample_dir}/mobsuite/raw/\${prefix}" --num_threads ${params.threads} > "${sample_dir}/mobsuite/raw/\${prefix}/mob_recon.stdout" 2> "${sample_dir}/mobsuite/raw/\${prefix}/mob_recon.stderr"; then
+            if mob_recon --infile "\${fasta}" --outdir "${sample_dir}/mobsuite/raw/\${prefix}" --num_threads ${params.threads} ${mobsuiteDbArg} > "${sample_dir}/mobsuite/raw/\${prefix}/mob_recon.stdout" 2> "${sample_dir}/mobsuite/raw/\${prefix}/mob_recon.stderr"; then
                 samples_processed=\$((samples_processed + 1))
             else
                 samples_failed=\$((samples_failed + 1))
@@ -2216,6 +2220,7 @@ process PANR2_FEATURE_RUNNERS {
         --run-amrfinderplus ${params.run_amrfinderplus} \\
         --amrfinderplus-update-db ${params.amrfinderplus_update_db} \\
         --run-mobsuite ${params.run_mobsuite} \\
+        --mobsuite-db ${shellQuote(params.mobsuite_db ? launchPath(params.mobsuite_db) : '')} \\
         --run-genomad ${params.run_genomad} \\
         --genomad-db ${shellQuote(genomadDbPath)} \\
         --run-kaptive ${params.run_kaptive} \\
@@ -2344,6 +2349,7 @@ process PANR2_COMPREHENSIVE {
             --run-amrfinderplus ${params.run_amrfinderplus} \\
             --amrfinderplus-update-db ${params.amrfinderplus_update_db} \\
             --run-mobsuite ${params.run_mobsuite} \\
+            --mobsuite-db ${shellQuote(params.mobsuite_db ? launchPath(params.mobsuite_db) : '')} \\
             --run-genomad ${params.run_genomad} \\
             --genomad-db ${shellQuote(genomadDbPath)} \\
             --run-kaptive ${params.run_kaptive} \\

@@ -349,6 +349,35 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
     else:
         rows.append(row("amrfinderplus_database_and_runner", False, False, "SKIPPED", "not_requested", "", "AMRFinderPlus was not requested."))
 
+    if args.run_mobsuite:
+        mobsuite_db_path = Path(args.mobsuite_db) if args.mobsuite_db else Path("")
+        if args.mobsuite_db:
+            rows.append(
+                row(
+                    "mobsuite_database",
+                    True,
+                    True,
+                    "PASS" if mobsuite_db_path.exists() else "FAIL",
+                    "provided_database_directory",
+                    str(mobsuite_db_path) if mobsuite_db_path.exists() else "",
+                    "MOB-suite database directory was supplied." if mobsuite_db_path.exists() else "Supplied --mobsuite_db path was not found.",
+                )
+            )
+        else:
+            rows.append(
+                row(
+                    "mobsuite_database",
+                    True,
+                    True,
+                    "WARNING",
+                    "runtime_auto_init",
+                    "",
+                    "No --mobsuite_db supplied; MOB-suite may try runtime database initialization/download.",
+                )
+            )
+    else:
+        rows.append(row("mobsuite_database", False, False, "SKIPPED", "not_requested", "", "MOB-suite was disabled."))
+
     for module, enabled, required_path, message in [
         ("mobsuite", args.run_mobsuite, sample_dir / "mobsuite" / "tables", "MOB-suite was requested but no tables were found."),
         ("genomad_database", args.run_genomad, Path(args.genomad_db) if args.genomad_db else Path(""), "geNomad requires --genomad_db when enabled."),
@@ -406,6 +435,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--run-amrfinderplus", type=as_bool, default=False)
     parser.add_argument("--amrfinderplus-update-db", type=as_bool, default=True)
     parser.add_argument("--run-mobsuite", type=as_bool, default=False)
+    parser.add_argument("--mobsuite-db", default="")
     parser.add_argument("--run-genomad", type=as_bool, default=False)
     parser.add_argument("--genomad-db", default="")
     parser.add_argument("--run-kaptive", type=as_bool, default=False)
