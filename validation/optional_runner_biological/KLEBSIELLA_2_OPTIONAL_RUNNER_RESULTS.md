@@ -188,7 +188,7 @@ A direct one-genome `mob_recon` smoke test with `--database_directory validation
 taxa.sqlite
 ```
 
-No local `taxa.sqlite` was available, and this sandbox could not resolve `ftp.ncbi.nih.gov` to download `taxdump.tar.gz.md5`. The current biological MOB-suite blocker is therefore not the PanResistome runner or the core MOB-suite database; it is the missing MOB-suite/ETE taxonomy cache in a network-restricted environment.
+No local `taxa.sqlite` was initially available, and this sandbox could not resolve `ftp.ncbi.nih.gov` to download `taxdump.tar.gz.md5`. The blocker was therefore narrowed to the missing MOB-suite/ETE taxonomy cache in a network-restricted environment.
 
 From this follow-up, PanResistome was hardened so MOB-suite runs with a task-local writable `HOME` for ETE cache creation, and database preflight now distinguishes:
 
@@ -197,6 +197,55 @@ core MOB-suite database missing/incomplete
 core database present but taxa.sqlite missing
 core database plus taxa.sqlite present
 ```
+
+## Final MOB-suite Biological Validation
+
+After network access was available, ETE initialized the missing MOB-suite taxonomy cache:
+
+```text
+validation_runs/mobsuite_db_test/taxa.sqlite
+```
+
+The focused two-genome validation was then rerun with:
+
+```text
+--run_mobsuite true
+--mobsuite_db validation_runs/mobsuite_db_test
+--run_kleborate true
+```
+
+while CheckM2, GTDB-Tk, QUAST, ANI, Mash, AMRFinderPlus, PanR2 comprehensive mode, and ABRicate were disabled to keep the run targeted.
+
+Final status: PASS
+
+```text
+MOB-suite samples_input=2
+MOB-suite samples_processed=2
+MOB-suite samples_failed=0
+MOB-suite collected raw rows=104
+mobsuite.features.tsv rows=253
+kleborate.features.tsv rows=25
+all_features.tsv rows=278
+schema unmatched_feature_rows=0
+schema invalid_feature_rows=0
+schema duplicate_feature_rows=0
+feature_completeness_audit mobsuite=PASS
+```
+
+MOB-suite features included plasmid/replicon and mobility context such as:
+
+```text
+IncFIB
+ColRNAI_rep_cluster_1987
+MPF_T
+AC125
+AA103
+AH720
+molecule_type_plasmid
+ISKpn26
+```
+
+This validates the optional MOB-suite runner, the `--mobsuite_db` handoff, and PanR2 standardized MOB-suite feature export on real Klebsiella assemblies.
 
 ## Fixes Added From This Validation
 
@@ -209,10 +258,11 @@ core database plus taxa.sqlite present
 7. MOB-suite runner mode now accepts `--mobsuite_db` for a preinitialized MOB-suite database directory.
 8. MOB-suite runner mode now uses a task-local writable `HOME` so ETE taxonomy initialization does not fail on read-only home directories.
 9. Database setup auditing now checks required MOB-suite core files and warns separately when `taxa.sqlite` is missing.
+10. MOB-suite runner mode now passes `--force` because `mob_recon` refuses to run when the output directory already exists.
+11. PanR2 contract export now converts real MOB-suite biomarker, contig-report, plasmid-cluster, mobility, host-range, and MGE rows into standardized `mobsuite.features.tsv` rows.
 
 ## Next Biological Optional-Runner Targets
 
-1. Supply a preinitialized MOB-suite database with both core files and `taxa.sqlite`, then rerun this same two-genome validation with `--mobsuite_db`.
-2. Add a Kaptive database path and run Kaptive on the same Klebsiella subset.
-3. Add geNomad DB path and run geNomad on the same subset.
-4. Use an E. coli two-genome subset for ECTyper validation.
+1. Add a Kaptive database path and run Kaptive on the same Klebsiella subset.
+2. Add geNomad DB path and run geNomad on the same subset.
+3. Use an E. coli two-genome subset for ECTyper validation.

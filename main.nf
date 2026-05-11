@@ -1784,7 +1784,7 @@ process MOBSUITE_ANALYSIS {
             samples_input=\$((samples_input + 1))
             prefix=\$(basename "\${fasta}" .fna)
             mkdir -p "${sample_dir}/mobsuite/raw/\${prefix}"
-            if mob_recon --infile "\${fasta}" --outdir "${sample_dir}/mobsuite/raw/\${prefix}" --num_threads ${params.threads} ${mobsuiteDbArg} > "${sample_dir}/mobsuite/raw/\${prefix}/mob_recon.stdout" 2> "${sample_dir}/mobsuite/raw/\${prefix}/mob_recon.stderr"; then
+            if mob_recon --infile "\${fasta}" --outdir "${sample_dir}/mobsuite/raw/\${prefix}" --num_threads ${params.threads} --force ${mobsuiteDbArg} > "${sample_dir}/mobsuite/raw/\${prefix}/mob_recon.stdout" 2> "${sample_dir}/mobsuite/raw/\${prefix}/mob_recon.stderr"; then
                 samples_processed=\$((samples_processed + 1))
             else
                 samples_failed=\$((samples_failed + 1))

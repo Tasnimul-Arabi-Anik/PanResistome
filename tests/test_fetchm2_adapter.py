@@ -275,6 +275,33 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertEqual(set(features["tool"]), {"kleborate"})
             self.assertEqual(set(features["assembly_accession"]), {"GCA_041085125.2"})
 
+    def test_mobsuite_realistic_output_exports_biological_features(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_dir = Path(tmpdir) / "Klebsiella_pneumoniae"
+            metadata_dir = sample_dir / "metadata_output"
+            mobsuite_dir = sample_dir / "mobsuite" / "tables"
+            metadata_dir.mkdir(parents=True)
+            mobsuite_dir.mkdir(parents=True)
+            pd.DataFrame(
+                [{"Assembly Accession": "GCA_000000001.1", "Organism Name": "Klebsiella pneumoniae"}]
+            ).to_csv(metadata_dir / "ncbi_clean.csv", index=False)
+            (mobsuite_dir / "mobsuite.tsv").write_text(
+                "sample_id\tbiomarker\tqseqid\tpident\tqcovs\tsseqid\tsstart\tsend\tmolecule_type\trep_type(s)\tprimary_cluster_id\tsecondary_cluster_id\tmash_nearest_neighbor\tmge_type\tmge_subtype\n"
+                "GCA_000000001.1_genomic\treplicon\t000100__NZ_CP016161_00012|IncFIB\t98.1\t100\tcontig1\t10\t500\tplasmid\tIncFIB\tAC125\tAL185\tCP021940\t\t\n"
+                "GCA_000000001.1_genomic.fna:AC125\t\t\t\t\tcontig1\t600\t1800\tplasmid\t\t\t\t\tISKpn26\tIS5\n",
+                encoding="utf-8",
+            )
+
+            outputs = export_contract(sample_dir, sample_dir / "panr2_inputs")
+            features = pd.read_csv(outputs["mobsuite"], sep="\t")
+            self.assertEqual(set(features["sample_id"]), {"GCA_000000001.1_genomic"})
+            self.assertIn("IncFIB", set(features["feature_id"]))
+            self.assertIn("AC125", set(features["feature_id"]))
+            self.assertIn("ISKpn26", set(features["feature_id"]))
+            self.assertIn("replicon", set(features["feature_category"]))
+            self.assertIn("plasmid_cluster", set(features["feature_category"]))
+            self.assertIn("is5", set(features["feature_category"]))
+
     def test_large_dataset_export_controls_limit_matrices_and_top_features(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             sample_dir = Path(tmpdir) / "Klebsiella_pneumoniae"

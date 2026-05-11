@@ -694,6 +694,135 @@ def parse_kleborate_tables(path: Path, sample_map: dict[str, str]) -> list[dict[
     return rows
 
 
+def _mobsuite_values(value: str) -> list[str]:
+    values: list[str] = []
+    for part in re.split(r"[;,]", str(value or "")):
+        text = part.strip()
+        if "|" in text:
+            text = text.split("|")[-1].strip()
+        text = re.sub(r"\s+", "_", text)
+        if not is_missing_value(text) and text not in values:
+            values.append(text)
+    return values
+
+
+def _mobsuite_sample(value: str, fallback: str) -> str:
+    text = first_value({"sample": value}, ["sample"], fallback)
+    if ":" in text:
+        text = text.split(":", 1)[0]
+    return clean_sample_id(text)
+
+
+def _mobsuite_category(value: str, default: str = "mobsuite_feature") -> str:
+    text = str(value or default).strip()
+    if is_missing_value(text):
+        text = default
+    return re.sub(r"[^A-Za-z0-9_]+", "_", text).strip("_").lower()
+
+
+def _append_mobsuite_feature(
+    rows: list[dict[str, str]],
+    row: dict[str, str],
+    path: Path,
+    sample: str,
+    sample_map: dict[str, str],
+    feature_id: str,
+    category: str,
+    evidence_type: str,
+    raw_value: str = "",
+) -> None:
+    category = _mobsuite_category(category)
+    if is_missing_value(feature_id) or is_missing_value(category):
+        return
+    rows.append(
+        contract_row(
+            sample,
+            "mobsuite",
+            feature_id,
+            feature_category=category,
+            identity=first_value(row, ["pident", "identity"], ""),
+            coverage=first_value(row, ["qcovs", "qcovhsp", "coverage"], ""),
+            contig=first_value(row, ["contig_id", "sseqid", "SEQUENCE", "sequence"], ""),
+            start=first_value(row, ["contig_start", "sstart", "START", "start"], ""),
+            end=first_value(row, ["contig_end", "send", "END", "end"], ""),
+            tool="mobsuite",
+            sample_map=sample_map,
+            feature_name=feature_id,
+            feature_subcategory=category,
+            source_table=str(path),
+            source_file=sample,
+            source_database="MOB-suite",
+            raw_feature_id=raw_value or feature_id,
+            raw_category=category,
+            evidence_type=evidence_type,
+            confidence=first_value(row, ["mash_neighbor_distance", "evalue", "bitscore"], ""),
+            notes=first_value(row, ["filtering_reason", "mash_nearest_neighbor"], ""),
+        )
+    )
+
+
+def parse_mobsuite_tables(path: Path, sample_map: dict[str, str]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for row in read_table(path):
+        sample = _mobsuite_sample(first_value(row, ["sample_id", "sample", "file", "#FILE"], path.stem), path.stem)
+        if not sample:
+            continue
+
+        generic_feature = first_value(row, ["GENE", "gene", "feature_id", "id"], "")
+        if generic_feature:
+            _append_mobsuite_feature(
+                rows,
+                row,
+                path,
+                sample,
+                sample_map,
+                generic_feature,
+                first_value(row, ["PRODUCT", "RESISTANCE", "product", "category"], "mobsuite_feature"),
+                "mobsuite_table_feature",
+                raw_value=generic_feature,
+            )
+            continue
+
+        biomarker = first_value(row, ["biomarker"], "")
+        for feature in _mobsuite_values(first_value(row, ["qseqid"], "")):
+            _append_mobsuite_feature(rows, row, path, sample, sample_map, feature, biomarker, "mobsuite_biomarker", raw_value=first_value(row, ["qseqid"], ""))
+
+        for column, category, evidence_type in [
+            ("rep_type(s)", "replicon", "mobsuite_contig_report"),
+            ("relaxase_type(s)", "relaxase", "mobsuite_contig_report"),
+            ("mpf_type", "mate_pair_formation", "mobsuite_contig_report"),
+            ("orit_type(s)", "origin_of_transfer", "mobsuite_contig_report"),
+            ("predicted_mobility", "mobility", "mobsuite_contig_report"),
+            ("primary_cluster_id", "plasmid_cluster", "mobsuite_contig_report"),
+            ("secondary_cluster_id", "plasmid_cluster_secondary", "mobsuite_contig_report"),
+            ("predicted_host_range_overall_name", "predicted_host_range", "mobsuite_contig_report"),
+            ("observed_host_range_ncbi_name", "observed_host_range", "mobsuite_contig_report"),
+            ("mash_nearest_neighbor", "mash_neighbor", "mobsuite_contig_report"),
+        ]:
+            for feature in _mobsuite_values(first_value(row, [column], "")):
+                _append_mobsuite_feature(rows, row, path, sample, sample_map, feature, category, evidence_type, raw_value=first_value(row, [column], ""))
+
+        molecule_type = first_value(row, ["molecule_type"], "")
+        if not is_missing_value(molecule_type):
+            _append_mobsuite_feature(
+                rows,
+                row,
+                path,
+                sample,
+                sample_map,
+                f"molecule_type_{molecule_type}",
+                "molecule_type",
+                "mobsuite_contig_report",
+                raw_value=molecule_type,
+            )
+
+        mge_feature = first_value(row, ["mge_type", "mge_subtype", "mge_id"], "")
+        mge_category = first_value(row, ["mge_subtype"], "mobile_genetic_element")
+        for feature in _mobsuite_values(mge_feature):
+            _append_mobsuite_feature(rows, row, path, sample, sample_map, feature, mge_category, "mobsuite_mge_report", raw_value=mge_feature)
+    return rows
+
+
 def discover_raw_feature_databases(sample_dir: Path) -> set[str]:
     raw_databases: set[str] = set()
     mlst_dirs = [
@@ -765,6 +894,8 @@ def discover_feature_rows(sample_dir: Path) -> list[dict[str, str]]:
         seen_paths.add(resolved)
         if "kleborate" in path.parts:
             rows.extend(parse_kleborate_tables(path, sample_map))
+        elif "mobsuite" in path.parts:
+            rows.extend(parse_mobsuite_tables(path, sample_map))
         else:
             rows.extend(parse_abricate_results(path, sample_dir, sample_map))
 
