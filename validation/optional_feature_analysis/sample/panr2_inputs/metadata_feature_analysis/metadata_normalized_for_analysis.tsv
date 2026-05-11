@@ -1,0 +1,7 @@
+sample_id	assembly_accession	country	continent	subcontinent	host	host_group	isolation_source	sample_type	environment_medium	collection_year	organism	species	genus	bioproject	biosample	assembly_level	submitter
+GCF_900000001.1	GCF_900000001.1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000002.1	GCF_900000002.1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000003.1	GCF_900000003.1	CountryA			environment		water			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000004.1	GCF_900000004.1	CountryB			Homo sapiens		blood			2023	Klebsiella pneumoniae			PRJNA_OTHER_4			
+GCF_900000005.1	GCF_900000005.1	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_5			
+GCF_900000006.1	GCF_900000006.1	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_6			

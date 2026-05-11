@@ -1,0 +1,12 @@
+<!doctype html><html><head><meta charset='utf-8'><title>Report Controls</title><style>
+body { font-family: Arial, sans-serif; margin: 2rem; color: #1f2933; }
+h1, h2 { color: #102a43; }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9rem; }
+th, td { border: 1px solid #d9e2ec; padding: 0.45rem; text-align: left; vertical-align: top; }
+th { background: #f0f4f8; }
+.warning { background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; }
+.card { border: 1px solid #d9e2ec; padding: 0.75rem; border-radius: 6px; }
+</style></head><body><h1>Report Controls</h1>
+<p>This page records report density, large-dataset safeguards, and output-size limits applied while building the PanR2 handoff bundle.</p>
+<table><thead><tr><th>setting</th><th>value</th><th>message</th></tr></thead><tbody><tr><td>large_dataset</td><td>true</td><td>Large-dataset safeguards enabled.</td></tr><tr><td>report_mode</td><td>compact</td><td>Handoff HTML density preset.</td></tr><tr><td>max_features_heatmap</td><td>25</td><td>Feature cap for handoff presence/absence matrices.</td></tr><tr><td>max_features_network</td><td>25</td><td>Feature cap for report-facing co-occurrence/proximity summaries; complete proximity evidence is preserved as feature_proximity_all.tsv.</td></tr><tr><td>max_metadata_columns</td><td>10</td><td>Metadata rows shown in compact HTML report tables.</td></tr><tr><td>top_n_features_per_database</td><td>10</td><td>Top prevalent features summarized per database.</td></tr><tr><td>skip_heavy_interactive_plots</td><td>true</td><td>Heavy interactive plots are deprioritized/skipped when supported.</td></tr><tr><td>samples</td><td>6</td><td>Samples represented in metadata or feature tables.</td></tr><tr><td>feature_rows</td><td>23</td><td>Total standardized feature rows.</td></tr><tr><td>unique_features</td><td>20</td><td>Unique database-feature pairs.</td></tr><tr><td>databases</td><td>amr,defensefinder,ectyper,isfinder,kaptive,kleborate,mobileelementfinder,mobsuite,plasmidfinder,prophage,sccmecfinder,serotypefinder,vfdb</td><td>Databases with standardized feature rows.</td></tr><tr><td>report_warning</td><td>large_dataset_summary_mode</td><td>Summary/report-level warning generated from dataset size and configured limits.</td></tr></tbody></table></body></html>

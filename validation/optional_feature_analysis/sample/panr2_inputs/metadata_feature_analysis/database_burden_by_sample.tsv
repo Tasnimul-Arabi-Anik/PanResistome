@@ -1,0 +1,79 @@
+assembly_accession	database	unique_feature_count	category_count	country	continent	subcontinent	host	host_group	isolation_source	sample_type	environment_medium	collection_year	organism	species	genus	bioproject	biosample	assembly_level	submitter
+GCF_900000001.1	amr	1	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	defensefinder	0	0	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	ectyper	0	0	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	isfinder	0	0	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	kaptive	0	0	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	kleborate	1	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	mobileelementfinder	0	0	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	mobsuite	5	5	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	plasmidfinder	1	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	prophage	0	0	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	sccmecfinder	0	0	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	serotypefinder	0	0	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	vfdb	1	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000002.1	amr	1	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000002.1	defensefinder	0	0	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000002.1	ectyper	0	0	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000002.1	isfinder	0	0	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000002.1	kaptive	1	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000002.1	kleborate	0	0	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000002.1	mobileelementfinder	1	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000002.1	mobsuite	0	0	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000002.1	plasmidfinder	1	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000002.1	prophage	0	0	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000002.1	sccmecfinder	0	0	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000002.1	serotypefinder	0	0	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000002.1	vfdb	0	0	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000003.1	amr	0	0	CountryA			environment		water			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000003.1	defensefinder	0	0	CountryA			environment		water			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000003.1	ectyper	1	1	CountryA			environment		water			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000003.1	isfinder	1	1	CountryA			environment		water			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000003.1	kaptive	0	0	CountryA			environment		water			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000003.1	kleborate	0	0	CountryA			environment		water			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000003.1	mobileelementfinder	0	0	CountryA			environment		water			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000003.1	mobsuite	0	0	CountryA			environment		water			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000003.1	plasmidfinder	0	0	CountryA			environment		water			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000003.1	prophage	0	0	CountryA			environment		water			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000003.1	sccmecfinder	0	0	CountryA			environment		water			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000003.1	serotypefinder	0	0	CountryA			environment		water			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000003.1	vfdb	1	1	CountryA			environment		water			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000004.1	amr	1	1	CountryB			Homo sapiens		blood			2023	Klebsiella pneumoniae			PRJNA_OTHER_4			
+GCF_900000004.1	defensefinder	0	0	CountryB			Homo sapiens		blood			2023	Klebsiella pneumoniae			PRJNA_OTHER_4			
+GCF_900000004.1	ectyper	0	0	CountryB			Homo sapiens		blood			2023	Klebsiella pneumoniae			PRJNA_OTHER_4			
+GCF_900000004.1	isfinder	0	0	CountryB			Homo sapiens		blood			2023	Klebsiella pneumoniae			PRJNA_OTHER_4			
+GCF_900000004.1	kaptive	0	0	CountryB			Homo sapiens		blood			2023	Klebsiella pneumoniae			PRJNA_OTHER_4			
+GCF_900000004.1	kleborate	0	0	CountryB			Homo sapiens		blood			2023	Klebsiella pneumoniae			PRJNA_OTHER_4			
+GCF_900000004.1	mobileelementfinder	0	0	CountryB			Homo sapiens		blood			2023	Klebsiella pneumoniae			PRJNA_OTHER_4			
+GCF_900000004.1	mobsuite	1	1	CountryB			Homo sapiens		blood			2023	Klebsiella pneumoniae			PRJNA_OTHER_4			
+GCF_900000004.1	plasmidfinder	1	1	CountryB			Homo sapiens		blood			2023	Klebsiella pneumoniae			PRJNA_OTHER_4			
+GCF_900000004.1	prophage	0	0	CountryB			Homo sapiens		blood			2023	Klebsiella pneumoniae			PRJNA_OTHER_4			
+GCF_900000004.1	sccmecfinder	0	0	CountryB			Homo sapiens		blood			2023	Klebsiella pneumoniae			PRJNA_OTHER_4			
+GCF_900000004.1	serotypefinder	1	1	CountryB			Homo sapiens		blood			2023	Klebsiella pneumoniae			PRJNA_OTHER_4			
+GCF_900000004.1	vfdb	0	0	CountryB			Homo sapiens		blood			2023	Klebsiella pneumoniae			PRJNA_OTHER_4			
+GCF_900000005.1	amr	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_5			
+GCF_900000005.1	defensefinder	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_5			
+GCF_900000005.1	ectyper	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_5			
+GCF_900000005.1	isfinder	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_5			
+GCF_900000005.1	kaptive	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_5			
+GCF_900000005.1	kleborate	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_5			
+GCF_900000005.1	mobileelementfinder	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_5			
+GCF_900000005.1	mobsuite	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_5			
+GCF_900000005.1	plasmidfinder	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_5			
+GCF_900000005.1	prophage	1	1	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_5			
+GCF_900000005.1	sccmecfinder	1	1	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_5			
+GCF_900000005.1	serotypefinder	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_5			
+GCF_900000005.1	vfdb	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_5			
+GCF_900000006.1	amr	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_6			
+GCF_900000006.1	defensefinder	1	1	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_6			
+GCF_900000006.1	ectyper	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_6			
+GCF_900000006.1	isfinder	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_6			
+GCF_900000006.1	kaptive	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_6			
+GCF_900000006.1	kleborate	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_6			
+GCF_900000006.1	mobileelementfinder	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_6			
+GCF_900000006.1	mobsuite	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_6			
+GCF_900000006.1	plasmidfinder	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_6			
+GCF_900000006.1	prophage	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_6			
+GCF_900000006.1	sccmecfinder	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_6			
+GCF_900000006.1	serotypefinder	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_6			
+GCF_900000006.1	vfdb	0	0	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_6			

@@ -1,0 +1,4 @@
+#FILE	SEQUENCE	START	END	GENE	%COVERAGE	%IDENTITY	DATABASE	ACCESSION	PRODUCT	RESISTANCE
+GCF_900000001.1.fna	contigA	100	500	blaKPC-2	100	99	ncbi	blaKPC-2_ACC	beta_lactam	beta_lactam
+GCF_900000002.1.fna	contigA	100	500	blaKPC-2	100	99	ncbi	blaKPC-2_ACC	beta_lactam	beta_lactam
+GCF_900000004.1.fna	contigB	100	500	tetA	100	99	ncbi	tetA_ACC	tetracycline	tetracycline

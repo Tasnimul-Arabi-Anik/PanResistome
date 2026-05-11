@@ -1,0 +1,2 @@
+sample_id	sseqid	sstart	send	molecule_type	rep_type(s)	primary_cluster_id	predicted_mobility	mge_type	mge_subtype
+GCF_900000001.1	contigA	1250	2500	plasmid	IncFIB	AC125	conjugative	ISKpn26	IS5

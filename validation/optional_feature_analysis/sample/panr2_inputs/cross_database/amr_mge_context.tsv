@@ -1,0 +1,7 @@
+assembly_accession	amr_features	plasmid_features	mge_features	amr_count	plasmid_count	mge_count	same_contig_evidence
+GCF_900000001.1	blaKPC-2	AC125;ISKpn26;IncFIB;conjugative;molecule_type_plasmid		1	5	0	yes
+GCF_900000002.1	blaKPC-2	IncFIB	IS26	1	1	1	yes
+GCF_900000003.1			ISEcp1	0	0	1	no
+GCF_900000004.1	tetA	IncFIB;IncX3		1	2	0	yes
+GCF_900000005.1				0	0	0	no
+GCF_900000006.1				0	0	0	no

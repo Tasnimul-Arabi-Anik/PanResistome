@@ -1,0 +1,14 @@
+output	exists	rows	path
+all_features	true	23	sample/panr2_inputs/features/all_features.tsv
+schema_validation_summary	true		sample/panr2_inputs/manifest/schema_validation_summary.txt
+feature_completeness_audit	true	18	sample/panr2_inputs/manifest/feature_completeness_audit.tsv
+all_feature_matrix	true	6	sample/panr2_inputs/feature_matrices/all_features_presence_absence.tsv
+feature_cooccurrence	true	190	sample/panr2_inputs/cross_database/feature_cooccurrence.tsv
+database_cooccurrence_summary	true	78	sample/panr2_inputs/cross_database/database_cooccurrence_summary.tsv
+feature_proximity	true	8	sample/panr2_inputs/cross_database/feature_proximity.tsv
+top_features_by_database	true	20	sample/panr2_inputs/metadata_feature_analysis/top_features_by_database.tsv
+metadata_usability_summary	true	7	sample/panr2_inputs/metadata_feature_analysis/metadata_usability_summary.tsv
+top_findings	true	50	sample/panr2_inputs/metadata_feature_analysis/top_findings.tsv
+handoff_report_index	true		sample/panr2_inputs/report/panr2_handoff_index.html
+top_findings_html	true		sample/panr2_inputs/report/top_findings.html
+cross_database_interpretation_html	true		sample/panr2_inputs/report/cross_database_interpretation.html

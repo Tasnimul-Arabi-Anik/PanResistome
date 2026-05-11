@@ -19,6 +19,7 @@
 - Audited MOB-suite database cache helpers through `--mobsuite_db_dir`, `--mobsuite_auto_init_db`, `--mobsuite_auto_init_taxa`, and `mobsuite/mobsuite_database_setup_status.tsv`.
 - Audited geNomad database download/cache helpers through `--genomad_db_dir`, `--genomad_auto_download_db`, and `prophage/genomad_database_setup_status.tsv`.
 - `--panr2_mobileelementfinder_allow_failure` to keep opt-in MobileElementFinder failures nonfatal while preserving module/audit status.
+- A reproducible optional-feature analysis validator at `scripts/validate_optional_feature_analysis.py`, with validation evidence under `validation/optional_feature_analysis/`.
 
 ### Changed
 - PanR2 handoff export now applies configured feature caps to presence/absence matrices and co-occurrence/proximity summaries, preserves complete proximity evidence as `feature_proximity_all.tsv`, and surfaces report-control settings in `panr2_inputs/report/report_controls.html`.
@@ -46,6 +47,7 @@
 ### Tested
 - Synthetic PanR2 contract tests now cover optional table-input exports for MobileElementFinder, ISfinder, MOB-suite, prophage/geNomad, DefenseFinder, Kleborate, Kaptive, ECTyper, SerotypeFinder, and SCCmecFinder.
 - Optional-runner smoke validation completed on two local fixture assemblies with ISfinder-compatible BLAST, MOB-suite, geNomad/prophage, Kleborate, Kaptive, ECTyper, PanR2 export, and result collection enabled while CheckM2, GTDB-Tk, QUAST, ANI, Mash, AMRFinderPlus, PanR2 comprehensive mode, and legacy ABRicate/PanR were disabled.
+- Optional-feature analysis validation completed on local fixture tables for AMR, VFDB, PlasmidFinder, MobileElementFinder, ISfinder, MOB-suite, prophage/geNomad, DefenseFinder, Kleborate, Kaptive, ECTyper, SerotypeFinder, and SCCmecFinder, producing 23 standardized feature rows, 13 feature tables, feature matrices, co-occurrence/proximity outputs, metadata summaries, top findings, and HTML handoff pages with zero unmatched/invalid/duplicate feature rows.
 - Kleborate biological validation completed on two complete `Klebsiella pneumoniae` assemblies, producing 25 standardized `kleborate.features.tsv` rows with zero unmatched, invalid, or duplicate feature rows.
 - MOB-suite biological validation completed on the same two assemblies after preinitializing `taxa.sqlite`, processing 2/2 samples and producing 253 standardized `mobsuite.features.tsv` rows plus 25 Kleborate rows with zero unmatched, invalid, or duplicate feature rows.
 

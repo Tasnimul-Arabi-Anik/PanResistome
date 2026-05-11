@@ -1,0 +1,8 @@
+feature_files_checked=13
+feature_rows=23
+databases_seen=amr,defensefinder,ectyper,isfinder,kaptive,kleborate,mobileelementfinder,mobsuite,plasmidfinder,prophage,sccmecfinder,serotypefinder,vfdb
+samples_seen=6
+metadata_accessions=6
+unmatched_feature_rows=0
+invalid_feature_rows=0
+duplicate_feature_rows=0

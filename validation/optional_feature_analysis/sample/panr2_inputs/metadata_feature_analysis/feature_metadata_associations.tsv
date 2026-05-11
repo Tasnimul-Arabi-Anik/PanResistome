@@ -1,0 +1,81 @@
+database	feature_id	feature_category	metadata_column	metadata_type	test_used	n_total	n_present	n_absent	groups_tested	effect_size	odds_ratio	p_value	q_value	top_enriched_group	top_enriched_group_prevalence	lowest_group	lowest_group_prevalence	status	warning
+amr	blaKPC-2	beta_lactam	collection_year	categorical_or_alias	prevalence_range_screen	6	2	4	2	0.6667				2024	0.6667	2023	0.0000	screening_summary	small_group
+plasmidfinder	IncFIB	replicon	collection_year	categorical_or_alias	prevalence_range_screen	6	2	4	2	0.6667				2024	0.6667	2023	0.0000	screening_summary	small_group
+amr	blaKPC-2	beta_lactam	country	categorical_or_alias	prevalence_range_screen	6	2	4	2	0.6667				CountryA	0.6667	CountryB	0.0000	screening_summary	small_group
+plasmidfinder	IncFIB	replicon	country	categorical_or_alias	prevalence_range_screen	6	2	4	2	0.6667				CountryA	0.6667	CountryB	0.0000	screening_summary	small_group
+amr	blaKPC-2	beta_lactam	host	categorical_or_alias	prevalence_range_screen	6	2	4	2	0.6667				Homo sapiens	0.6667	environment	0.0000	screening_summary	small_group
+mobsuite	IncFIB	replicon	host	categorical_or_alias	prevalence_range_screen	6	2	4	2	0.6667				Homo sapiens	0.6667	environment	0.0000	screening_summary	small_group
+plasmidfinder	IncFIB	replicon	host	categorical_or_alias	prevalence_range_screen	6	2	4	2	0.6667				Homo sapiens	0.6667	environment	0.0000	screening_summary	small_group
+amr	blaKPC-2	beta_lactam	isolation_source	categorical_or_alias	prevalence_range_screen	6	2	4	2	0.6667				blood	0.6667	water	0.0000	screening_summary	small_group
+mobsuite	IncFIB	replicon	isolation_source	categorical_or_alias	prevalence_range_screen	6	2	4	2	0.6667				blood	0.6667	water	0.0000	screening_summary	small_group
+plasmidfinder	IncFIB	replicon	isolation_source	categorical_or_alias	prevalence_range_screen	6	2	4	2	0.6667				blood	0.6667	water	0.0000	screening_summary	small_group
+amr	tetA	tetracycline	collection_year	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				2023	0.3333	2024	0.0000	screening_summary	small_group
+defensefinder	RM_Type_I	defense_system	collection_year	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				2023	0.3333	2024	0.0000	screening_summary	small_group
+ectyper	O157:H7	serotype	collection_year	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				2024	0.3333	2023	0.0000	screening_summary	small_group
+isfinder	ISEcp1	insertion_sequence	collection_year	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				2024	0.3333	2023	0.0000	screening_summary	small_group
+kaptive	KL64	capsule_locus	collection_year	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				2024	0.3333	2023	0.0000	screening_summary	small_group
+kleborate	ST147	sequence_type	collection_year	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				2024	0.3333	2023	0.0000	screening_summary	small_group
+mobileelementfinder	IS26	insertion_sequence	collection_year	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				2024	0.3333	2023	0.0000	screening_summary	small_group
+mobsuite	AC125	plasmid_cluster	collection_year	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				2024	0.3333	2023	0.0000	screening_summary	small_group
+mobsuite	ISKpn26	is5	collection_year	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				2024	0.3333	2023	0.0000	screening_summary	small_group
+mobsuite	conjugative	mobility	collection_year	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				2024	0.3333	2023	0.0000	screening_summary	small_group
+mobsuite	molecule_type_plasmid	molecule_type	collection_year	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				2024	0.3333	2023	0.0000	screening_summary	small_group
+plasmidfinder	IncX3	replicon	collection_year	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				2023	0.3333	2024	0.0000	screening_summary	small_group
+prophage	region_1	prophage	collection_year	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				2023	0.3333	2024	0.0000	screening_summary	small_group
+sccmecfinder	SCCmec_IV	cassette_type	collection_year	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				2023	0.3333	2024	0.0000	screening_summary	small_group
+serotypefinder	O2	serotype	collection_year	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				2023	0.3333	2024	0.0000	screening_summary	small_group
+vfdb	fimH	virulence	collection_year	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				2024	0.3333	2023	0.0000	screening_summary	small_group
+vfdb	iutA	virulence	collection_year	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				2024	0.3333	2023	0.0000	screening_summary	small_group
+amr	tetA	tetracycline	country	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				CountryB	0.3333	CountryA	0.0000	screening_summary	small_group
+defensefinder	RM_Type_I	defense_system	country	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				CountryB	0.3333	CountryA	0.0000	screening_summary	small_group
+ectyper	O157:H7	serotype	country	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				CountryA	0.3333	CountryB	0.0000	screening_summary	small_group
+isfinder	ISEcp1	insertion_sequence	country	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				CountryA	0.3333	CountryB	0.0000	screening_summary	small_group
+kaptive	KL64	capsule_locus	country	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				CountryA	0.3333	CountryB	0.0000	screening_summary	small_group
+kleborate	ST147	sequence_type	country	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				CountryA	0.3333	CountryB	0.0000	screening_summary	small_group
+mobileelementfinder	IS26	insertion_sequence	country	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				CountryA	0.3333	CountryB	0.0000	screening_summary	small_group
+mobsuite	AC125	plasmid_cluster	country	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				CountryA	0.3333	CountryB	0.0000	screening_summary	small_group
+mobsuite	ISKpn26	is5	country	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				CountryA	0.3333	CountryB	0.0000	screening_summary	small_group
+mobsuite	conjugative	mobility	country	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				CountryA	0.3333	CountryB	0.0000	screening_summary	small_group
+mobsuite	molecule_type_plasmid	molecule_type	country	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				CountryA	0.3333	CountryB	0.0000	screening_summary	small_group
+plasmidfinder	IncX3	replicon	country	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				CountryB	0.3333	CountryA	0.0000	screening_summary	small_group
+prophage	region_1	prophage	country	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				CountryB	0.3333	CountryA	0.0000	screening_summary	small_group
+sccmecfinder	SCCmec_IV	cassette_type	country	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				CountryB	0.3333	CountryA	0.0000	screening_summary	small_group
+serotypefinder	O2	serotype	country	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				CountryB	0.3333	CountryA	0.0000	screening_summary	small_group
+vfdb	fimH	virulence	country	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				CountryA	0.3333	CountryB	0.0000	screening_summary	small_group
+vfdb	iutA	virulence	country	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				CountryA	0.3333	CountryB	0.0000	screening_summary	small_group
+amr	tetA	tetracycline	host	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				Homo sapiens	0.3333	environment	0.0000	screening_summary	small_group
+defensefinder	RM_Type_I	defense_system	host	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				environment	0.3333	Homo sapiens	0.0000	screening_summary	small_group
+ectyper	O157:H7	serotype	host	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				environment	0.3333	Homo sapiens	0.0000	screening_summary	small_group
+isfinder	ISEcp1	insertion_sequence	host	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				environment	0.3333	Homo sapiens	0.0000	screening_summary	small_group
+kaptive	KL64	capsule_locus	host	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				Homo sapiens	0.3333	environment	0.0000	screening_summary	small_group
+kleborate	ST147	sequence_type	host	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				Homo sapiens	0.3333	environment	0.0000	screening_summary	small_group
+mobileelementfinder	IS26	insertion_sequence	host	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				Homo sapiens	0.3333	environment	0.0000	screening_summary	small_group
+mobsuite	AC125	plasmid_cluster	host	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				Homo sapiens	0.3333	environment	0.0000	screening_summary	small_group
+mobsuite	ISKpn26	is5	host	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				Homo sapiens	0.3333	environment	0.0000	screening_summary	small_group
+mobsuite	conjugative	mobility	host	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				Homo sapiens	0.3333	environment	0.0000	screening_summary	small_group
+mobsuite	molecule_type_plasmid	molecule_type	host	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				Homo sapiens	0.3333	environment	0.0000	screening_summary	small_group
+plasmidfinder	IncX3	replicon	host	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				Homo sapiens	0.3333	environment	0.0000	screening_summary	small_group
+prophage	region_1	prophage	host	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				environment	0.3333	Homo sapiens	0.0000	screening_summary	small_group
+sccmecfinder	SCCmec_IV	cassette_type	host	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				environment	0.3333	Homo sapiens	0.0000	screening_summary	small_group
+serotypefinder	O2	serotype	host	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				Homo sapiens	0.3333	environment	0.0000	screening_summary	small_group
+vfdb	fimH	virulence	host	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				environment	0.3333	Homo sapiens	0.0000	screening_summary	small_group
+vfdb	iutA	virulence	host	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				Homo sapiens	0.3333	environment	0.0000	screening_summary	small_group
+amr	tetA	tetracycline	isolation_source	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				blood	0.3333	water	0.0000	screening_summary	small_group
+defensefinder	RM_Type_I	defense_system	isolation_source	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				water	0.3333	blood	0.0000	screening_summary	small_group
+ectyper	O157:H7	serotype	isolation_source	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				water	0.3333	blood	0.0000	screening_summary	small_group
+isfinder	ISEcp1	insertion_sequence	isolation_source	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				water	0.3333	blood	0.0000	screening_summary	small_group
+kaptive	KL64	capsule_locus	isolation_source	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				blood	0.3333	water	0.0000	screening_summary	small_group
+kleborate	ST147	sequence_type	isolation_source	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				blood	0.3333	water	0.0000	screening_summary	small_group
+mobileelementfinder	IS26	insertion_sequence	isolation_source	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				blood	0.3333	water	0.0000	screening_summary	small_group
+mobsuite	AC125	plasmid_cluster	isolation_source	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				blood	0.3333	water	0.0000	screening_summary	small_group
+mobsuite	ISKpn26	is5	isolation_source	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				blood	0.3333	water	0.0000	screening_summary	small_group
+mobsuite	conjugative	mobility	isolation_source	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				blood	0.3333	water	0.0000	screening_summary	small_group
+mobsuite	molecule_type_plasmid	molecule_type	isolation_source	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				blood	0.3333	water	0.0000	screening_summary	small_group
+plasmidfinder	IncX3	replicon	isolation_source	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				blood	0.3333	water	0.0000	screening_summary	small_group
+prophage	region_1	prophage	isolation_source	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				water	0.3333	blood	0.0000	screening_summary	small_group
+sccmecfinder	SCCmec_IV	cassette_type	isolation_source	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				water	0.3333	blood	0.0000	screening_summary	small_group
+serotypefinder	O2	serotype	isolation_source	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				blood	0.3333	water	0.0000	screening_summary	small_group
+vfdb	fimH	virulence	isolation_source	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				water	0.3333	blood	0.0000	screening_summary	small_group
+vfdb	iutA	virulence	isolation_source	categorical_or_alias	prevalence_range_screen	6	1	5	2	0.3333				blood	0.3333	water	0.0000	screening_summary	small_group
+mobsuite	IncFIB	replicon	collection_year	categorical_or_alias	prevalence_range_screen	6	2	4	2	0.0000				2023	0.3333	2023	0.3333	screening_summary	small_group
+mobsuite	IncFIB	replicon	country	categorical_or_alias	prevalence_range_screen	6	2	4	2	0.0000				CountryA	0.3333	CountryA	0.3333	screening_summary	small_group

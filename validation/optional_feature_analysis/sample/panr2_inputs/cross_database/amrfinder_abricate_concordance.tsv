@@ -1,0 +1,3 @@
+feature_id	sample_id	normalized_feature_id	abricate_feature_ids	amrfinderplus_feature_ids	abricate_present	amrfinderplus_present	abricate_sample_count	amrfinderplus_sample_count	shared_sample_count	status	possible_match_basis	interpretation_note
+blaKPC-2		blakpc2	blaKPC-2		true	false	2	0	0	abricate_only	normalized_gene_symbol	Gene-symbol matching is normalized for punctuation/case; inspect raw tool outputs for naming differences.
+tetA		teta	tetA		true	false	1	0	0	abricate_only	normalized_gene_symbol	Gene-symbol matching is normalized for punctuation/case; inspect raw tool outputs for naming differences.

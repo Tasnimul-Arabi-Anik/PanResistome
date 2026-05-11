@@ -1,0 +1,8 @@
+metadata_column	non_missing_count	missing_fraction	unique_values	largest_group_fraction	recommended_for_analysis	reason
+Assembly Accession	6	0.0000	6	0.1667	true	eligible
+Assembly BioProject Accession	6	0.0000	4	0.5000	true	eligible
+Collection_Year	6	0.0000	2	0.5000	true	eligible
+Country	6	0.0000	2	0.5000	true	eligible
+Host_SD	6	0.0000	2	0.5000	true	eligible
+Isolation_Source_SD	6	0.0000	2	0.5000	true	eligible
+Organism Name	6	0.0000	1	1.0000	false	sparse_constant_identifier_or_dominated

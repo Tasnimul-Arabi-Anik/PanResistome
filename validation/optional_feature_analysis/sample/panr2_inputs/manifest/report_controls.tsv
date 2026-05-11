@@ -1,0 +1,13 @@
+setting	value	message
+large_dataset	true	Large-dataset safeguards enabled.
+report_mode	compact	Handoff HTML density preset.
+max_features_heatmap	25	Feature cap for handoff presence/absence matrices.
+max_features_network	25	Feature cap for report-facing co-occurrence/proximity summaries; complete proximity evidence is preserved as feature_proximity_all.tsv.
+max_metadata_columns	10	Metadata rows shown in compact HTML report tables.
+top_n_features_per_database	10	Top prevalent features summarized per database.
+skip_heavy_interactive_plots	true	Heavy interactive plots are deprioritized/skipped when supported.
+samples	6	Samples represented in metadata or feature tables.
+feature_rows	23	Total standardized feature rows.
+unique_features	20	Unique database-feature pairs.
+databases	amr,defensefinder,ectyper,isfinder,kaptive,kleborate,mobileelementfinder,mobsuite,plasmidfinder,prophage,sccmecfinder,serotypefinder,vfdb	Databases with standardized feature rows.
+report_warning	large_dataset_summary_mode	Summary/report-level warning generated from dataset size and configured limits.

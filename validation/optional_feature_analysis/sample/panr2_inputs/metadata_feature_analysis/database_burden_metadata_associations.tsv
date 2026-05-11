@@ -1,0 +1,53 @@
+database	metadata_column	test_used	groups_tested	top_group	top_group_n	top_group_mean_unique_features	lowest_group	lowest_group_n	lowest_group_mean_unique_features	effect_size	warning
+mobsuite	host	mean_burden_range_screen	2	Homo sapiens	3	2.0000	environment	3	0.0000	2.0000	small_group
+mobsuite	isolation_source	mean_burden_range_screen	2	blood	3	2.0000	water	3	0.0000	2.0000	small_group
+mobsuite	collection_year	mean_burden_range_screen	2	2024	3	1.6667	2023	3	0.3333	1.3333	small_group
+mobsuite	country	mean_burden_range_screen	2	CountryA	3	1.6667	CountryB	3	0.3333	1.3333	small_group
+amr	host	mean_burden_range_screen	2	Homo sapiens	3	1.0000	environment	3	0.0000	1.0000	small_group
+plasmidfinder	host	mean_burden_range_screen	2	Homo sapiens	3	1.0000	environment	3	0.0000	1.0000	small_group
+amr	isolation_source	mean_burden_range_screen	2	blood	3	1.0000	water	3	0.0000	1.0000	small_group
+plasmidfinder	isolation_source	mean_burden_range_screen	2	blood	3	1.0000	water	3	0.0000	1.0000	small_group
+vfdb	collection_year	mean_burden_range_screen	2	2024	3	0.6667	2023	3	0.0000	0.6667	small_group
+vfdb	country	mean_burden_range_screen	2	CountryA	3	0.6667	CountryB	3	0.0000	0.6667	small_group
+amr	collection_year	mean_burden_range_screen	2	2024	3	0.6667	2023	3	0.3333	0.3333	small_group
+defensefinder	collection_year	mean_burden_range_screen	2	2023	3	0.3333	2024	3	0.0000	0.3333	small_group
+ectyper	collection_year	mean_burden_range_screen	2	2024	3	0.3333	2023	3	0.0000	0.3333	small_group
+isfinder	collection_year	mean_burden_range_screen	2	2024	3	0.3333	2023	3	0.0000	0.3333	small_group
+kaptive	collection_year	mean_burden_range_screen	2	2024	3	0.3333	2023	3	0.0000	0.3333	small_group
+kleborate	collection_year	mean_burden_range_screen	2	2024	3	0.3333	2023	3	0.0000	0.3333	small_group
+mobileelementfinder	collection_year	mean_burden_range_screen	2	2024	3	0.3333	2023	3	0.0000	0.3333	small_group
+plasmidfinder	collection_year	mean_burden_range_screen	2	2024	3	0.6667	2023	3	0.3333	0.3333	small_group
+prophage	collection_year	mean_burden_range_screen	2	2023	3	0.3333	2024	3	0.0000	0.3333	small_group
+sccmecfinder	collection_year	mean_burden_range_screen	2	2023	3	0.3333	2024	3	0.0000	0.3333	small_group
+serotypefinder	collection_year	mean_burden_range_screen	2	2023	3	0.3333	2024	3	0.0000	0.3333	small_group
+amr	country	mean_burden_range_screen	2	CountryA	3	0.6667	CountryB	3	0.3333	0.3333	small_group
+defensefinder	country	mean_burden_range_screen	2	CountryB	3	0.3333	CountryA	3	0.0000	0.3333	small_group
+ectyper	country	mean_burden_range_screen	2	CountryA	3	0.3333	CountryB	3	0.0000	0.3333	small_group
+isfinder	country	mean_burden_range_screen	2	CountryA	3	0.3333	CountryB	3	0.0000	0.3333	small_group
+kaptive	country	mean_burden_range_screen	2	CountryA	3	0.3333	CountryB	3	0.0000	0.3333	small_group
+kleborate	country	mean_burden_range_screen	2	CountryA	3	0.3333	CountryB	3	0.0000	0.3333	small_group
+mobileelementfinder	country	mean_burden_range_screen	2	CountryA	3	0.3333	CountryB	3	0.0000	0.3333	small_group
+plasmidfinder	country	mean_burden_range_screen	2	CountryA	3	0.6667	CountryB	3	0.3333	0.3333	small_group
+prophage	country	mean_burden_range_screen	2	CountryB	3	0.3333	CountryA	3	0.0000	0.3333	small_group
+sccmecfinder	country	mean_burden_range_screen	2	CountryB	3	0.3333	CountryA	3	0.0000	0.3333	small_group
+serotypefinder	country	mean_burden_range_screen	2	CountryB	3	0.3333	CountryA	3	0.0000	0.3333	small_group
+defensefinder	host	mean_burden_range_screen	2	environment	3	0.3333	Homo sapiens	3	0.0000	0.3333	small_group
+ectyper	host	mean_burden_range_screen	2	environment	3	0.3333	Homo sapiens	3	0.0000	0.3333	small_group
+isfinder	host	mean_burden_range_screen	2	environment	3	0.3333	Homo sapiens	3	0.0000	0.3333	small_group
+kaptive	host	mean_burden_range_screen	2	Homo sapiens	3	0.3333	environment	3	0.0000	0.3333	small_group
+kleborate	host	mean_burden_range_screen	2	Homo sapiens	3	0.3333	environment	3	0.0000	0.3333	small_group
+mobileelementfinder	host	mean_burden_range_screen	2	Homo sapiens	3	0.3333	environment	3	0.0000	0.3333	small_group
+prophage	host	mean_burden_range_screen	2	environment	3	0.3333	Homo sapiens	3	0.0000	0.3333	small_group
+sccmecfinder	host	mean_burden_range_screen	2	environment	3	0.3333	Homo sapiens	3	0.0000	0.3333	small_group
+serotypefinder	host	mean_burden_range_screen	2	Homo sapiens	3	0.3333	environment	3	0.0000	0.3333	small_group
+defensefinder	isolation_source	mean_burden_range_screen	2	water	3	0.3333	blood	3	0.0000	0.3333	small_group
+ectyper	isolation_source	mean_burden_range_screen	2	water	3	0.3333	blood	3	0.0000	0.3333	small_group
+isfinder	isolation_source	mean_burden_range_screen	2	water	3	0.3333	blood	3	0.0000	0.3333	small_group
+kaptive	isolation_source	mean_burden_range_screen	2	blood	3	0.3333	water	3	0.0000	0.3333	small_group
+kleborate	isolation_source	mean_burden_range_screen	2	blood	3	0.3333	water	3	0.0000	0.3333	small_group
+mobileelementfinder	isolation_source	mean_burden_range_screen	2	blood	3	0.3333	water	3	0.0000	0.3333	small_group
+prophage	isolation_source	mean_burden_range_screen	2	water	3	0.3333	blood	3	0.0000	0.3333	small_group
+sccmecfinder	isolation_source	mean_burden_range_screen	2	water	3	0.3333	blood	3	0.0000	0.3333	small_group
+serotypefinder	isolation_source	mean_burden_range_screen	2	blood	3	0.3333	water	3	0.0000	0.3333	small_group
+vfdb	host	mean_burden_range_screen	2	Homo sapiens	3	0.3333	Homo sapiens	3	0.3333	0.0000	small_group
+vfdb	isolation_source	mean_burden_range_screen	2	blood	3	0.3333	blood	3	0.3333	0.0000	small_group

@@ -1,0 +1,191 @@
+feature_a_database	feature_a_id	feature_a_category	feature_b_database	feature_b_id	feature_b_category	n_total	n_both_present	n_a_only	n_b_only	n_neither	jaccard	phi	odds_ratio	p_value	q_value	status
+amr	blaKPC-2	beta_lactam	mobsuite	IncFIB	replicon	6	1	1	1	3	0.3333	0.2500	3.0000	1	1	screening_exact_fisher_bh_fdr
+amr	blaKPC-2	beta_lactam	plasmidfinder	IncFIB	replicon	6	2	0	0	4	1.0000	1.0000		0.0666667	1	screening_exact_fisher_bh_fdr
+amr	blaKPC-2	beta_lactam	amr	tetA	tetracycline	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	blaKPC-2	beta_lactam	defensefinder	RM_Type_I	defense_system	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	blaKPC-2	beta_lactam	ectyper	O157:H7	serotype	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	blaKPC-2	beta_lactam	isfinder	ISEcp1	insertion_sequence	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	blaKPC-2	beta_lactam	kaptive	KL64	capsule_locus	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+amr	blaKPC-2	beta_lactam	kleborate	ST147	sequence_type	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+amr	blaKPC-2	beta_lactam	mobileelementfinder	IS26	insertion_sequence	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+amr	blaKPC-2	beta_lactam	mobsuite	AC125	plasmid_cluster	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+amr	blaKPC-2	beta_lactam	mobsuite	ISKpn26	is5	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+amr	blaKPC-2	beta_lactam	mobsuite	conjugative	mobility	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+amr	blaKPC-2	beta_lactam	mobsuite	molecule_type_plasmid	molecule_type	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+amr	blaKPC-2	beta_lactam	plasmidfinder	IncX3	replicon	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	blaKPC-2	beta_lactam	prophage	region_1	prophage	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	blaKPC-2	beta_lactam	sccmecfinder	SCCmec_IV	cassette_type	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	blaKPC-2	beta_lactam	serotypefinder	O2	serotype	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	blaKPC-2	beta_lactam	vfdb	fimH	virulence	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	blaKPC-2	beta_lactam	vfdb	iutA	virulence	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+mobsuite	IncFIB	replicon	plasmidfinder	IncFIB	replicon	6	1	1	1	3	0.3333	0.2500	3.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	IncFIB	replicon	amr	tetA	tetracycline	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+mobsuite	IncFIB	replicon	defensefinder	RM_Type_I	defense_system	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	IncFIB	replicon	ectyper	O157:H7	serotype	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	IncFIB	replicon	isfinder	ISEcp1	insertion_sequence	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	IncFIB	replicon	kaptive	KL64	capsule_locus	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	IncFIB	replicon	kleborate	ST147	sequence_type	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+mobsuite	IncFIB	replicon	mobileelementfinder	IS26	insertion_sequence	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	IncFIB	replicon	mobsuite	AC125	plasmid_cluster	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+mobsuite	IncFIB	replicon	mobsuite	ISKpn26	is5	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+mobsuite	IncFIB	replicon	mobsuite	conjugative	mobility	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+mobsuite	IncFIB	replicon	mobsuite	molecule_type_plasmid	molecule_type	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+mobsuite	IncFIB	replicon	plasmidfinder	IncX3	replicon	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+mobsuite	IncFIB	replicon	prophage	region_1	prophage	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	IncFIB	replicon	sccmecfinder	SCCmec_IV	cassette_type	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	IncFIB	replicon	serotypefinder	O2	serotype	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+mobsuite	IncFIB	replicon	vfdb	fimH	virulence	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	IncFIB	replicon	vfdb	iutA	virulence	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncFIB	replicon	amr	tetA	tetracycline	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncFIB	replicon	defensefinder	RM_Type_I	defense_system	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncFIB	replicon	ectyper	O157:H7	serotype	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncFIB	replicon	isfinder	ISEcp1	insertion_sequence	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncFIB	replicon	kaptive	KL64	capsule_locus	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncFIB	replicon	kleborate	ST147	sequence_type	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncFIB	replicon	mobileelementfinder	IS26	insertion_sequence	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncFIB	replicon	mobsuite	AC125	plasmid_cluster	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncFIB	replicon	mobsuite	ISKpn26	is5	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncFIB	replicon	mobsuite	conjugative	mobility	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncFIB	replicon	mobsuite	molecule_type_plasmid	molecule_type	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncFIB	replicon	plasmidfinder	IncX3	replicon	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncFIB	replicon	prophage	region_1	prophage	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncFIB	replicon	sccmecfinder	SCCmec_IV	cassette_type	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncFIB	replicon	serotypefinder	O2	serotype	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncFIB	replicon	vfdb	fimH	virulence	6	0	2	1	3	0.0000	-0.3162	0.0000	1	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncFIB	replicon	vfdb	iutA	virulence	6	1	1	0	4	0.5000	0.6325		0.333333	1	screening_exact_fisher_bh_fdr
+amr	tetA	tetracycline	defensefinder	RM_Type_I	defense_system	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	tetA	tetracycline	ectyper	O157:H7	serotype	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	tetA	tetracycline	isfinder	ISEcp1	insertion_sequence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	tetA	tetracycline	kaptive	KL64	capsule_locus	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	tetA	tetracycline	kleborate	ST147	sequence_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	tetA	tetracycline	mobileelementfinder	IS26	insertion_sequence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	tetA	tetracycline	mobsuite	AC125	plasmid_cluster	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	tetA	tetracycline	mobsuite	ISKpn26	is5	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	tetA	tetracycline	mobsuite	conjugative	mobility	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	tetA	tetracycline	mobsuite	molecule_type_plasmid	molecule_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	tetA	tetracycline	plasmidfinder	IncX3	replicon	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+amr	tetA	tetracycline	prophage	region_1	prophage	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	tetA	tetracycline	sccmecfinder	SCCmec_IV	cassette_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	tetA	tetracycline	serotypefinder	O2	serotype	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+amr	tetA	tetracycline	vfdb	fimH	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+amr	tetA	tetracycline	vfdb	iutA	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+defensefinder	RM_Type_I	defense_system	ectyper	O157:H7	serotype	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+defensefinder	RM_Type_I	defense_system	isfinder	ISEcp1	insertion_sequence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+defensefinder	RM_Type_I	defense_system	kaptive	KL64	capsule_locus	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+defensefinder	RM_Type_I	defense_system	kleborate	ST147	sequence_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+defensefinder	RM_Type_I	defense_system	mobileelementfinder	IS26	insertion_sequence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+defensefinder	RM_Type_I	defense_system	mobsuite	AC125	plasmid_cluster	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+defensefinder	RM_Type_I	defense_system	mobsuite	ISKpn26	is5	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+defensefinder	RM_Type_I	defense_system	mobsuite	conjugative	mobility	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+defensefinder	RM_Type_I	defense_system	mobsuite	molecule_type_plasmid	molecule_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+defensefinder	RM_Type_I	defense_system	plasmidfinder	IncX3	replicon	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+defensefinder	RM_Type_I	defense_system	prophage	region_1	prophage	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+defensefinder	RM_Type_I	defense_system	sccmecfinder	SCCmec_IV	cassette_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+defensefinder	RM_Type_I	defense_system	serotypefinder	O2	serotype	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+defensefinder	RM_Type_I	defense_system	vfdb	fimH	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+defensefinder	RM_Type_I	defense_system	vfdb	iutA	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+ectyper	O157:H7	serotype	isfinder	ISEcp1	insertion_sequence	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+ectyper	O157:H7	serotype	kaptive	KL64	capsule_locus	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+ectyper	O157:H7	serotype	kleborate	ST147	sequence_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+ectyper	O157:H7	serotype	mobileelementfinder	IS26	insertion_sequence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+ectyper	O157:H7	serotype	mobsuite	AC125	plasmid_cluster	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+ectyper	O157:H7	serotype	mobsuite	ISKpn26	is5	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+ectyper	O157:H7	serotype	mobsuite	conjugative	mobility	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+ectyper	O157:H7	serotype	mobsuite	molecule_type_plasmid	molecule_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+ectyper	O157:H7	serotype	plasmidfinder	IncX3	replicon	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+ectyper	O157:H7	serotype	prophage	region_1	prophage	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+ectyper	O157:H7	serotype	sccmecfinder	SCCmec_IV	cassette_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+ectyper	O157:H7	serotype	serotypefinder	O2	serotype	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+ectyper	O157:H7	serotype	vfdb	fimH	virulence	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+ectyper	O157:H7	serotype	vfdb	iutA	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+isfinder	ISEcp1	insertion_sequence	kaptive	KL64	capsule_locus	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+isfinder	ISEcp1	insertion_sequence	kleborate	ST147	sequence_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+isfinder	ISEcp1	insertion_sequence	mobileelementfinder	IS26	insertion_sequence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+isfinder	ISEcp1	insertion_sequence	mobsuite	AC125	plasmid_cluster	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+isfinder	ISEcp1	insertion_sequence	mobsuite	ISKpn26	is5	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+isfinder	ISEcp1	insertion_sequence	mobsuite	conjugative	mobility	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+isfinder	ISEcp1	insertion_sequence	mobsuite	molecule_type_plasmid	molecule_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+isfinder	ISEcp1	insertion_sequence	plasmidfinder	IncX3	replicon	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+isfinder	ISEcp1	insertion_sequence	prophage	region_1	prophage	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+isfinder	ISEcp1	insertion_sequence	sccmecfinder	SCCmec_IV	cassette_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+isfinder	ISEcp1	insertion_sequence	serotypefinder	O2	serotype	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+isfinder	ISEcp1	insertion_sequence	vfdb	fimH	virulence	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+isfinder	ISEcp1	insertion_sequence	vfdb	iutA	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+kaptive	KL64	capsule_locus	kleborate	ST147	sequence_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+kaptive	KL64	capsule_locus	mobileelementfinder	IS26	insertion_sequence	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+kaptive	KL64	capsule_locus	mobsuite	AC125	plasmid_cluster	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+kaptive	KL64	capsule_locus	mobsuite	ISKpn26	is5	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+kaptive	KL64	capsule_locus	mobsuite	conjugative	mobility	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+kaptive	KL64	capsule_locus	mobsuite	molecule_type_plasmid	molecule_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+kaptive	KL64	capsule_locus	plasmidfinder	IncX3	replicon	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+kaptive	KL64	capsule_locus	prophage	region_1	prophage	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+kaptive	KL64	capsule_locus	sccmecfinder	SCCmec_IV	cassette_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+kaptive	KL64	capsule_locus	serotypefinder	O2	serotype	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+kaptive	KL64	capsule_locus	vfdb	fimH	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+kaptive	KL64	capsule_locus	vfdb	iutA	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+kleborate	ST147	sequence_type	mobileelementfinder	IS26	insertion_sequence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+kleborate	ST147	sequence_type	mobsuite	AC125	plasmid_cluster	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+kleborate	ST147	sequence_type	mobsuite	ISKpn26	is5	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+kleborate	ST147	sequence_type	mobsuite	conjugative	mobility	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+kleborate	ST147	sequence_type	mobsuite	molecule_type_plasmid	molecule_type	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+kleborate	ST147	sequence_type	plasmidfinder	IncX3	replicon	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+kleborate	ST147	sequence_type	prophage	region_1	prophage	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+kleborate	ST147	sequence_type	sccmecfinder	SCCmec_IV	cassette_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+kleborate	ST147	sequence_type	serotypefinder	O2	serotype	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+kleborate	ST147	sequence_type	vfdb	fimH	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+kleborate	ST147	sequence_type	vfdb	iutA	virulence	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+mobileelementfinder	IS26	insertion_sequence	mobsuite	AC125	plasmid_cluster	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobileelementfinder	IS26	insertion_sequence	mobsuite	ISKpn26	is5	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobileelementfinder	IS26	insertion_sequence	mobsuite	conjugative	mobility	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobileelementfinder	IS26	insertion_sequence	mobsuite	molecule_type_plasmid	molecule_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobileelementfinder	IS26	insertion_sequence	plasmidfinder	IncX3	replicon	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobileelementfinder	IS26	insertion_sequence	prophage	region_1	prophage	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobileelementfinder	IS26	insertion_sequence	sccmecfinder	SCCmec_IV	cassette_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobileelementfinder	IS26	insertion_sequence	serotypefinder	O2	serotype	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobileelementfinder	IS26	insertion_sequence	vfdb	fimH	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobileelementfinder	IS26	insertion_sequence	vfdb	iutA	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	AC125	plasmid_cluster	mobsuite	ISKpn26	is5	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+mobsuite	AC125	plasmid_cluster	mobsuite	conjugative	mobility	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+mobsuite	AC125	plasmid_cluster	mobsuite	molecule_type_plasmid	molecule_type	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+mobsuite	AC125	plasmid_cluster	plasmidfinder	IncX3	replicon	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	AC125	plasmid_cluster	prophage	region_1	prophage	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	AC125	plasmid_cluster	sccmecfinder	SCCmec_IV	cassette_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	AC125	plasmid_cluster	serotypefinder	O2	serotype	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	AC125	plasmid_cluster	vfdb	fimH	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	AC125	plasmid_cluster	vfdb	iutA	virulence	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+mobsuite	ISKpn26	is5	mobsuite	conjugative	mobility	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+mobsuite	ISKpn26	is5	mobsuite	molecule_type_plasmid	molecule_type	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+mobsuite	ISKpn26	is5	plasmidfinder	IncX3	replicon	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	ISKpn26	is5	prophage	region_1	prophage	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	ISKpn26	is5	sccmecfinder	SCCmec_IV	cassette_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	ISKpn26	is5	serotypefinder	O2	serotype	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	ISKpn26	is5	vfdb	fimH	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	ISKpn26	is5	vfdb	iutA	virulence	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+mobsuite	conjugative	mobility	mobsuite	molecule_type_plasmid	molecule_type	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+mobsuite	conjugative	mobility	plasmidfinder	IncX3	replicon	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	conjugative	mobility	prophage	region_1	prophage	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	conjugative	mobility	sccmecfinder	SCCmec_IV	cassette_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	conjugative	mobility	serotypefinder	O2	serotype	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	conjugative	mobility	vfdb	fimH	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	conjugative	mobility	vfdb	iutA	virulence	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+mobsuite	molecule_type_plasmid	molecule_type	plasmidfinder	IncX3	replicon	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	molecule_type_plasmid	molecule_type	prophage	region_1	prophage	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	molecule_type_plasmid	molecule_type	sccmecfinder	SCCmec_IV	cassette_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	molecule_type_plasmid	molecule_type	serotypefinder	O2	serotype	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	molecule_type_plasmid	molecule_type	vfdb	fimH	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+mobsuite	molecule_type_plasmid	molecule_type	vfdb	iutA	virulence	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncX3	replicon	prophage	region_1	prophage	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncX3	replicon	sccmecfinder	SCCmec_IV	cassette_type	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncX3	replicon	serotypefinder	O2	serotype	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncX3	replicon	vfdb	fimH	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+plasmidfinder	IncX3	replicon	vfdb	iutA	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+prophage	region_1	prophage	sccmecfinder	SCCmec_IV	cassette_type	6	1	0	0	5	1.0000	1.0000		0.166667	1	screening_exact_fisher_bh_fdr
+prophage	region_1	prophage	serotypefinder	O2	serotype	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+prophage	region_1	prophage	vfdb	fimH	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+prophage	region_1	prophage	vfdb	iutA	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+sccmecfinder	SCCmec_IV	cassette_type	serotypefinder	O2	serotype	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+sccmecfinder	SCCmec_IV	cassette_type	vfdb	fimH	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+sccmecfinder	SCCmec_IV	cassette_type	vfdb	iutA	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+serotypefinder	O2	serotype	vfdb	fimH	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+serotypefinder	O2	serotype	vfdb	iutA	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr
+vfdb	fimH	virulence	vfdb	iutA	virulence	6	0	1	1	4	0.0000	-0.2000	0.0000	1	1	screening_exact_fisher_bh_fdr

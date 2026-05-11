@@ -1,0 +1,7 @@
+Assembly Accession,Organism Name,Country,Host_SD,Isolation_Source_SD,Collection_Year,Assembly BioProject Accession
+GCF_900000001.1,Klebsiella pneumoniae,CountryA,Homo sapiens,blood,2024,PRJNA_DOMINANT
+GCF_900000002.1,Klebsiella pneumoniae,CountryA,Homo sapiens,blood,2024,PRJNA_DOMINANT
+GCF_900000003.1,Klebsiella pneumoniae,CountryA,environment,water,2024,PRJNA_DOMINANT
+GCF_900000004.1,Klebsiella pneumoniae,CountryB,Homo sapiens,blood,2023,PRJNA_OTHER_4
+GCF_900000005.1,Klebsiella pneumoniae,CountryB,environment,water,2023,PRJNA_OTHER_5
+GCF_900000006.1,Klebsiella pneumoniae,CountryB,environment,water,2023,PRJNA_OTHER_6

@@ -1,0 +1,19 @@
+database	expected_from_profile	module_enabled	raw_output_found	feature_table_found	feature_rows	unique_features	samples_with_features	samples_processed	status	message
+amr	unknown_from_export_context	true	true	true	3	2	3	3	PASS	feature table contains rows
+amrfinderplus	unknown_from_export_context	false	false	false	0	0	0	0	SKIPPED_NOT_ENABLED	module output not found
+defensefinder	unknown_from_export_context	true	true	true	1	1	1	1	PASS	feature table contains rows
+ectyper	unknown_from_export_context	true	true	true	1	1	1	1	PASS	feature table contains rows
+genomad	unknown_from_export_context	false	false	false	0	0	0	0	SKIPPED_NOT_ENABLED	module output not found
+iceberg	unknown_from_export_context	false	false	false	0	0	0	0	SKIPPED_NOT_ENABLED	module output not found
+integronfinder	unknown_from_export_context	false	false	false	0	0	0	0	SKIPPED_NOT_ENABLED	module output not found
+isfinder	unknown_from_export_context	true	true	true	1	1	1	1	PASS	feature table contains rows
+kaptive	unknown_from_export_context	true	true	true	1	1	1	1	PASS	feature table contains rows
+kleborate	unknown_from_export_context	true	true	true	1	1	1	1	PASS	feature table contains rows
+mlst	unknown_from_export_context	false	false	false	0	0	0	0	SKIPPED_NOT_ENABLED	module output not found
+mobileelementfinder	unknown_from_export_context	true	true	true	1	1	1	1	PASS	feature table contains rows
+mobsuite	unknown_from_export_context	true	true	true	6	5	2	2	PASS	feature table contains rows
+plasmidfinder	unknown_from_export_context	true	true	true	3	2	3	3	PASS	feature table contains rows
+prophage	unknown_from_export_context	true	true	true	1	1	1	1	PASS	feature table contains rows
+sccmecfinder	unknown_from_export_context	true	true	true	1	1	1	1	PASS	feature table contains rows
+serotypefinder	unknown_from_export_context	true	true	true	1	1	1	1	PASS	feature table contains rows
+vfdb	unknown_from_export_context	true	true	true	2	2	2	2	PASS	feature table contains rows

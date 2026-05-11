@@ -1,0 +1,19 @@
+module	enabled	started	completed	status	samples_input	samples_processed	samples_failed	raw_tables_created	feature_rows_created	unique_features_created	output_dir	message
+amr	true	true	true	PASS	3	3		true	3	2	validation/optional_feature_analysis/sample/amr	feature table contains rows
+amrfinderplus	false	false	false	SKIPPED_NOT_ENABLED	0	0		false	0	0	validation/optional_feature_analysis/sample/amrfinderplus	module output not found
+defensefinder	true	true	true	PASS	1	1		true	1	1	validation/optional_feature_analysis/sample/defensefinder	feature table contains rows
+ectyper	true	true	true	PASS	1	1		true	1	1	validation/optional_feature_analysis/sample/ectyper	feature table contains rows
+genomad	false	false	false	SKIPPED_NOT_ENABLED	0	0		false	0	0	validation/optional_feature_analysis/sample/genomad	module output not found
+iceberg	false	false	false	SKIPPED_NOT_ENABLED	0	0		false	0	0	validation/optional_feature_analysis/sample/iceberg	module output not found
+integronfinder	false	false	false	SKIPPED_NOT_ENABLED	0	0		false	0	0	validation/optional_feature_analysis/sample/integronfinder	module output not found
+isfinder	true	true	true	PASS	1	1		true	1	1	validation/optional_feature_analysis/sample/isfinder	feature table contains rows
+kaptive	true	true	true	PASS	1	1		true	1	1	validation/optional_feature_analysis/sample/kaptive	feature table contains rows
+kleborate	true	true	true	PASS	1	1		true	1	1	validation/optional_feature_analysis/sample/kleborate	feature table contains rows
+mlst	false	false	false	SKIPPED_NOT_ENABLED	0	0		false	0	0	validation/optional_feature_analysis/sample/mlst	module output not found
+mobileelementfinder	true	true	true	PASS	1	1		true	1	1	validation/optional_feature_analysis/sample/mobileelementfinder	feature table contains rows
+mobsuite	true	true	true	PASS	2	2		true	6	5	validation/optional_feature_analysis/sample/mobsuite	feature table contains rows
+plasmidfinder	true	true	true	PASS	3	3		true	3	2	validation/optional_feature_analysis/sample/plasmidfinder	feature table contains rows
+prophage	true	true	true	PASS	1	1		true	1	1	validation/optional_feature_analysis/sample/prophage	feature table contains rows
+sccmecfinder	true	true	true	PASS	1	1		true	1	1	validation/optional_feature_analysis/sample/sccmecfinder	feature table contains rows
+serotypefinder	true	true	true	PASS	1	1		true	1	1	validation/optional_feature_analysis/sample/serotypefinder	feature table contains rows
+vfdb	true	true	true	PASS	2	2		true	2	2	validation/optional_feature_analysis/sample/vfdb	feature table contains rows

@@ -1,0 +1,4 @@
+#FILE	SEQUENCE	START	END	GENE	%COVERAGE	%IDENTITY	DATABASE	ACCESSION	PRODUCT	RESISTANCE
+GCF_900000001.1.fna	contigA	1300	1700	IncFIB	100	99	plasmidfinder	IncFIB_ACC	replicon	replicon
+GCF_900000002.1.fna	contigA	1300	1700	IncFIB	100	99	plasmidfinder	IncFIB_ACC	replicon	replicon
+GCF_900000004.1.fna	contigB	1300	1700	IncX3	100	99	plasmidfinder	IncX3_ACC	replicon	replicon

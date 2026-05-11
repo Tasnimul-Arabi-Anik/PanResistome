@@ -1,0 +1,8 @@
+column	standardized_name	data_type	non_missing_count	missing_fraction	unique_values	top_value	top_value_fraction	recommended_for_analysis	reason
+Assembly Accession		categorical	6	0.0000	6	GCF_900000001.1	0.1667	true	eligible
+Assembly BioProject Accession	bioproject	categorical	6	0.0000	4	PRJNA_DOMINANT	0.5000	true	eligible
+Collection_Year	collection_year	year	6	0.0000	2	2024	0.5000	true	eligible
+Country	country	categorical	6	0.0000	2	CountryA	0.5000	true	eligible
+Host_SD	host	categorical	6	0.0000	2	Homo sapiens	0.5000	true	eligible
+Isolation_Source_SD	isolation_source	categorical	6	0.0000	2	blood	0.5000	true	eligible
+Organism Name	organism	categorical	6	0.0000	1	Klebsiella pneumoniae	1.0000	false	sparse_constant_identifier_or_dominated

@@ -1,0 +1,7 @@
+assembly_accession	amr|blaKPC-2	mobsuite|IncFIB	plasmidfinder|IncFIB	amr|tetA	defensefinder|RM_Type_I	ectyper|O157:H7	isfinder|ISEcp1	kaptive|KL64	kleborate|ST147	mobileelementfinder|IS26	mobsuite|AC125	mobsuite|ISKpn26	mobsuite|conjugative	mobsuite|molecule_type_plasmid	plasmidfinder|IncX3	prophage|region_1	sccmecfinder|SCCmec_IV	serotypefinder|O2	vfdb|fimH	vfdb|iutA
+GCF_900000001.1	1	1	1	0	0	0	0	0	1	0	1	1	1	1	0	0	0	0	0	1
+GCF_900000002.1	1	0	1	0	0	0	0	1	0	1	0	0	0	0	0	0	0	0	0	0
+GCF_900000003.1	0	0	0	0	0	1	1	0	0	0	0	0	0	0	0	0	0	0	1	0
+GCF_900000004.1	0	1	0	1	0	0	0	0	0	0	0	0	0	0	1	0	0	1	0	0
+GCF_900000005.1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	1	1	0	0	0
+GCF_900000006.1	0	0	0	0	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0

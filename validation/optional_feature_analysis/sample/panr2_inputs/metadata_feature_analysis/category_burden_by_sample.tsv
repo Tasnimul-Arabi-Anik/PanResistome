@@ -1,0 +1,24 @@
+assembly_accession	database	feature_category	unique_feature_count	country	continent	subcontinent	host	host_group	isolation_source	sample_type	environment_medium	collection_year	organism	species	genus	bioproject	biosample	assembly_level	submitter
+GCF_900000001.1	amr	beta_lactam	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	kleborate	sequence_type	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	mobsuite	is5	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	mobsuite	mobility	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	mobsuite	molecule_type	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	mobsuite	plasmid_cluster	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	mobsuite	replicon	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	plasmidfinder	replicon	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000001.1	vfdb	virulence	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000002.1	amr	beta_lactam	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000002.1	kaptive	capsule_locus	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000002.1	mobileelementfinder	insertion_sequence	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000002.1	plasmidfinder	replicon	1	CountryA			Homo sapiens		blood			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000003.1	ectyper	serotype	1	CountryA			environment		water			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000003.1	isfinder	insertion_sequence	1	CountryA			environment		water			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000003.1	vfdb	virulence	1	CountryA			environment		water			2024	Klebsiella pneumoniae			PRJNA_DOMINANT			
+GCF_900000004.1	amr	tetracycline	1	CountryB			Homo sapiens		blood			2023	Klebsiella pneumoniae			PRJNA_OTHER_4			
+GCF_900000004.1	mobsuite	replicon	1	CountryB			Homo sapiens		blood			2023	Klebsiella pneumoniae			PRJNA_OTHER_4			
+GCF_900000004.1	plasmidfinder	replicon	1	CountryB			Homo sapiens		blood			2023	Klebsiella pneumoniae			PRJNA_OTHER_4			
+GCF_900000004.1	serotypefinder	serotype	1	CountryB			Homo sapiens		blood			2023	Klebsiella pneumoniae			PRJNA_OTHER_4			
+GCF_900000005.1	prophage	prophage	1	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_5			
+GCF_900000005.1	sccmecfinder	cassette_type	1	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_5			
+GCF_900000006.1	defensefinder	defense_system	1	CountryB			environment		water			2023	Klebsiella pneumoniae			PRJNA_OTHER_6			
