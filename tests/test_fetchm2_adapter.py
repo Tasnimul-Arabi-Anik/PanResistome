@@ -609,6 +609,61 @@ class FetchM2AdapterTests(unittest.TestCase):
             vfdb_status = status.loc[status["database_or_tool"] == "abricate_db:vfdb", "status"].iloc[0]
             self.assertEqual(vfdb_status, "FAIL")
 
+    def test_database_setup_status_warns_when_mobsuite_taxa_sqlite_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            sample_dir = root / "Klebsiella_oxytoca"
+            (sample_dir / "metadata_output").mkdir(parents=True)
+            (sample_dir / "sequence").mkdir()
+            (sample_dir / "mobsuite" / "tables").mkdir(parents=True)
+            (sample_dir / "metadata_output" / "ncbi_clean.csv").write_text(
+                "Assembly Accession,Organism Name\nGCF_000000001.1,Klebsiella oxytoca\n",
+                encoding="utf-8",
+            )
+            (sample_dir / "sequence" / "GCF_000000001.1_genomic.fna").write_text(
+                ">contig1\nATGC\n",
+                encoding="utf-8",
+            )
+            mobsuite_db = root / "mobsuite_db"
+            mobsuite_db.mkdir()
+            for name in [
+                "clusters.txt",
+                "host_range_literature_plasmidDB.txt",
+                "mob.proteins.faa",
+                "mpf.proteins.faa",
+                "ncbi_plasmid_full_seqs.fas",
+                "ncbi_plasmid_full_seqs.fas.msh",
+                "orit.fas",
+                "rep.dna.fas",
+                "repetitive.dna.fas",
+                "ncbi_plasmid_full_seqs.fas.nhr",
+                "repetitive.dna.fas.nhr",
+            ]:
+                (mobsuite_db / name).write_text("placeholder\n", encoding="utf-8")
+            out = root / "database_setup_status.tsv"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "scripts" / "database_setup_status.py"),
+                    "--sample-dir",
+                    str(sample_dir),
+                    "--out",
+                    str(out),
+                    "--run-mobsuite",
+                    "true",
+                    "--mobsuite-db",
+                    str(mobsuite_db),
+                    "--strict",
+                ],
+                check=True,
+            )
+
+            status = pd.read_csv(out, sep="\t")
+            row = status.loc[status["database_or_tool"] == "mobsuite_database"].iloc[0]
+            self.assertEqual(row["status"], "WARNING")
+            self.assertIn("taxa.sqlite", row["message"])
+
     def test_validation_summary_script_reports_manifest_metrics(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

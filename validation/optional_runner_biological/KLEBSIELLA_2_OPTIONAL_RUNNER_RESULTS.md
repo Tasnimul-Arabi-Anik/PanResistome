@@ -106,13 +106,13 @@ Feature-contract validation was clean: zero unmatched, invalid, or duplicate fea
 
 ## MOB-suite Result
 
-MOB-suite was attempted on the same two assemblies, but the cached environment is broken:
+MOB-suite was attempted on the same two assemblies. The first cached environment was broken:
 
 ```text
 ModuleNotFoundError: No module named 'mob_suite.mob_recon'
 ```
 
-The workflow now preserves per-sample MOB-suite logs under:
+The workflow preserves per-sample MOB-suite logs under:
 
 ```text
 mobsuite/raw/<sample>/mob_recon.stderr
@@ -135,7 +135,7 @@ samples_failed=2
 feature_rows_created=0
 ```
 
-This means MOB-suite orchestration and failure reporting are working, but the local MOB-suite installation must be repaired before biological MOB-suite validation can pass.
+This means MOB-suite orchestration and failure reporting are working, but the original local MOB-suite installation had to be repaired before biological MOB-suite validation could proceed.
 
 ## MOB-suite Environment Repair Follow-up
 
@@ -172,6 +172,32 @@ PanResistome now supports:
 
 which is passed to `mob_recon --database_directory`.
 
+## MOB-suite Database Follow-up
+
+A real MOB-suite database initialization was attempted after the environment repair. The Zenodo database archive downloaded and extracted successfully, and the database directory contains the core MOB-suite FASTA files plus BLAST databases. The failed post-download step was the Mash sketch because `mob_init` did not find `mash` on its subprocess `PATH`.
+
+The missing sketch was then built manually with the same environment:
+
+```text
+ncbi_plasmid_full_seqs.fas.msh
+```
+
+A direct one-genome `mob_recon` smoke test with `--database_directory validation_runs/mobsuite_db_test` then progressed through real MOB-suite plasmid reconstruction and wrote a plasmid FASTA, showing that the repaired environment and core database are usable. The remaining failure occurred at final MOB-typer/host-range reporting because MOB-suite calls `ete3`, which requires an NCBI taxonomy database:
+
+```text
+taxa.sqlite
+```
+
+No local `taxa.sqlite` was available, and this sandbox could not resolve `ftp.ncbi.nih.gov` to download `taxdump.tar.gz.md5`. The current biological MOB-suite blocker is therefore not the PanResistome runner or the core MOB-suite database; it is the missing MOB-suite/ETE taxonomy cache in a network-restricted environment.
+
+From this follow-up, PanResistome was hardened so MOB-suite runs with a task-local writable `HOME` for ETE cache creation, and database preflight now distinguishes:
+
+```text
+core MOB-suite database missing/incomplete
+core database present but taxa.sqlite missing
+core database plus taxa.sqlite present
+```
+
 ## Fixes Added From This Validation
 
 1. Kleborate runner now uses `--preset kpsc`, required by Kleborate v3.
@@ -181,10 +207,12 @@ which is passed to `mob_recon --database_directory`.
 5. MOB-suite now writes per-sample stdout/stderr and a `module_status.tsv` instead of hiding runtime failures behind an empty table.
 6. MOB-suite environment creation now avoids the fragile Bioconda `mob_init` post-link by installing `mob-suite==3.1.9` with pip inside a Conda-managed environment.
 7. MOB-suite runner mode now accepts `--mobsuite_db` for a preinitialized MOB-suite database directory.
+8. MOB-suite runner mode now uses a task-local writable `HOME` so ETE taxonomy initialization does not fail on read-only home directories.
+9. Database setup auditing now checks required MOB-suite core files and warns separately when `taxa.sqlite` is missing.
 
 ## Next Biological Optional-Runner Targets
 
-1. Supply a preinitialized MOB-suite database with `--mobsuite_db`, then rerun this same two-genome validation.
+1. Supply a preinitialized MOB-suite database with both core files and `taxa.sqlite`, then rerun this same two-genome validation with `--mobsuite_db`.
 2. Add a Kaptive database path and run Kaptive on the same Klebsiella subset.
 3. Add geNomad DB path and run geNomad on the same subset.
 4. Use an E. coli two-genome subset for ECTyper validation.

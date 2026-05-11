@@ -1771,6 +1771,8 @@ process MOBSUITE_ANALYSIS {
     fi
 
     mkdir -p ${sample_dir}/mobsuite/raw ${sample_dir}/mobsuite/tables
+    export HOME="\${PWD}/mobsuite_home"
+    mkdir -p "\${HOME}/.etetoolkit"
     status_file=${sample_dir}/mobsuite/module_status.tsv
     printf "module\\tenabled\\tstarted\\tcompleted\\tstatus\\tsamples_input\\tsamples_processed\\tsamples_failed\\traw_tables_created\\tfeature_rows_created\\tunique_features_created\\toutput_dir\\tmessage\\n" > "\${status_file}"
     started=\$(date -u +"%Y-%m-%dT%H:%M:%SZ")

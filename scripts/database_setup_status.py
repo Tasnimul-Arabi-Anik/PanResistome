@@ -90,6 +90,44 @@ def existing_path(value: str | None) -> str:
     return str(path) if path.exists() else ""
 
 
+def mobsuite_database_status(path: Path) -> tuple[str, str]:
+    """Return a status and message for a supplied MOB-suite database directory."""
+    required_files = [
+        "clusters.txt",
+        "host_range_literature_plasmidDB.txt",
+        "mob.proteins.faa",
+        "mpf.proteins.faa",
+        "ncbi_plasmid_full_seqs.fas",
+        "ncbi_plasmid_full_seqs.fas.msh",
+        "orit.fas",
+        "rep.dna.fas",
+        "repetitive.dna.fas",
+    ]
+    required_prefixes = [
+        "ncbi_plasmid_full_seqs.fas.n",
+        "repetitive.dna.fas.n",
+    ]
+    if not path.exists():
+        return "FAIL", "Supplied --mobsuite_db path was not found."
+    if not path.is_dir():
+        return "FAIL", "Supplied --mobsuite_db path is not a directory."
+
+    missing_files = [name for name in required_files if not (path / name).exists()]
+    missing_prefixes = [
+        prefix for prefix in required_prefixes if not any(child.name.startswith(prefix) for child in path.iterdir())
+    ]
+    if missing_files or missing_prefixes:
+        missing = missing_files + [f"{prefix}*" for prefix in missing_prefixes]
+        return "FAIL", f"MOB-suite database is incomplete; missing {', '.join(missing)}."
+
+    if not (path / "taxa.sqlite").exists():
+        return (
+            "WARNING",
+            "MOB-suite core database files are present, but taxa.sqlite is missing; mob_recon may try to download NCBI taxonomy at runtime.",
+        )
+    return "PASS", "MOB-suite database directory contains core files and taxa.sqlite."
+
+
 def first_dmnd(path: str | None) -> str:
     if not path:
         return ""
@@ -352,15 +390,16 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
     if args.run_mobsuite:
         mobsuite_db_path = Path(args.mobsuite_db) if args.mobsuite_db else Path("")
         if args.mobsuite_db:
+            mobsuite_status, mobsuite_message = mobsuite_database_status(mobsuite_db_path)
             rows.append(
                 row(
                     "mobsuite_database",
                     True,
                     True,
-                    "PASS" if mobsuite_db_path.exists() else "FAIL",
+                    mobsuite_status,
                     "provided_database_directory",
                     str(mobsuite_db_path) if mobsuite_db_path.exists() else "",
-                    "MOB-suite database directory was supplied." if mobsuite_db_path.exists() else "Supplied --mobsuite_db path was not found.",
+                    mobsuite_message,
                 )
             )
         else:

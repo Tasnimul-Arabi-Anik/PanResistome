@@ -31,12 +31,13 @@
 - MOB-suite runner mode now preserves per-sample stdout/stderr and writes `mobsuite/module_status.tsv`, making broken local installations visible in the PanR2 module status summary.
 - MOB-suite environment creation now installs `mob-suite==3.1.9` with pip inside a Conda-managed environment to avoid Bioconda post-link `mob_init` fragility during environment creation.
 - Added `--mobsuite_db` to pass a preinitialized MOB-suite database directory to `mob_recon --database_directory`.
+- MOB-suite runner mode now uses a task-local writable `HOME` for ETE taxonomy cache creation and the database preflight distinguishes incomplete core MOB-suite databases from missing `taxa.sqlite`.
 
 ### Tested
 - Synthetic PanR2 contract tests now cover optional table-input exports for MobileElementFinder, ISfinder, MOB-suite, prophage/geNomad, DefenseFinder, Kleborate, Kaptive, ECTyper, SerotypeFinder, and SCCmecFinder.
 - Optional-runner smoke validation completed on two local fixture assemblies with ISfinder-compatible BLAST, MOB-suite, geNomad/prophage, Kleborate, Kaptive, ECTyper, PanR2 export, and result collection enabled while CheckM2, GTDB-Tk, QUAST, ANI, Mash, AMRFinderPlus, PanR2 comprehensive mode, and legacy ABRicate/PanR were disabled.
 - Kleborate biological validation completed on two complete `Klebsiella pneumoniae` assemblies, producing 25 standardized `kleborate.features.tsv` rows with zero unmatched, invalid, or duplicate feature rows.
-- MOB-suite biological validation was attempted on the same two assemblies. The repaired environment exposes `mob_recon 3.1.9` and the runner starts correctly, but biological feature validation remains blocked until a preinitialized MOB-suite database is supplied or runtime database download succeeds.
+- MOB-suite biological validation was attempted on the same two assemblies. The repaired environment exposes `mob_recon 3.1.9`; a real MOB-suite database reached plasmid reconstruction in direct smoke testing, but final feature validation remains blocked in this restricted environment until `taxa.sqlite` is supplied or NCBI taxonomy download succeeds.
 
 ### Validated
 - The 100-record `Klebsiella pneumoniae` input completed with `-profile conda,mamba,desktop_parallel,large`, GTDB-Tk disabled, CheckM2 capped, AMRFinderPlus enabled, and parallel native feature runners. The run produced 12,838 complete standardized feature rows, 99 QC PASS calls, zero unmatched/invalid/duplicate feature rows, capped report-facing matrices/summaries, and the expected HTML report set.

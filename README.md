@@ -441,7 +441,7 @@ PanResistome/
 | `--skip_heavy_interactive_plots` | bool | false | Mark heavy interactive plots as skipped/deprioritized in report controls; enabled automatically by large-dataset mode |
 | `--run_mobsuite` | bool | false | Run MOB-suite and pass plasmid reconstruction/typing tables into PanR2 |
 | `--mobsuite_dir` | path | - | Existing MOB-suite table directory to pass into PanR2 |
-| `--mobsuite_db` | path | - | Existing MOB-suite database directory passed to `mob_recon --database_directory`; if omitted, MOB-suite may try to initialize/download its database at runtime |
+| `--mobsuite_db` | path | - | Existing MOB-suite database directory passed to `mob_recon --database_directory`; for offline/restricted runs it should include core MOB-suite files plus `taxa.sqlite` |
 | `--run_genomad` | bool | false | Run geNomad and pass prophage/viral-region tables into PanR2 |
 | `--prophage_dir` | path | - | Existing prophage/viral-region table directory to pass into PanR2 |
 | `--genomad_db` | path | - | geNomad database directory required for `--run_genomad true` |
