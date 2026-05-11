@@ -16,6 +16,9 @@
 - First real biological optional-runner validation evidence under `validation/optional_runner_biological/`, using two complete Klebsiella genomes with Kleborate and MOB-suite enabled.
 - Explicit ABRicate setup/update auditing through `scripts/setup_abricate_databases.py`, `--panr2_update_abricate_db`, and `panr2_inputs/manifest/abricate_database_setup_status.tsv`.
 - A database automation matrix documenting which databases are automatic, opt-in, path-required, restricted, or still validation targets.
+- Audited MOB-suite database cache helpers through `--mobsuite_db_dir`, `--mobsuite_auto_init_db`, `--mobsuite_auto_init_taxa`, and `mobsuite/mobsuite_database_setup_status.tsv`.
+- Audited geNomad database download/cache helpers through `--genomad_db_dir`, `--genomad_auto_download_db`, and `prophage/genomad_database_setup_status.tsv`.
+- `--panr2_mobileelementfinder_allow_failure` to keep opt-in MobileElementFinder failures nonfatal while preserving module/audit status.
 
 ### Changed
 - PanR2 handoff export now applies configured feature caps to presence/absence matrices and co-occurrence/proximity summaries, preserves complete proximity evidence as `feature_proximity_all.tsv`, and surfaces report-control settings in `panr2_inputs/report/report_controls.html`.
@@ -37,6 +40,8 @@
 - MOB-suite runner mode now passes `--force` to `mob_recon`, and PanR2 contract export now converts real MOB-suite biomarker, plasmid-cluster, mobility, host-range, and MGE rows into standardized `mobsuite.features.tsv` rows.
 - Comprehensive/native PanR2 feature-runner setup now records whether requested ABRicate databases were present before setup, whether `panr setup-db` ran, whether `abricate-get_db --force` was requested, and whether each database was present afterward.
 - ABRicate database force-refresh is now enabled by default for comprehensive/native PanR2 feature-runner setup; set `--panr2_update_abricate_db false` for offline, cached, or fully frozen-database reruns.
+- MOB-suite and geNomad remain opt-in, but when explicitly enabled PanResistome now tries to prepare their databases automatically unless a user-provided database path is supplied.
+- MobileElementFinder remains opt-in, but upstream parser failures now produce auditable header-only outputs by default instead of aborting the whole run.
 
 ### Tested
 - Synthetic PanR2 contract tests now cover optional table-input exports for MobileElementFinder, ISfinder, MOB-suite, prophage/geNomad, DefenseFinder, Kleborate, Kaptive, ECTyper, SerotypeFinder, and SCCmecFinder.

@@ -74,6 +74,27 @@ def count_feature_rows(path: Path) -> tuple[int, int]:
     return len(rows), len(feature_ids)
 
 
+def write_empty_abricate_style_table(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    header = [
+        "#FILE",
+        "SEQUENCE",
+        "START",
+        "END",
+        "GENE",
+        "COVERAGE",
+        "COVERAGE_MAP",
+        "GAPS",
+        "%COVERAGE",
+        "%IDENTITY",
+        "DATABASE",
+        "ACCESSION",
+        "PRODUCT",
+        "RESISTANCE",
+    ]
+    path.write_text("\t".join(header) + "\n", encoding="utf-8")
+
+
 def is_missing_value(value: str) -> bool:
     text = str(value or "").strip()
     return not text or text in {"-", ".", "?"} or text.lower() in {"na", "n/a", "nan", "none", "null", "unknown"}
@@ -460,6 +481,7 @@ def main() -> int:
     parser.add_argument("--run-integronfinder", type=as_bool, default=False)
     parser.add_argument("--run-mlst", type=as_bool, default=False)
     parser.add_argument("--run-mobileelementfinder", type=as_bool, default=False)
+    parser.add_argument("--mobileelementfinder-allow-failure", type=as_bool, default=True)
     args = parser.parse_args()
 
     try:
@@ -725,11 +747,20 @@ def main() -> int:
                 )
             )
         except Exception as exc:
-            rows.append(status_row("mobileelementfinder", True, started, "FAIL", sample_dir / "tool_results" / "mobileelementfinder", str(exc), sample_count, 0, sample_count))
+            output_dir = sample_dir / "tool_results" / "mobileelementfinder" / "panr2_inputs"
+            write_empty_abricate_style_table(output_dir / "mobileelementfinder_results.tab")
+            status = "WARNING_FAILED" if args.mobileelementfinder_allow_failure else "FAIL"
+            message = (
+                "MobileElementFinder failed but was kept nonfatal; inspect native runner status and rerun without "
+                "--panr2_run_mobileelementfinder if not needed. "
+                f"Original error: {exc}"
+            )
+            rows.append(status_row("mobileelementfinder", True, started, status, output_dir, message, sample_count, 0, sample_count))
             write_status(status_path, rows)
-            audit_rows.append(audit_row("mobileelementfinder", args.mode, sample_count, 0, sample_count, 0, sample_count, 0, 0, "FAIL", str(exc)))
+            audit_rows.append(audit_row("mobileelementfinder", args.mode, sample_count, 1, sample_count, 0, sample_count, 0, 0, status, message))
             write_audit(audit_path, audit_rows)
-            raise
+            if not args.mobileelementfinder_allow_failure:
+                raise
     else:
         rows.append(status_row("mobileelementfinder", False, utc_now(), "SKIPPED", sample_dir / "tool_results" / "mobileelementfinder", "Not enabled for this profile."))
         audit_rows.append(audit_row("mobileelementfinder", args.mode, 0, 0, sample_count, 0, 0, 0, 0, "SKIPPED", "Not enabled for this profile."))

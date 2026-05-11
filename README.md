@@ -101,7 +101,7 @@ The same feature families can also be supplied as precomputed tables without run
 
 This table-input path is the preferred stable route for organism-specific typing and CGE outputs until their database setup is reproducible across fresh machines. SerotypeFinder and SCCmecFinder are currently supported as PanR2-compatible table inputs; their CGE database-driven runners are intentionally kept outside the default environment.
 
-Database setup automation is documented in [`docs/database_automation_matrix.md`](docs/database_automation_matrix.md). In short: PanResistome automatically handles FetchM2 downloads, CheckM2 database download, ABRicate setup/refresh, AMRFinderPlus database update when enabled, and tool-bundled resources such as MLST schemes. ISfinder and GTDB-Tk intentionally require user-supplied database paths; geNomad, Kaptive, MOB-suite, DefenseFinder, and CGE-style typing runners remain opt-in until each database setup path is validated on fresh machines.
+Database setup automation is documented in [`docs/database_automation_matrix.md`](docs/database_automation_matrix.md). In short: PanResistome automatically handles FetchM2 downloads, CheckM2 database download, ABRicate setup/refresh, AMRFinderPlus database update when enabled, and tool-bundled resources such as MLST schemes. MOB-suite and geNomad remain opt-in, but now have cache/download helpers when explicitly enabled. ISfinder and GTDB-Tk intentionally require user-supplied database paths; Kaptive, DefenseFinder, and CGE-style typing runners remain opt-in until each database setup path is validated on fresh machines.
 
 For large runs, add `--large_dataset true` or combine a resource profile with `large`, for example `-profile conda,mamba,desktop_parallel,large`. Large-dataset mode still writes complete feature TSV outputs, but caps report-facing matrices/co-occurrence/proximity summaries, switches the handoff pages to compact mode, summarizes top features per database, and records the applied limits in `panr2_inputs/manifest/report_controls.tsv`. Complete proximity evidence is preserved separately as `panr2_inputs/cross_database/feature_proximity_all.tsv`.
 
@@ -415,6 +415,7 @@ PanResistome/
 | `--panr2_native_feature_runners` | bool | true | Run ABRicate/IntegronFinder/MLST under PanResistome before PanR2, then pass precomputed result directories |
 | `--panr2_native_feature_runner_mode` | str | serial | Native feature-runner backend: `serial` or `parallel`; parallel runs each ABRicate database with per-genome workers, then runs per-assembly IntegronFinder/MLST concurrently within the native-runner process |
 | `--panr2_run_mobileelementfinder` | bool | false | Run MobileElementFinder in the PanR2 feature-runner layer; opt-in because the upstream parser can fail on some assemblies |
+| `--panr2_mobileelementfinder_allow_failure` | bool | true | Keep MobileElementFinder failures nonfatal and write auditable header-only outputs |
 | `--run_isfinder` | bool | false | Run PanResistome's ISfinder-compatible BLAST annotator and pass results to PanR2 |
 | `--isfinder_db_fasta` | path | - | Authorized local ISfinder nucleotide FASTA used to build the local BLAST database |
 | `--isfinder_dir` | path | - | Existing ISfinder-style result directory to pass into PanR2 |
@@ -445,9 +446,14 @@ PanResistome/
 | `--run_mobsuite` | bool | false | Run MOB-suite and pass plasmid reconstruction/typing tables into PanR2 |
 | `--mobsuite_dir` | path | - | Existing MOB-suite table directory to pass into PanR2 |
 | `--mobsuite_db` | path | - | Existing MOB-suite database directory passed to `mob_recon --database_directory`; for offline/restricted runs it should include core MOB-suite files plus `taxa.sqlite` |
+| `--mobsuite_db_dir` | path | `<outdir>/databases/mobsuite` | MOB-suite database cache/init directory when `--mobsuite_db` is not supplied |
+| `--mobsuite_auto_init_db` | bool | true | Run `mob_init` for the MOB-suite cache directory when needed |
+| `--mobsuite_auto_init_taxa` | bool | true | Initialize MOB-suite ETE `taxa.sqlite` in the cache directory when needed |
 | `--run_genomad` | bool | false | Run geNomad and pass prophage/viral-region tables into PanR2 |
 | `--prophage_dir` | path | - | Existing prophage/viral-region table directory to pass into PanR2 |
-| `--genomad_db` | path | - | geNomad database directory required for `--run_genomad true` |
+| `--genomad_db` | path | - | Existing geNomad database directory; if omitted and `--run_genomad true`, PanResistome uses `--genomad_db_dir` |
+| `--genomad_db_dir` | path | `<outdir>/databases/genomad` | geNomad database download/cache directory when `--genomad_db` is not supplied |
+| `--genomad_auto_download_db` | bool | true | Run `genomad download-database` into `--genomad_db_dir` when `--run_genomad true` and no `--genomad_db` is supplied |
 | `--run_organism_specific_typing` | bool | false | Run available organism-specific typing helpers |
 | `--run_kleborate` | bool | false | Run Kleborate when available |
 | `--kleborate_dir` | path | - | Existing Kleborate table directory to pass into PanR2 |

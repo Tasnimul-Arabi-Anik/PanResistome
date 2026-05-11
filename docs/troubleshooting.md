@@ -142,6 +142,48 @@ MobileElementFinder is opt-in because upstream parser behavior can vary by insta
 
 If it fails, rerun without it and provide MobileElementFinder tables later as precomputed PanR2 inputs.
 
+## MOB-suite Database Setup Fails
+
+When `--run_mobsuite true` is enabled and no `--mobsuite_db` is supplied, PanResistome initializes a MOB-suite cache under:
+
+```text
+<outdir>/databases/mobsuite
+```
+
+The setup audit is:
+
+```text
+<sample>/mobsuite/mobsuite_database_setup_status.tsv
+```
+
+If a shared or preinitialized database is available, prefer:
+
+```bash
+--run_mobsuite true --mobsuite_db /path/to/mobsuite_db
+```
+
+For offline runs, the database should include the core MOB-suite files and `taxa.sqlite`.
+
+## geNomad Database Download Fails
+
+When `--run_genomad true` is enabled and no `--genomad_db` is supplied, PanResistome downloads/caches the geNomad database under:
+
+```text
+<outdir>/databases/genomad
+```
+
+The setup audit is:
+
+```text
+<sample>/prophage/genomad_database_setup_status.tsv
+```
+
+For restricted networks or shared systems, pre-download the database once and pass:
+
+```bash
+--run_genomad true --genomad_db /path/to/genomad_db
+```
+
 ## Report Has Too Many Features
 
 Use the large-dataset report safeguards first. Complete TSV outputs are still written, but report-facing matrices and co-occurrence summaries are capped:

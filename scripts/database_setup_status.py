@@ -195,6 +195,19 @@ def count_status_values(path: Path, column: str = "status") -> dict[str, int]:
     return counts
 
 
+def read_first_record(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    try:
+        with path.open(newline="", errors="ignore") as handle:
+            reader = csv.DictReader(handle, delimiter="\t")
+            for record in reader:
+                return {str(key): str(value) for key, value in record.items() if key is not None}
+    except csv.Error:
+        return {}
+    return {}
+
+
 def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
     sample_dir = Path(args.sample_dir)
     rows: list[dict[str, str]] = []
@@ -424,37 +437,55 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
 
     if args.run_mobsuite:
         mobsuite_db_path = Path(args.mobsuite_db) if args.mobsuite_db else Path("")
-        if args.mobsuite_db:
-            mobsuite_status, mobsuite_message = mobsuite_database_status(mobsuite_db_path)
+        mobsuite_setup = read_first_record(sample_dir / "mobsuite" / "mobsuite_database_setup_status.tsv")
+        if mobsuite_setup:
+            setup_status = mobsuite_setup.get("status", "")
+            setup_status_normalized = "PASS" if setup_status in {"PASS", "WARNING_TAXA_MISSING"} else "FAIL"
             rows.append(
                 row(
-                    "mobsuite_database",
+                    "mobsuite_database_setup",
                     True,
                     True,
-                    mobsuite_status,
-                    "provided_database_directory",
-                    str(mobsuite_db_path) if mobsuite_db_path.exists() else "",
-                    mobsuite_message,
+                    setup_status_normalized,
+                    "mob_init_cache" if args.mobsuite_auto_init_db else "provided_or_cached_database",
+                    mobsuite_setup.get("database_dir", str(mobsuite_db_path)),
+                    mobsuite_setup.get("message", ""),
                 )
             )
-        else:
-            rows.append(
-                row(
-                    "mobsuite_database",
-                    True,
-                    True,
-                    "WARNING",
-                    "runtime_auto_init",
-                    "",
-                    "No --mobsuite_db supplied; MOB-suite may try runtime database initialization/download.",
-                )
+        mobsuite_status, mobsuite_message = mobsuite_database_status(mobsuite_db_path)
+        rows.append(
+            row(
+                "mobsuite_database",
+                True,
+                True,
+                mobsuite_status,
+                "auto_init_or_provided_database" if args.mobsuite_auto_init_db else "provided_or_cached_database",
+                str(mobsuite_db_path) if mobsuite_db_path.exists() else "",
+                mobsuite_message,
             )
+        )
     else:
         rows.append(row("mobsuite_database", False, False, "SKIPPED", "not_requested", "", "MOB-suite was disabled."))
 
+    if args.run_genomad:
+        genomad_setup = read_first_record(sample_dir / "prophage" / "genomad_database_setup_status.tsv")
+        genomad_path = Path(genomad_setup.get("resolved_database_dir") or args.genomad_db or "")
+        if genomad_setup:
+            rows.append(
+                row(
+                    "genomad_database_setup",
+                    True,
+                    True,
+                    "PASS" if genomad_setup.get("status") == "PASS" else "FAIL",
+                    "genomad_download_database" if args.genomad_auto_download_db else "provided_or_cached_database",
+                    str(genomad_path) if str(genomad_path) else "",
+                    genomad_setup.get("message", ""),
+                )
+            )
+
     for module, enabled, required_path, message in [
         ("mobsuite", args.run_mobsuite, sample_dir / "mobsuite" / "tables", "MOB-suite was requested but no tables were found."),
-        ("genomad_database", args.run_genomad, Path(args.genomad_db) if args.genomad_db else Path(""), "geNomad requires --genomad_db when enabled."),
+        ("genomad_database", args.run_genomad, Path(args.genomad_db) if args.genomad_db else Path(""), "geNomad database setup failed; inspect prophage/genomad_database_setup_status.tsv."),
         ("kaptive_database", args.run_kaptive, Path(args.kaptive_db) if args.kaptive_db else Path(""), "Kaptive requires --kaptive_db when enabled."),
     ]:
         if not enabled:
@@ -511,8 +542,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--amrfinderplus-update-db", type=as_bool, default=True)
     parser.add_argument("--run-mobsuite", type=as_bool, default=False)
     parser.add_argument("--mobsuite-db", default="")
+    parser.add_argument("--mobsuite-auto-init-db", type=as_bool, default=True)
+    parser.add_argument("--mobsuite-auto-init-taxa", type=as_bool, default=True)
     parser.add_argument("--run-genomad", type=as_bool, default=False)
     parser.add_argument("--genomad-db", default="")
+    parser.add_argument("--genomad-auto-download-db", type=as_bool, default=True)
     parser.add_argument("--run-kaptive", type=as_bool, default=False)
     parser.add_argument("--kaptive-db", default="")
     parser.add_argument("--strict", action="store_true")

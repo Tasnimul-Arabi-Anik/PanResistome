@@ -93,6 +93,7 @@ params.panr2_force_tool_run = false
 params.panr2_native_feature_runners = true
 params.panr2_native_feature_runner_mode = 'serial'
 params.panr2_run_mobileelementfinder = false
+params.panr2_mobileelementfinder_allow_failure = true
 params.panr2_run_defensefinder = false
 params.panr2_sample_map = null
 params.defensefinder_dir = null
@@ -114,9 +115,14 @@ params.amrfinderplus_progress_every = 10
 params.run_mobsuite = false
 params.mobsuite_dir = null
 params.mobsuite_db = null
+params.mobsuite_db_dir = null
+params.mobsuite_auto_init_db = true
+params.mobsuite_auto_init_taxa = true
 params.run_genomad = false
 params.prophage_dir = null
 params.genomad_db = null
+params.genomad_db_dir = null
+params.genomad_auto_download_db = true
 params.run_organism_specific_typing = false
 params.run_kleborate = false
 params.kleborate_dir = null
@@ -212,6 +218,30 @@ def abricateSetupCommand(panr2Dbs, sampleDir) {
         command += " --update"
     }
     return command
+}
+
+def outdirDatabasePath(name) {
+    return params.outdir.toString().startsWith("/") ? "${params.outdir}/databases/${name}" : "${launchDir}/${params.outdir}/databases/${name}"
+}
+
+def effectiveMobsuiteDbPath() {
+    if (params.mobsuite_db) {
+        return launchPath(params.mobsuite_db)
+    }
+    if (params.mobsuite_db_dir) {
+        return launchPath(params.mobsuite_db_dir)
+    }
+    return outdirDatabasePath("mobsuite")
+}
+
+def effectiveGenomadDbPath() {
+    if (params.genomad_db) {
+        return launchPath(params.genomad_db)
+    }
+    if (params.genomad_db_dir) {
+        return launchPath(params.genomad_db_dir)
+    }
+    return outdirDatabasePath("genomad")
 }
 
 def effectiveRunMobileElementFinder() {
@@ -385,6 +415,8 @@ def helpMessage() {
       --panr2_sample_map       Optional sample_id to Assembly Accession map for external PanR2 table inputs
       --panr2_run_mobileelementfinder
                               Run MobileElementFinder in the PanR2 feature-runner layer. Disabled by default because some valid assemblies trigger upstream parser failures.
+      --panr2_mobileelementfinder_allow_failure
+                              Keep MobileElementFinder failures nonfatal and write auditable header-only outputs [default: true]
       --run_isfinder           Run PanResistome ISfinder-compatible BLAST annotation [default: false]
       --isfinder_db_fasta      Authorized ISfinder nucleotide FASTA used to build a local BLAST database
       --isfinder_dir           Existing ISfinder-style result directory to pass into PanR2
@@ -393,9 +425,14 @@ def helpMessage() {
       --run_mobsuite           Run MOB-suite plasmid reconstruction/typing and pass outputs to PanR2 [default: false]
       --mobsuite_dir           Existing MOB-suite table directory to pass into PanR2
       --mobsuite_db            Existing MOB-suite database directory for mob_recon --database_directory
+      --mobsuite_db_dir        MOB-suite database cache/init directory when --mobsuite_db is not supplied [default: <outdir>/databases/mobsuite]
+      --mobsuite_auto_init_db  Run mob_init for the MOB-suite cache directory when needed [default: true]
+      --mobsuite_auto_init_taxa Initialize ETE taxa.sqlite for MOB-suite cache when needed [default: true]
       --run_genomad            Run geNomad viral/prophage annotation and pass outputs to PanR2 [default: false]
       --prophage_dir           Existing prophage/viral-region table directory to pass into PanR2
       --genomad_db             geNomad database directory, required when --run_genomad true
+      --genomad_db_dir         geNomad database download/cache directory when --genomad_db is not supplied [default: <outdir>/databases/genomad]
+      --genomad_auto_download_db Download geNomad database into --genomad_db_dir when --run_genomad true and --genomad_db is not supplied [default: true]
       --run_organism_specific_typing Run organism-specific typing helpers where applicable [default: false]
       --run_kleborate          Run Kleborate and pass outputs to PanR2 [default: false]
       --kleborate_dir          Existing Kleborate table directory to pass into PanR2
@@ -1775,8 +1812,9 @@ process MOBSUITE_ANALYSIS {
     path "${sample_dir}", emit: mobsuite_results
 
     script:
-    def mobsuiteDbPath = params.mobsuite_db ? launchPath(params.mobsuite_db) : null
-    def mobsuiteDbArg = mobsuiteDbPath ? "--database_directory ${shellQuote(mobsuiteDbPath)}" : ""
+    def mobsuiteDbPath = effectiveMobsuiteDbPath()
+    def mobsuiteDbArg = "--database_directory ${shellQuote(mobsuiteDbPath)}"
+    def mobsuiteAutoInit = params.mobsuite_db ? "false" : params.mobsuite_auto_init_db
     """
     sequence_dir="${sample_dir}/sequence"
     if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
@@ -1789,10 +1827,18 @@ process MOBSUITE_ANALYSIS {
     status_file=${sample_dir}/mobsuite/module_status.tsv
     printf "module\\tenabled\\tstarted\\tcompleted\\tstatus\\tsamples_input\\tsamples_processed\\tsamples_failed\\traw_tables_created\\tfeature_rows_created\\tunique_features_created\\toutput_dir\\tmessage\\n" > "\${status_file}"
     started=\$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    python ${baseDir}/scripts/setup_mobsuite_database.py \\
+        --db-dir ${shellQuote(mobsuiteDbPath)} \\
+        --out ${sample_dir}/mobsuite/mobsuite_database_setup_status.tsv \\
+        --auto-init ${mobsuiteAutoInit} \\
+        --auto-init-taxa ${params.mobsuite_auto_init_taxa}
+    db_setup_status=\$(awk -F '\\t' 'NR == 2 {print \$8}' ${sample_dir}/mobsuite/mobsuite_database_setup_status.tsv 2>/dev/null || echo FAIL)
     samples_input=0
     samples_processed=0
     samples_failed=0
-    if command -v mob_recon >/dev/null 2>&1 && [ -d "\${sequence_dir}" ]; then
+    if [ "\${db_setup_status}" = "FAIL" ]; then
+        echo "MOB-suite database setup failed; inspect ${sample_dir}/mobsuite/mobsuite_database_setup_status.tsv." > ${sample_dir}/mobsuite/tables/mobsuite_warning.txt
+    elif command -v mob_recon >/dev/null 2>&1 && [ -d "\${sequence_dir}" ]; then
         for fasta in \$(find "\${sequence_dir}" -name "*.fna" | sort); do
             samples_input=\$((samples_input + 1))
             prefix=\$(basename "\${fasta}" .fna)
@@ -1814,7 +1860,13 @@ process MOBSUITE_ANALYSIS {
     unique_features=\$(awk -F '\\t' 'NR > 1 {for (i=1; i<=NF; i++) if (\$i != "") seen[\$i]=1} END {print length(seen)}' ${sample_dir}/mobsuite/tables/mobsuite.tsv 2>/dev/null || echo 0)
     status=PASS
     message="MOB-suite completed and parseable tables were collected."
-    if [ "\${samples_input}" -eq 0 ]; then
+    if [ "\${db_setup_status}" = "FAIL" ]; then
+        status=FAIL
+        message="MOB-suite database setup failed; inspect mobsuite/mobsuite_database_setup_status.tsv."
+    fi
+    if [ "\${status}" = "FAIL" ]; then
+        :
+    elif [ "\${samples_input}" -eq 0 ]; then
         status=WARNING_EMPTY
         message="No FASTA files found for MOB-suite."
     elif [ "\${samples_failed}" -gt 0 ]; then
@@ -1840,7 +1892,8 @@ process GENOMAD_PROPHAGE {
     path "${sample_dir}", emit: genomad_results
 
     script:
-    def genomadDbCheck = params.genomad_db ? "true" : "false"
+    def genomadDbPath = effectiveGenomadDbPath()
+    def genomadAutoDownload = params.genomad_db ? "false" : params.genomad_auto_download_db
     """
     sequence_dir="${sample_dir}/sequence"
     if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
@@ -1848,13 +1901,30 @@ process GENOMAD_PROPHAGE {
     fi
 
     mkdir -p ${sample_dir}/prophage/raw ${sample_dir}/prophage/tables
-    if [ "${genomadDbCheck}" != "true" ]; then
-        echo "geNomad database not provided; pass --genomad_db to run geNomad." > ${sample_dir}/prophage/tables/genomad_warning.txt
+    status_file=${sample_dir}/prophage/module_status.tsv
+    printf "module\\tenabled\\tstarted\\tcompleted\\tstatus\\tsamples_input\\tsamples_processed\\tsamples_failed\\traw_tables_created\\tfeature_rows_created\\tunique_features_created\\toutput_dir\\tmessage\\n" > "\${status_file}"
+    started=\$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    python ${baseDir}/scripts/setup_genomad_database.py \\
+        --db-dir ${shellQuote(genomadDbPath)} \\
+        --out ${sample_dir}/prophage/genomad_database_setup_status.tsv \\
+        --auto-download ${genomadAutoDownload}
+    genomad_db_path=\$(awk -F '\\t' 'NR == 2 {print \$2}' ${sample_dir}/prophage/genomad_database_setup_status.tsv 2>/dev/null || true)
+    db_setup_status=\$(awk -F '\\t' 'NR == 2 {print \$6}' ${sample_dir}/prophage/genomad_database_setup_status.tsv 2>/dev/null || echo FAIL)
+    samples_input=0
+    samples_processed=0
+    samples_failed=0
+    if [ "\${db_setup_status}" = "FAIL" ]; then
+        echo "geNomad database setup failed; inspect ${sample_dir}/prophage/genomad_database_setup_status.tsv." > ${sample_dir}/prophage/tables/genomad_warning.txt
     elif command -v genomad >/dev/null 2>&1 && [ -d "\${sequence_dir}" ]; then
         for fasta in \$(find "\${sequence_dir}" -name "*.fna" | sort); do
+            samples_input=\$((samples_input + 1))
             prefix=\$(basename "\${fasta}" .fna)
             mkdir -p "${sample_dir}/prophage/raw/\${prefix}"
-            genomad end-to-end "\${fasta}" "${sample_dir}/prophage/raw/\${prefix}" "${params.genomad_db}" --threads ${params.threads} || true
+            if genomad end-to-end "\${fasta}" "${sample_dir}/prophage/raw/\${prefix}" "\${genomad_db_path}" --threads ${params.threads}; then
+                samples_processed=\$((samples_processed + 1))
+            else
+                samples_failed=\$((samples_failed + 1))
+            fi
         done
     else
         echo "geNomad executable was not available or no sequence directory was found." > ${sample_dir}/prophage/tables/genomad_warning.txt
@@ -1863,6 +1933,26 @@ process GENOMAD_PROPHAGE {
         --raw-dir ${sample_dir}/prophage/raw \\
         --out ${sample_dir}/prophage/tables/prophage.tsv \\
         --tool prophage
+    feature_rows=\$(awk 'NR > 1 {count++} END {print count + 0}' ${sample_dir}/prophage/tables/prophage.tsv 2>/dev/null || echo 0)
+    unique_features=\$(awk -F '\\t' 'NR > 1 {for (i=1; i<=NF; i++) if (\$i != "") seen[\$i]=1} END {print length(seen)}' ${sample_dir}/prophage/tables/prophage.tsv 2>/dev/null || echo 0)
+    status=PASS
+    message="geNomad completed and parseable tables were collected."
+    if [ "\${db_setup_status}" = "FAIL" ]; then
+        status=FAIL
+        message="geNomad database setup failed; inspect prophage/genomad_database_setup_status.tsv."
+    elif [ "\${samples_input}" -eq 0 ]; then
+        status=WARNING_EMPTY
+        message="No FASTA files found for geNomad."
+    elif [ "\${samples_failed}" -gt 0 ]; then
+        status=WARNING_PARTIAL
+        message="geNomad had sample failures; inspect prophage/raw/* outputs."
+    fi
+    if [ "\${status}" != "FAIL" ] && [ "\${feature_rows}" -eq 0 ]; then
+        status=WARNING_EMPTY
+        message="\${message} No geNomad feature rows were collected."
+    fi
+    printf "genomad\\ttrue\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n" \\
+        "\${started}" "\$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "\${status}" "\${samples_input}" "\${samples_processed}" "\${samples_failed}" "\${samples_processed}" "\${feature_rows}" "\${unique_features}" "${sample_dir}/prophage" "\${message}" >> "\${status_file}"
     """
 }
 
@@ -2189,7 +2279,8 @@ process PANR2_FEATURE_RUNNERS {
     def checkm2DownloadDir = params.checkm2_db_dir ? launchPath(params.checkm2_db_dir) : (params.outdir.toString().startsWith("/") ? "${params.outdir}/databases/checkm2" : "${launchDir}/${params.outdir}/databases/checkm2")
     def gtdbtkDataPath = params.gtdbtk_data_path ? launchPath(params.gtdbtk_data_path) : ""
     def isfinderDbFasta = params.isfinder_db_fasta ? launchPath(params.isfinder_db_fasta) : ""
-    def genomadDbPath = params.genomad_db ? launchPath(params.genomad_db) : ""
+    def mobsuiteDbPath = effectiveMobsuiteDbPath()
+    def genomadDbPath = effectiveGenomadDbPath()
     def kaptiveDbPath = params.kaptive_db ? launchPath(params.kaptive_db) : ""
     """
     sequence_dir="${sample_dir}/sequence"
@@ -2236,9 +2327,12 @@ process PANR2_FEATURE_RUNNERS {
         --run-amrfinderplus ${params.run_amrfinderplus} \\
         --amrfinderplus-update-db ${params.amrfinderplus_update_db} \\
         --run-mobsuite ${params.run_mobsuite} \\
-        --mobsuite-db ${shellQuote(params.mobsuite_db ? launchPath(params.mobsuite_db) : '')} \\
+        --mobsuite-db ${shellQuote(mobsuiteDbPath)} \\
+        --mobsuite-auto-init-db ${params.mobsuite_auto_init_db} \\
+        --mobsuite-auto-init-taxa ${params.mobsuite_auto_init_taxa} \\
         --run-genomad ${params.run_genomad} \\
         --genomad-db ${shellQuote(genomadDbPath)} \\
+        --genomad-auto-download-db ${params.genomad_auto_download_db} \\
         --run-kaptive ${params.run_kaptive} \\
         --kaptive-db ${shellQuote(kaptiveDbPath)} \\
         --strict
@@ -2252,7 +2346,8 @@ process PANR2_FEATURE_RUNNERS {
         --force ${params.panr2_force_tool_run} \\
         --run-integronfinder ${effectiveRunIntegronFinder()} \\
         --run-mlst ${effectiveRunMlst()} \\
-        --run-mobileelementfinder ${effectiveRunMobileElementFinder()}
+        --run-mobileelementfinder ${effectiveRunMobileElementFinder()} \\
+        --mobileelementfinder-allow-failure ${params.panr2_mobileelementfinder_allow_failure}
     """
 }
 
@@ -2318,7 +2413,8 @@ process PANR2_COMPREHENSIVE {
     def checkm2DownloadDir = params.checkm2_db_dir ? launchPath(params.checkm2_db_dir) : (params.outdir.toString().startsWith("/") ? "${params.outdir}/databases/checkm2" : "${launchDir}/${params.outdir}/databases/checkm2")
     def gtdbtkDataPath = params.gtdbtk_data_path ? launchPath(params.gtdbtk_data_path) : ""
     def isfinderDbFasta = params.isfinder_db_fasta ? launchPath(params.isfinder_db_fasta) : ""
-    def genomadDbPath = params.genomad_db ? launchPath(params.genomad_db) : ""
+    def mobsuiteDbPath = effectiveMobsuiteDbPath()
+    def genomadDbPath = effectiveGenomadDbPath()
     def kaptiveDbPath = params.kaptive_db ? launchPath(params.kaptive_db) : ""
     """
     sequence_dir="${sample_dir}/sequence"
@@ -2366,9 +2462,12 @@ process PANR2_COMPREHENSIVE {
             --run-amrfinderplus ${params.run_amrfinderplus} \\
             --amrfinderplus-update-db ${params.amrfinderplus_update_db} \\
             --run-mobsuite ${params.run_mobsuite} \\
-            --mobsuite-db ${shellQuote(params.mobsuite_db ? launchPath(params.mobsuite_db) : '')} \\
+            --mobsuite-db ${shellQuote(mobsuiteDbPath)} \\
+            --mobsuite-auto-init-db ${params.mobsuite_auto_init_db} \\
+            --mobsuite-auto-init-taxa ${params.mobsuite_auto_init_taxa} \\
             --run-genomad ${params.run_genomad} \\
             --genomad-db ${shellQuote(genomadDbPath)} \\
+            --genomad-auto-download-db ${params.genomad_auto_download_db} \\
             --run-kaptive ${params.run_kaptive} \\
             --kaptive-db ${shellQuote(kaptiveDbPath)} \\
             --strict

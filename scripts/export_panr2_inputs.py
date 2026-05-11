@@ -114,6 +114,14 @@ def main():
         sample_dir / "panr2_native_feature_runners" / "module_status.tsv",
         out / "manifest" / "native_runner_module_status.tsv",
     )
+    copy_if_exists(
+        sample_dir / "mobsuite" / "mobsuite_database_setup_status.tsv",
+        out / "manifest" / "mobsuite_database_setup_status.tsv",
+    )
+    copy_if_exists(
+        sample_dir / "prophage" / "genomad_database_setup_status.tsv",
+        out / "manifest" / "genomad_database_setup_status.tsv",
+    )
     copy_if_exists(sample_dir / "qc" / "qc_master_report.csv", out / "qc" / "qc_master_report.csv")
     copy_if_exists(sample_dir / "qc" / "excluded_for_panr2.csv", out / "qc" / "excluded_for_panr2.csv")
     copy_if_exists(sample_dir / "ani" / "analysis" / "panr2_ani_summary.csv", out / "ani" / "analysis" / "panr2_ani_summary.csv")

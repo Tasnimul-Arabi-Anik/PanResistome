@@ -4,10 +4,13 @@ PanResistome should reduce setup friction, but it should not hide large,
 licensed, fragile, or unvalidated database downloads. The release rule is:
 
 ```text
-Automate database setup when it is legally redistributable or tool-supported,
-validated in PanResistome, and has an audit trail.
+Automate database setup for default modules only when the path is validated in
+PanResistome and has an audit trail.
+For opt-in modules, an audited helper can be available when the upstream tool
+officially supports download/init, but the module should remain opt-in until
+fresh-user validation is complete.
 Require an explicit path when the database is restricted, very large, or not
-yet validated as a fresh-user download.
+safe to fetch automatically.
 ```
 
 ## Current Behavior
@@ -25,24 +28,22 @@ yet validated as a fresh-user download.
 | QUAST | Yes | `--run_quast true` | No | Reference-free assembly metrics by default. |
 | FastANI/skani | Yes | `--run_ani true` | No | Tool only; large mode guards expensive all-vs-all ANI. |
 | Mash | Yes | `--run_mash true` | No | Tool only. |
-| MOB-suite | Partly | `--run_mobsuite true` | Recommended for reliable/offline runs | Runner can use MOB-suite runtime initialization, but biological validation used a preinitialized DB with `taxa.sqlite`. Keep opt-in. |
+| MOB-suite | Yes, when explicitly enabled | `--run_mobsuite true` | No, unless offline/restricted | Uses `--mobsuite_db_dir` under `<outdir>/databases/mobsuite`, runs `mob_init` when needed, and attempts ETE `taxa.sqlite` initialization. Still opt-in. |
 | Kleborate | Yes | `--run_kleborate true` | No | Small biological validation passed on Klebsiella; still opt-in because organism-specific. |
 | Kaptive | No | `--run_kaptive true` | Yes | Requires `--kaptive_db`; keep explicit until database setup is validated. |
-| geNomad | No | `--run_genomad true` | Yes | Requires `--genomad_db`; database is large, so keep explicit until fresh-user download is validated. |
+| geNomad | Yes, when explicitly enabled | `--run_genomad true` | No, unless offline/restricted | Uses `--genomad_db_dir` under `<outdir>/databases/genomad` and runs `genomad download-database` when no `--genomad_db` is supplied. Still opt-in because the database is large. |
 | ISfinder-compatible BLAST | No | `--run_isfinder true` | Yes | Requires authorized `--isfinder_db_fasta`; PanResistome must not download or redistribute ISfinder. |
 | GTDB-Tk | No | `--run_gtdbtk true` | Yes | Requires large GTDB-Tk reference data; remains off by default. |
 | DefenseFinder | No | `--panr2_run_defensefinder true` | Depends on local installation/database | Kept opt-in until dependency/database setup is stable. |
 | SerotypeFinder/SCCmecFinder | No runner | Table input only | Yes, for runner workflows outside PanResistome | PanR2-compatible table inputs are supported. |
 
-## Should More Modules Be Automated?
+## What Still Needs Validation?
 
-Yes, but only module-by-module after validation.
+The helper paths exist, but these should be validated before changing defaults:
 
-Good candidates for future automation:
-
-1. **MOB-suite cached DB initialization** under `<outdir>/databases/mobsuite`, because the runner is now biologically validated on a small Klebsiella set. This still needs a fresh-machine test that confirms `taxa.sqlite` is created reliably.
-2. **Kaptive database helper** for Klebsiella-focused workflows, but not as a default module because it is organism-specific.
-3. **geNomad database helper** only after testing disk size, download stability, and resume behavior.
+1. **MOB-suite cached DB initialization validation** under `<outdir>/databases/mobsuite`, confirming `mob_init` and `taxa.sqlite` creation on a fresh machine.
+2. **geNomad cached DB download validation**, confirming disk size, download stability, and resume behavior on a fresh machine.
+3. **Kaptive database helper** for Klebsiella-focused workflows, but not as a default module because it is organism-specific.
 
 Do not automate by default:
 
@@ -59,5 +60,7 @@ reruns, cache the databases and record the manifest files:
 ```text
 panr2_inputs/manifest/database_setup_status.tsv
 panr2_inputs/manifest/abricate_database_setup_status.tsv
+panr2_inputs/manifest/mobsuite_database_setup_status.tsv
+panr2_inputs/manifest/genomad_database_setup_status.tsv
 pipeline_versions/
 ```

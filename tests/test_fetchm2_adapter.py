@@ -715,6 +715,109 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("abricate-get_db --db vfdb --force", commands)
             self.assertIn("abricate --setupdb", commands)
 
+    def test_setup_mobsuite_database_runs_mob_init_cache(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            db_dir = root / "mobsuite_db"
+            required_files = [
+                "clusters.txt",
+                "host_range_literature_plasmidDB.txt",
+                "mob.proteins.faa",
+                "mpf.proteins.faa",
+                "ncbi_plasmid_full_seqs.fas",
+                "ncbi_plasmid_full_seqs.fas.msh",
+                "orit.fas",
+                "rep.dna.fas",
+                "repetitive.dna.fas",
+                "ncbi_plasmid_full_seqs.fas.nhr",
+                "repetitive.dna.fas.nhr",
+            ]
+            create_files = "\n".join([f"printf 'x\\n' > \"$db/{name}\"" for name in required_files])
+            (fake_bin / "mob_init").write_text(
+                "#!/bin/sh\n"
+                "db=''\n"
+                "while [ $# -gt 0 ]; do\n"
+                "  case \"$1\" in\n"
+                "    -d|--database_directory) shift; db=\"$1\" ;;\n"
+                "  esac\n"
+                "  shift\n"
+                "done\n"
+                "mkdir -p \"$db\"\n"
+                f"{create_files}\n"
+                "printf 'mob init ok\\n'\n",
+                encoding="utf-8",
+            )
+            (fake_bin / "mob_init").chmod(0o755)
+            out = root / "mobsuite_database_setup_status.tsv"
+            env = os.environ.copy()
+            env["PATH"] = f"{fake_bin}:{env.get('PATH', '')}"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "scripts" / "setup_mobsuite_database.py"),
+                    "--db-dir",
+                    str(db_dir),
+                    "--out",
+                    str(out),
+                    "--auto-init",
+                    "true",
+                    "--auto-init-taxa",
+                    "false",
+                ],
+                check=True,
+                env=env,
+            )
+
+            status = pd.read_csv(out, sep="\t").iloc[0]
+            self.assertEqual(status["mob_init_status"], "PASS")
+            self.assertEqual(status["core_status"], "PASS")
+            self.assertEqual(status["status"], "WARNING_TAXA_MISSING")
+
+    def test_setup_genomad_database_downloads_to_cache(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            db_dir = root / "genomad_cache"
+            (fake_bin / "genomad").write_text(
+                "#!/bin/sh\n"
+                "if [ \"$1\" = \"download-database\" ]; then\n"
+                "  mkdir -p \"$2/genomad_db\"\n"
+                "  printf 'db\\n' > \"$2/genomad_db/version.txt\"\n"
+                "  printf 'downloaded\\n'\n"
+                "else\n"
+                "  printf 'genomad 1.0\\n'\n"
+                "fi\n",
+                encoding="utf-8",
+            )
+            (fake_bin / "genomad").chmod(0o755)
+            out = root / "genomad_database_setup_status.tsv"
+            env = os.environ.copy()
+            env["PATH"] = f"{fake_bin}:{env.get('PATH', '')}"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "scripts" / "setup_genomad_database.py"),
+                    "--db-dir",
+                    str(db_dir),
+                    "--out",
+                    str(out),
+                    "--auto-download",
+                    "true",
+                ],
+                check=True,
+                env=env,
+            )
+
+            status = pd.read_csv(out, sep="\t").iloc[0]
+            self.assertEqual(status["download_status"], "PASS")
+            self.assertEqual(status["status"], "PASS")
+            self.assertTrue(str(status["resolved_database_dir"]).endswith("genomad_db"))
+
     def test_database_setup_status_warns_when_mobsuite_taxa_sqlite_missing(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
