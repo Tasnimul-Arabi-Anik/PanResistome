@@ -76,7 +76,7 @@ params.run_abricate = true
 params.export_panr2_inputs = true
 params.run_panr2_comprehensive = false
 params.panr2_setup_abricate_db = true
-params.panr2_update_abricate_db = false
+params.panr2_update_abricate_db = true
 params.panr2_abricate_dbs = 'ncbi,vfdb,plasmidfinder'
 params.panr2_min_identity = 90
 params.panr2_plot_style = 'publication'
@@ -364,7 +364,7 @@ def helpMessage() {
       --amrfinderplus_reuse_existing Reuse non-empty per-sample AMRFinderPlus TSVs on resume [default: true]
       --amrfinderplus_progress_every Print AMRFinderPlus progress every N completed samples [default: 10]
       --panr2_setup_abricate_db Run panr setup-db before comprehensive PanR2 analysis [default: true]
-      --panr2_update_abricate_db Force-refresh requested ABRicate databases with abricate-get_db after setup when available [default: false]
+      --panr2_update_abricate_db Force-refresh requested ABRicate databases with abricate-get_db after setup when available [default: true]
       --panr2_abricate_dbs     ABRicate databases for PanR2 comprehensive mode [default: ncbi,vfdb,plasmidfinder; add isfinder only if installed]
       --panr2_min_identity     Minimum identity for PanR2 integrated feature analysis [default: 90]
       --panr2_plot_style       PanR2 plot style: publication, dashboard, compact [default: publication]

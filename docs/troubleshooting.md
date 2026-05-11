@@ -34,13 +34,13 @@ The standard comprehensive profile requires `ncbi`, `vfdb`, and `plasmidfinder`.
 <sample>/panr2_inputs/manifest/abricate_database_setup_status.tsv
 ```
 
-If you want to force-refresh the requested ABRicate databases before analysis, rerun with:
+PanResistome force-refreshes the requested ABRicate databases by default. If you want to disable the refresh for offline, cached, or frozen-database reruns, use:
 
 ```bash
---panr2_update_abricate_db true
+--panr2_update_abricate_db false
 ```
 
-This uses `abricate-get_db --force` when that helper is available in the ABRicate environment, then re-indexes with `abricate --setupdb`. If setup still fails, inspect:
+The default refresh uses `abricate-get_db --force` when that helper is available in the ABRicate environment, then re-indexes with `abricate --setupdb`. If setup still fails, inspect:
 
 ```text
 <sample>/panr2_inputs/manifest/database_setup_status.tsv

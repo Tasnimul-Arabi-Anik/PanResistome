@@ -85,7 +85,7 @@ Download assemblies with FetchM2 native downloader
 Run CheckM2 and auto-download/cache its database when --checkm2_db is omitted
 Run QUAST, ANI/skani, and Mash summaries
 Run AMRFinderPlus and update/download its database when needed
-Run PanR2 setup-db for ABRicate ncbi,vfdb,plasmidfinder. If `--panr2_update_abricate_db true` is supplied, force-refresh requested ABRicate databases with `abricate-get_db --force` when available.
+Run PanR2 setup-db for ABRicate ncbi,vfdb,plasmidfinder. By default, `--panr2_update_abricate_db true` force-refreshes requested ABRicate databases with `abricate-get_db --force` when available; set it false only for offline/cached reruns.
 Verify required ABRicate databases before PanR2 analysis
 Run PanResistome-native ABRicate, IntegronFinder, and MLST feature runners before PanR2 analysis
 Export panr2_inputs/features/*.features.tsv
