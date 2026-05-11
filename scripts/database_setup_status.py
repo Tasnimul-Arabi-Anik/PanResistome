@@ -285,9 +285,22 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
             if ani_status.exists():
                 with ani_status.open(newline="", encoding="utf-8") as handle:
                     status_rows = list(csv.DictReader(handle, delimiter="\t"))
-                if status_rows and status_rows[0].get("status", "").startswith("SKIPPED"):
+                if status_rows and status_rows[0].get("status", "") == "SKIPPED_INAPPLICABLE":
+                    status = "SKIPPED_INAPPLICABLE"
+                    message = status_rows[0].get("message") or "ANI requires at least two genomes."
+                elif status_rows and status_rows[0].get("status", "").startswith("SKIPPED"):
                     status = "WARNING_SKIPPED"
                     message = status_rows[0].get("message") or "ANI summary exists, but pairwise ANI was skipped."
+        if module == "mash" and found:
+            mash_status = sample_dir / "mash" / "analysis" / "mash_run_status.tsv"
+            if mash_status.exists():
+                with mash_status.open(newline="", encoding="utf-8") as handle:
+                    status_rows = list(csv.DictReader(handle, delimiter="\t"))
+                if status_rows:
+                    module_status = status_rows[0].get("status", "")
+                    if module_status:
+                        status = module_status
+                        message = status_rows[0].get("message") or message
         rows.append(
             row(
                 module,

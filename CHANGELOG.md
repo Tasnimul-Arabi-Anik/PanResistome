@@ -23,6 +23,7 @@
 
 ### Changed
 - PanR2 handoff export now applies configured feature caps to presence/absence matrices and co-occurrence/proximity summaries, preserves complete proximity evidence as `feature_proximity_all.tsv`, and surfaces report-control settings in `panr2_inputs/report/report_controls.html`.
+- ANI and Mash now record single-genome/post-QC single-genome runs as `SKIPPED_INAPPLICABLE` instead of warning-like pairwise failures, because pairwise analyses require at least two genomes.
 - AMRFinderPlus now runs independent assemblies concurrently by default using `--threads` as the sample-job count and one AMRFinderPlus thread per sample, avoiding the previous serial per-genome bottleneck.
 - AMRFinderPlus per-sample execution now reuses existing non-empty TSV outputs, making interrupted large runs safer to resume without recomputing completed assemblies.
 - AMRFinderPlus now prints periodic per-sample progress and records per-sample runtime in `amrfinderplus_sample_status.tsv`.

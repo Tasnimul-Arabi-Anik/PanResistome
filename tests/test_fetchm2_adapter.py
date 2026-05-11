@@ -653,6 +653,59 @@ class FetchM2AdapterTests(unittest.TestCase):
             vfdb_status = status.loc[status["database_or_tool"] == "abricate_db:vfdb", "status"].iloc[0]
             self.assertEqual(vfdb_status, "FAIL")
 
+    def test_database_setup_status_marks_single_genome_pairwise_modules_inapplicable(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            sample_dir = root / "Klebsiella_oxytoca"
+            (sample_dir / "metadata_output").mkdir(parents=True)
+            (sample_dir / "ani" / "analysis").mkdir(parents=True)
+            (sample_dir / "mash" / "analysis").mkdir(parents=True)
+            (sample_dir / "metadata_output" / "ncbi_clean.csv").write_text(
+                "Assembly Accession,Organism Name\nGCF_000000001.1,Klebsiella oxytoca\n",
+                encoding="utf-8",
+            )
+            (sample_dir / "ani" / "analysis" / "panr2_ani_summary.csv").write_text(
+                "sample_id,closest_genome,closest_ani,ani_cluster\n",
+                encoding="utf-8",
+            )
+            (sample_dir / "ani" / "analysis" / "ani_run_status.tsv").write_text(
+                "tool\tgenome_count\testimated_comparisons\tstrategy\tmax_all_vs_all_genomes\tlarge_dataset\tdecision\tstatus\tmessage\n"
+                "fastani\t1\t1\tauto\t200\tfalse\tinsufficient_genomes\tSKIPPED_INAPPLICABLE\tANI requires at least two genomes; pairwise ANI was skipped.\n",
+                encoding="utf-8",
+            )
+            (sample_dir / "mash" / "analysis" / "mash_distance_long.csv").write_text(
+                "query,reference,mash_distance,p_value,matching_hashes\n",
+                encoding="utf-8",
+            )
+            (sample_dir / "mash" / "analysis" / "mash_run_status.tsv").write_text(
+                "tool\tgenome_count\tpair_rows\tnonself_pair_rows\tdecision\tstatus\tmessage\n"
+                "mash\t1\t0\t0\tinsufficient_genomes\tSKIPPED_INAPPLICABLE\tMash requires at least two genomes; pairwise Mash screening was skipped.\n",
+                encoding="utf-8",
+            )
+            out = root / "database_setup_status.tsv"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "scripts" / "database_setup_status.py"),
+                    "--sample-dir",
+                    str(sample_dir),
+                    "--out",
+                    str(out),
+                    "--run-ani",
+                    "true",
+                    "--run-mash",
+                    "true",
+                ],
+                check=True,
+            )
+
+            status = pd.read_csv(out, sep="\t")
+            ani_status = status.loc[status["database_or_tool"] == "ani", "status"].iloc[0]
+            mash_status = status.loc[status["database_or_tool"] == "mash", "status"].iloc[0]
+            self.assertEqual(ani_status, "SKIPPED_INAPPLICABLE")
+            self.assertEqual(mash_status, "SKIPPED_INAPPLICABLE")
+
     def test_setup_abricate_databases_runs_optional_force_update(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

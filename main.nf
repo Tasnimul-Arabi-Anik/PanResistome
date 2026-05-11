@@ -1766,7 +1766,7 @@ process ANI_ANALYSIS {
         fi
     else
         printf "tool\\tgenome_count\\testimated_comparisons\\tstrategy\\tmax_all_vs_all_genomes\\tlarge_dataset\\tdecision\\tstatus\\tmessage\\n" > ${sample_dir}/ani/analysis/ani_run_status.tsv
-        printf "%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n" "${params.ani_tool}" "\${genome_count}" "\${estimated_comparisons}" "${aniStrategy}" "${aniMaxAllVsAll}" "${params.large_dataset}" "insufficient_genomes" "SKIPPED" "ANI requires at least two genomes." >> ${sample_dir}/ani/analysis/ani_run_status.tsv
+        printf "%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n" "${params.ani_tool}" "\${genome_count}" "\${estimated_comparisons}" "${aniStrategy}" "${aniMaxAllVsAll}" "${params.large_dataset}" "insufficient_genomes" "SKIPPED_INAPPLICABLE" "ANI requires at least two genomes; pairwise ANI was skipped." >> ${sample_dir}/ani/analysis/ani_run_status.tsv
         printf "query\\treference\\tani\\tfragments_mapped\\tfragments_total\\n" > ${sample_dir}/ani/fastani_pairs.tsv
         python ${baseDir}/scripts/ani_summary.py --sample-dir ${sample_dir} --pairs ${sample_dir}/ani/fastani_pairs.tsv --genomes-list ${sample_dir}/ani/genomes.list --tool ${params.ani_tool}
     fi
@@ -1798,7 +1798,10 @@ process MASH_PRESCREEN {
     else
         touch ${sample_dir}/mash/mash_dist.tsv
     fi
-    python ${baseDir}/scripts/mash_summary.py --sample-dir ${sample_dir} --dist ${sample_dir}/mash/mash_dist.tsv
+    python ${baseDir}/scripts/mash_summary.py \\
+        --sample-dir ${sample_dir} \\
+        --dist ${sample_dir}/mash/mash_dist.tsv \\
+        --genomes-list ${sample_dir}/mash/genomes.list
     """
 }
 
