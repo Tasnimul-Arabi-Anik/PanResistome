@@ -28,7 +28,19 @@ Then resume the run. On shared systems, pre-download the database once and pass:
 
 ## ABRicate Database Missing
 
-The standard comprehensive profile requires `ncbi`, `vfdb`, and `plasmidfinder`. PanResistome runs `panr setup-db` before reporting. If setup still fails, inspect:
+The standard comprehensive profile requires `ncbi`, `vfdb`, and `plasmidfinder`. PanResistome runs `panr setup-db` before reporting and records the explicit setup action in:
+
+```text
+<sample>/panr2_inputs/manifest/abricate_database_setup_status.tsv
+```
+
+If you want to force-refresh the requested ABRicate databases before analysis, rerun with:
+
+```bash
+--panr2_update_abricate_db true
+```
+
+This uses `abricate-get_db --force` when that helper is available in the ABRicate environment, then re-indexes with `abricate --setupdb`. If setup still fails, inspect:
 
 ```text
 <sample>/panr2_inputs/manifest/database_setup_status.tsv

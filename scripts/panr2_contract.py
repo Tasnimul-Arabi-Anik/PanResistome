@@ -2819,6 +2819,7 @@ th { background: #f0f4f8; }
 
     setup_path = report_dir / "database_setup_and_contract.html"
     setup_rows = read_table(manifest_dir / "database_setup_status.tsv")
+    abricate_setup_rows = read_table(manifest_dir / "abricate_database_setup_status.tsv")
     audit_rows = read_table(manifest_dir / "feature_completeness_audit.tsv")
     setup_body = "<h2>Database And Tool Setup</h2>"
     setup_body += _html_table(
@@ -2826,6 +2827,13 @@ th { background: #f0f4f8; }
         ["database_or_tool", "required_for_profile", "checked", "status", "setup_action", "version_or_path", "message"],
         max_rows=80,
     )
+    if abricate_setup_rows:
+        setup_body += "<h2>ABRicate Database Setup Actions</h2>"
+        setup_body += _html_table(
+            abricate_setup_rows,
+            ["database", "present_before", "setup_requested", "update_requested", "setup_status", "update_status", "present_after", "status", "message"],
+            max_rows=80,
+        )
     setup_body += "<h2>Feature Completeness Audit</h2>"
     setup_body += _html_table(
         audit_rows,

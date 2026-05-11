@@ -535,6 +535,15 @@ class FetchM2AdapterTests(unittest.TestCase):
                 ">contig1\nATGC\n",
                 encoding="utf-8",
             )
+            manifest = sample_dir / "panr2_inputs" / "manifest"
+            manifest.mkdir(parents=True)
+            (manifest / "abricate_database_setup_status.tsv").write_text(
+                "database\trequested\tpresent_before\tsetup_requested\tupdate_requested\tsetup_status\tupdate_status\tpresent_after\tstatus\tmessage\n"
+                "ncbi\ttrue\tfalse\ttrue\tfalse\tPASS\tSKIPPED\ttrue\tPASS\tok\n"
+                "vfdb\ttrue\tfalse\ttrue\tfalse\tPASS\tSKIPPED\ttrue\tPASS\tok\n"
+                "plasmidfinder\ttrue\tfalse\ttrue\tfalse\tPASS\tSKIPPED\ttrue\tPASS\tok\n",
+                encoding="utf-8",
+            )
             fake_bin = root / "bin"
             fake_bin.mkdir()
             (fake_bin / "abricate").write_text(
@@ -594,6 +603,14 @@ class FetchM2AdapterTests(unittest.TestCase):
                 ">contig1\nATGC\n",
                 encoding="utf-8",
             )
+            manifest = sample_dir / "panr2_inputs" / "manifest"
+            manifest.mkdir(parents=True)
+            (manifest / "abricate_database_setup_status.tsv").write_text(
+                "database\trequested\tpresent_before\tsetup_requested\tupdate_requested\tsetup_status\tupdate_status\tpresent_after\tstatus\tmessage\n"
+                "ncbi\ttrue\tfalse\ttrue\tfalse\tPASS\tSKIPPED\ttrue\tPASS\tok\n"
+                "vfdb\ttrue\tfalse\ttrue\tfalse\tPASS\tSKIPPED\ttrue\tPASS\tok\n",
+                encoding="utf-8",
+            )
             fake_bin = root / "bin"
             fake_bin.mkdir()
             (fake_bin / "abricate").write_text(
@@ -635,6 +652,68 @@ class FetchM2AdapterTests(unittest.TestCase):
             status = pd.read_csv(out, sep="\t")
             vfdb_status = status.loc[status["database_or_tool"] == "abricate_db:vfdb", "status"].iloc[0]
             self.assertEqual(vfdb_status, "FAIL")
+
+    def test_setup_abricate_databases_runs_optional_force_update(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            log = root / "commands.log"
+            (fake_bin / "panr").write_text(
+                "#!/bin/sh\n"
+                f"printf 'panr %s\\n' \"$*\" >> {log}\n"
+                "printf 'setup complete\\n'\n",
+                encoding="utf-8",
+            )
+            (fake_bin / "abricate-get_db").write_text(
+                "#!/bin/sh\n"
+                f"printf 'abricate-get_db %s\\n' \"$*\" >> {log}\n"
+                "printf 'updated\\n'\n",
+                encoding="utf-8",
+            )
+            (fake_bin / "abricate").write_text(
+                "#!/bin/sh\n"
+                "if [ \"$1\" = \"--list\" ]; then\n"
+                "  printf 'DATABASE\\tSEQUENCES\\n'\n"
+                "  printf 'ncbi\\t10\\n'\n"
+                "  printf 'vfdb\\t10\\n'\n"
+                "elif [ \"$1\" = \"--setupdb\" ]; then\n"
+                f"  printf 'abricate --setupdb\\n' >> {log}\n"
+                "  printf 'indexed\\n'\n"
+                "else\n"
+                "  printf 'abricate 1.0.1\\n'\n"
+                "fi\n",
+                encoding="utf-8",
+            )
+            for executable in fake_bin.iterdir():
+                executable.chmod(0o755)
+
+            out = root / "abricate_database_setup_status.tsv"
+            env = os.environ.copy()
+            env["PATH"] = f"{fake_bin}:{env.get('PATH', '')}"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "scripts" / "setup_abricate_databases.py"),
+                    "--dbs",
+                    "ncbi,vfdb",
+                    "--out",
+                    str(out),
+                    "--update",
+                ],
+                check=True,
+                env=env,
+            )
+
+            status = pd.read_csv(out, sep="\t")
+            self.assertEqual(set(status["status"]), {"PASS"})
+            self.assertTrue(status["update_requested"].astype(str).str.lower().eq("true").all())
+            commands = log.read_text(encoding="utf-8")
+            self.assertIn("panr setup-db --dbs ncbi,vfdb", commands)
+            self.assertIn("abricate-get_db --db ncbi --force", commands)
+            self.assertIn("abricate-get_db --db vfdb --force", commands)
+            self.assertIn("abricate --setupdb", commands)
 
     def test_database_setup_status_warns_when_mobsuite_taxa_sqlite_missing(self):
         with tempfile.TemporaryDirectory() as tmpdir:

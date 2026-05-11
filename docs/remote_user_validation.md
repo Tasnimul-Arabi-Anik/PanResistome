@@ -85,7 +85,7 @@ Download assemblies with FetchM2 native downloader
 Run CheckM2 and auto-download/cache its database when --checkm2_db is omitted
 Run QUAST, ANI/skani, and Mash summaries
 Run AMRFinderPlus and update/download its database when needed
-Run PanR2 setup-db for ABRicate ncbi,vfdb,plasmidfinder
+Run PanR2 setup-db for ABRicate ncbi,vfdb,plasmidfinder. If `--panr2_update_abricate_db true` is supplied, force-refresh requested ABRicate databases with `abricate-get_db --force` when available.
 Verify required ABRicate databases before PanR2 analysis
 Run PanResistome-native ABRicate, IntegronFinder, and MLST feature runners before PanR2 analysis
 Export panr2_inputs/features/*.features.tsv
@@ -100,6 +100,7 @@ Write the combined HTML dashboard
 validation_runs/delftia_fresh/<organism>/report/index.html
 validation_runs/delftia_fresh/<organism>/panr2_inputs/features/all_features.tsv
 validation_runs/delftia_fresh/<organism>/panr2_inputs/manifest/database_setup_status.tsv
+validation_runs/delftia_fresh/<organism>/panr2_inputs/manifest/abricate_database_setup_status.tsv
 validation_runs/delftia_fresh/<organism>/panr2_inputs/manifest/schema_validation_summary.txt
 validation_runs/delftia_fresh/<organism>/panr2_inputs/manifest/feature_completeness_audit.tsv
 validation_runs/delftia_fresh/<organism>/panr2_inputs/manifest/module_status_summary.tsv

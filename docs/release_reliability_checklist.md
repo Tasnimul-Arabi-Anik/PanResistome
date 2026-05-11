@@ -35,7 +35,8 @@ This checklist turns the public-user reliability goals into release gates. A Pan
     - Evidence: `panr2_inputs/manifest/database_setup_status.tsv` exists and required rows have no `FAIL` status.
 
 11. ABRicate NCBI/VFDB/PlasmidFinder are available after setup
-    - Evidence: comprehensive mode confirms `ncbi`, `vfdb`, and `plasmidfinder` through `abricate --list` after `panr setup-db`.
+    - Evidence: comprehensive mode confirms `ncbi`, `vfdb`, and `plasmidfinder` through `abricate --list` after `panr setup-db`, and records setup/update actions in `panr2_inputs/manifest/abricate_database_setup_status.tsv`.
+    - Note: `--panr2_update_abricate_db true` force-refreshes requested ABRicate databases with `abricate-get_db --force` when the ABRicate helper is available.
 
 12. AMRFinderPlus setup is automatic when enabled
     - Evidence: `--run_amrfinderplus true` records the AMRFinderPlus executable version, database version, setup action, and per-sample status.

@@ -76,6 +76,7 @@ params.run_abricate = true
 params.export_panr2_inputs = true
 params.run_panr2_comprehensive = false
 params.panr2_setup_abricate_db = true
+params.panr2_update_abricate_db = false
 params.panr2_abricate_dbs = 'ncbi,vfdb,plasmidfinder'
 params.panr2_min_identity = 90
 params.panr2_plot_style = 'publication'
@@ -200,6 +201,17 @@ def effectivePanr2Dbs() {
         return 'ncbi'
     }
     return params.panr2_abricate_dbs
+}
+
+def abricateSetupCommand(panr2Dbs, sampleDir) {
+    def command = "python ${baseDir}/scripts/setup_abricate_databases.py --dbs ${panr2Dbs} --out ${sampleDir}/panr2_inputs/manifest/abricate_database_setup_status.tsv"
+    if (!params.panr2_setup_abricate_db) {
+        command += " --check-only"
+    }
+    if (params.panr2_update_abricate_db) {
+        command += " --update"
+    }
+    return command
 }
 
 def effectiveRunMobileElementFinder() {
@@ -352,6 +364,7 @@ def helpMessage() {
       --amrfinderplus_reuse_existing Reuse non-empty per-sample AMRFinderPlus TSVs on resume [default: true]
       --amrfinderplus_progress_every Print AMRFinderPlus progress every N completed samples [default: 10]
       --panr2_setup_abricate_db Run panr setup-db before comprehensive PanR2 analysis [default: true]
+      --panr2_update_abricate_db Force-refresh requested ABRicate databases with abricate-get_db after setup when available [default: false]
       --panr2_abricate_dbs     ABRicate databases for PanR2 comprehensive mode [default: ncbi,vfdb,plasmidfinder; add isfinder only if installed]
       --panr2_min_identity     Minimum identity for PanR2 integrated feature analysis [default: 90]
       --panr2_plot_style       PanR2 plot style: publication, dashboard, compact [default: publication]
@@ -2171,7 +2184,7 @@ process PANR2_FEATURE_RUNNERS {
 
     script:
     def panr2Dbs = effectivePanr2Dbs()
-    def setupCmd = params.panr2_setup_abricate_db ? "panr setup-db --dbs ${panr2Dbs}" : "panr setup-db --dbs ${panr2Dbs} --check-only"
+    def setupCmd = abricateSetupCommand(panr2Dbs, sample_dir)
     def checkm2DbPath = params.checkm2_db ? launchPath(params.checkm2_db) : ""
     def checkm2DownloadDir = params.checkm2_db_dir ? launchPath(params.checkm2_db_dir) : (params.outdir.toString().startsWith("/") ? "${params.outdir}/databases/checkm2" : "${launchDir}/${params.outdir}/databases/checkm2")
     def gtdbtkDataPath = params.gtdbtk_data_path ? launchPath(params.gtdbtk_data_path) : ""
@@ -2213,6 +2226,7 @@ process PANR2_FEATURE_RUNNERS {
         --run-ani ${params.run_ani} \\
         --run-mash ${params.run_mash} \\
         --run-panr2-comprehensive ${effectiveRunPanr2Comprehensive()} \\
+        --panr2-update-abricate-db ${params.panr2_update_abricate_db} \\
         --run-integronfinder ${effectiveRunIntegronFinder()} \\
         --run-mlst ${effectiveRunMlst()} \\
         --run-mobileelementfinder ${effectiveRunMobileElementFinder()} \\
@@ -2294,7 +2308,7 @@ process PANR2_COMPREHENSIVE {
     }
     def externalFeatureArgText = externalFeatureArgs.join(' ')
     def panr2Dbs = effectivePanr2Dbs()
-    def setupCmd = params.panr2_setup_abricate_db ? "panr setup-db --dbs ${panr2Dbs}" : "panr setup-db --dbs ${panr2Dbs} --check-only"
+    def setupCmd = abricateSetupCommand(panr2Dbs, sample_dir)
     def configuredSampleMap = params.panr2_sample_map ? launchPath(params.panr2_sample_map) : ""
     def abricateRunFlag = params.panr2_native_feature_runners ? "" : "--run-abricate"
     def mobileElementFinderFlag = (!params.panr2_native_feature_runners && effectiveRunMobileElementFinder()) ? "--run-mobileelementfinder" : ""
@@ -2342,6 +2356,7 @@ process PANR2_COMPREHENSIVE {
             --run-ani ${params.run_ani} \\
             --run-mash ${params.run_mash} \\
             --run-panr2-comprehensive ${effectiveRunPanr2Comprehensive()} \\
+            --panr2-update-abricate-db ${params.panr2_update_abricate_db} \\
             --run-integronfinder ${effectiveRunIntegronFinder()} \\
             --run-mlst ${effectiveRunMlst()} \\
             --run-mobileelementfinder ${effectiveRunMobileElementFinder()} \\

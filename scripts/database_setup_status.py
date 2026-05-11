@@ -180,6 +180,21 @@ def count_status_rows(path: Path, status_value: str = "PASS") -> int:
         return 0
 
 
+def count_status_values(path: Path, column: str = "status") -> dict[str, int]:
+    counts: dict[str, int] = {}
+    if not path.exists():
+        return counts
+    try:
+        with path.open(newline="", errors="ignore") as handle:
+            reader = csv.DictReader(handle, delimiter="\t")
+            for record in reader:
+                value = str(record.get(column, "")).strip().upper() or "UNKNOWN"
+                counts[value] = counts.get(value, 0) + 1
+    except csv.Error:
+        return counts
+    return counts
+
+
 def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
     sample_dir = Path(args.sample_dir)
     rows: list[dict[str, str]] = []
@@ -305,13 +320,33 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
     abricate_version = command_version("abricate", ["--version"])
     abricate_databases, abricate_message = read_abricate_databases()
     required_dbs = [item.strip() for item in str(args.panr2_dbs or "").split(",") if item.strip()]
+    abricate_setup_report = sample_dir / "panr2_inputs" / "manifest" / "abricate_database_setup_status.tsv"
+    abricate_setup_counts = count_status_values(abricate_setup_report)
+    if required_dbs:
+        setup_report_status = "PASS" if abricate_setup_counts.get("FAIL", 0) == 0 and abricate_setup_report.exists() else "FAIL"
+        setup_report_message = (
+            f"ABRicate setup report rows by status: {abricate_setup_counts}."
+            if abricate_setup_report.exists()
+            else "ABRicate setup report was not found."
+        )
+        rows.append(
+            row(
+                "abricate_database_setup_report",
+                True,
+                True,
+                setup_report_status,
+                "panr_setup_db_or_abricate_get_db_update" if args.panr2_update_abricate_db else "panr_setup_db",
+                str(abricate_setup_report) if abricate_setup_report.exists() else "",
+                setup_report_message,
+            )
+        )
     rows.append(
         row(
             "abricate_tool",
             bool(required_dbs),
             True,
             "PASS" if abricate_version and abricate_databases else ("FAIL" if required_dbs else "SKIPPED"),
-            "panr_setup_db_then_list",
+            "panr_setup_db_update_then_list" if args.panr2_update_abricate_db else "panr_setup_db_then_list",
             abricate_version,
             abricate_message,
         )
@@ -323,7 +358,7 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
                 True,
                 True,
                 "PASS" if db_name in abricate_databases else "FAIL",
-                "panr_setup_db",
+                "panr_setup_db_or_forced_update" if args.panr2_update_abricate_db else "panr_setup_db",
                 db_name if db_name in abricate_databases else "",
                 f"ABRicate database {db_name!r} is available." if db_name in abricate_databases else f"ABRicate database {db_name!r} is required but unavailable after setup.",
             )
@@ -465,6 +500,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--run-ani", type=as_bool, default=False)
     parser.add_argument("--run-mash", type=as_bool, default=False)
     parser.add_argument("--run-panr2-comprehensive", type=as_bool, default=False)
+    parser.add_argument("--panr2-update-abricate-db", type=as_bool, default=False)
     parser.add_argument("--run-integronfinder", type=as_bool, default=False)
     parser.add_argument("--run-mlst", type=as_bool, default=False)
     parser.add_argument("--run-mobileelementfinder", type=as_bool, default=False)
