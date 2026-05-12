@@ -1,52 +1,52 @@
 row_type	database	feature_id	metadata_column	metadata_value	samples_evaluated	n_bioprojects	largest_bioproject	largest_bioproject_count	largest_bioproject_fraction	status	warning
-dataset_summary			bioproject		6	4	PRJNA_DOMINANT	3	0.5000	PASS	
-top_finding_project_support	mobsuite	database_burden	host	Homo sapiens	3	2	PRJNA_DOMINANT	2	0.6667	PASS	
-top_finding_project_support	mobsuite	database_burden	isolation_source	blood	3	2	PRJNA_DOMINANT	2	0.6667	PASS	
+dataset_summary			bioproject		6	4	PRJNA_DOMINANT	3	0.5000	PASS
+top_finding_project_support	mobsuite	database_burden	host	Homo sapiens	3	2	PRJNA_DOMINANT	2	0.6667	PASS
+top_finding_project_support	mobsuite	database_burden	isolation_source	blood	3	2	PRJNA_DOMINANT	2	0.6667	PASS
 top_finding_project_support	mobsuite	database_burden	collection_year	2024	3	1	PRJNA_DOMINANT	3	1.0000	WARNING_DOMINATED	single_bioproject_dominance
 top_finding_project_support	mobsuite	database_burden	country	CountryA	3	1	PRJNA_DOMINANT	3	1.0000	WARNING_DOMINATED	single_bioproject_dominance
-top_finding_project_support	amr	database_burden	host	Homo sapiens	3	2	PRJNA_DOMINANT	2	0.6667	PASS	
-top_finding_project_support	plasmidfinder	database_burden	host	Homo sapiens	3	2	PRJNA_DOMINANT	2	0.6667	PASS	
-top_finding_project_support	amr	database_burden	isolation_source	blood	3	2	PRJNA_DOMINANT	2	0.6667	PASS	
-top_finding_project_support	plasmidfinder	database_burden	isolation_source	blood	3	2	PRJNA_DOMINANT	2	0.6667	PASS	
-top_finding_project_support	amr	blaKPC-2	collection_year	2024	2	1	PRJNA_DOMINANT	2	1.0000	PASS	
-top_finding_project_support	plasmidfinder	IncFIB	collection_year	2024	2	1	PRJNA_DOMINANT	2	1.0000	PASS	
-top_finding_project_support	amr	blaKPC-2	country	CountryA	2	1	PRJNA_DOMINANT	2	1.0000	PASS	
-top_finding_project_support	plasmidfinder	IncFIB	country	CountryA	2	1	PRJNA_DOMINANT	2	1.0000	PASS	
-top_finding_project_support	amr	blaKPC-2	host	Homo sapiens	2	1	PRJNA_DOMINANT	2	1.0000	PASS	
-top_finding_project_support	mobsuite	IncFIB	host	Homo sapiens	2	2	PRJNA_DOMINANT	1	0.5000	PASS	
-top_finding_project_support	plasmidfinder	IncFIB	host	Homo sapiens	2	1	PRJNA_DOMINANT	2	1.0000	PASS	
-top_finding_project_support	amr	blaKPC-2	isolation_source	blood	2	1	PRJNA_DOMINANT	2	1.0000	PASS	
-top_finding_project_support	mobsuite	IncFIB	isolation_source	blood	2	2	PRJNA_DOMINANT	1	0.5000	PASS	
-top_finding_project_support	plasmidfinder	IncFIB	isolation_source	blood	2	1	PRJNA_DOMINANT	2	1.0000	PASS	
+top_finding_project_support	amr	database_burden	host	Homo sapiens	3	2	PRJNA_DOMINANT	2	0.6667	PASS
+top_finding_project_support	plasmidfinder	database_burden	host	Homo sapiens	3	2	PRJNA_DOMINANT	2	0.6667	PASS
+top_finding_project_support	amr	database_burden	isolation_source	blood	3	2	PRJNA_DOMINANT	2	0.6667	PASS
+top_finding_project_support	plasmidfinder	database_burden	isolation_source	blood	3	2	PRJNA_DOMINANT	2	0.6667	PASS
+top_finding_project_support	amr	blaKPC-2	collection_year	2024	2	1	PRJNA_DOMINANT	2	1.0000	PASS
+top_finding_project_support	plasmidfinder	IncFIB	collection_year	2024	2	1	PRJNA_DOMINANT	2	1.0000	PASS
+top_finding_project_support	amr	blaKPC-2	country	CountryA	2	1	PRJNA_DOMINANT	2	1.0000	PASS
+top_finding_project_support	plasmidfinder	IncFIB	country	CountryA	2	1	PRJNA_DOMINANT	2	1.0000	PASS
+top_finding_project_support	amr	blaKPC-2	host	Homo sapiens	2	1	PRJNA_DOMINANT	2	1.0000	PASS
+top_finding_project_support	mobsuite	IncFIB	host	Homo sapiens	2	2	PRJNA_DOMINANT	1	0.5000	PASS
+top_finding_project_support	plasmidfinder	IncFIB	host	Homo sapiens	2	1	PRJNA_DOMINANT	2	1.0000	PASS
+top_finding_project_support	amr	blaKPC-2	isolation_source	blood	2	1	PRJNA_DOMINANT	2	1.0000	PASS
+top_finding_project_support	mobsuite	IncFIB	isolation_source	blood	2	2	PRJNA_DOMINANT	1	0.5000	PASS
+top_finding_project_support	plasmidfinder	IncFIB	isolation_source	blood	2	1	PRJNA_DOMINANT	2	1.0000	PASS
 top_finding_project_support	vfdb	database_burden	collection_year	2024	3	1	PRJNA_DOMINANT	3	1.0000	WARNING_DOMINATED	single_bioproject_dominance
 top_finding_project_support	vfdb	database_burden	country	CountryA	3	1	PRJNA_DOMINANT	3	1.0000	WARNING_DOMINATED	single_bioproject_dominance
 top_finding_project_support	amr	database_burden	collection_year	2024	3	1	PRJNA_DOMINANT	3	1.0000	WARNING_DOMINATED	single_bioproject_dominance
-top_finding_project_support	defensefinder	database_burden	collection_year	2023	3	3	PRJNA_OTHER_6	1	0.3333	PASS	
+top_finding_project_support	defensefinder	database_burden	collection_year	2023	3	3	PRJNA_OTHER_4	1	0.3333	PASS
 top_finding_project_support	ectyper	database_burden	collection_year	2024	3	1	PRJNA_DOMINANT	3	1.0000	WARNING_DOMINATED	single_bioproject_dominance
 top_finding_project_support	isfinder	database_burden	collection_year	2024	3	1	PRJNA_DOMINANT	3	1.0000	WARNING_DOMINATED	single_bioproject_dominance
 top_finding_project_support	kaptive	database_burden	collection_year	2024	3	1	PRJNA_DOMINANT	3	1.0000	WARNING_DOMINATED	single_bioproject_dominance
 top_finding_project_support	kleborate	database_burden	collection_year	2024	3	1	PRJNA_DOMINANT	3	1.0000	WARNING_DOMINATED	single_bioproject_dominance
 top_finding_project_support	mobileelementfinder	database_burden	collection_year	2024	3	1	PRJNA_DOMINANT	3	1.0000	WARNING_DOMINATED	single_bioproject_dominance
 top_finding_project_support	plasmidfinder	database_burden	collection_year	2024	3	1	PRJNA_DOMINANT	3	1.0000	WARNING_DOMINATED	single_bioproject_dominance
-top_finding_project_support	prophage	database_burden	collection_year	2023	3	3	PRJNA_OTHER_6	1	0.3333	PASS	
-top_finding_project_support	sccmecfinder	database_burden	collection_year	2023	3	3	PRJNA_OTHER_6	1	0.3333	PASS	
-top_finding_project_support	serotypefinder	database_burden	collection_year	2023	3	3	PRJNA_OTHER_6	1	0.3333	PASS	
+top_finding_project_support	prophage	database_burden	collection_year	2023	3	3	PRJNA_OTHER_4	1	0.3333	PASS
+top_finding_project_support	sccmecfinder	database_burden	collection_year	2023	3	3	PRJNA_OTHER_4	1	0.3333	PASS
+top_finding_project_support	serotypefinder	database_burden	collection_year	2023	3	3	PRJNA_OTHER_4	1	0.3333	PASS
 top_finding_project_support	amr	database_burden	country	CountryA	3	1	PRJNA_DOMINANT	3	1.0000	WARNING_DOMINATED	single_bioproject_dominance
-top_finding_project_support	defensefinder	database_burden	country	CountryB	3	3	PRJNA_OTHER_6	1	0.3333	PASS	
+top_finding_project_support	defensefinder	database_burden	country	CountryB	3	3	PRJNA_OTHER_4	1	0.3333	PASS
 top_finding_project_support	ectyper	database_burden	country	CountryA	3	1	PRJNA_DOMINANT	3	1.0000	WARNING_DOMINATED	single_bioproject_dominance
 top_finding_project_support	isfinder	database_burden	country	CountryA	3	1	PRJNA_DOMINANT	3	1.0000	WARNING_DOMINATED	single_bioproject_dominance
 top_finding_project_support	kaptive	database_burden	country	CountryA	3	1	PRJNA_DOMINANT	3	1.0000	WARNING_DOMINATED	single_bioproject_dominance
 top_finding_project_support	kleborate	database_burden	country	CountryA	3	1	PRJNA_DOMINANT	3	1.0000	WARNING_DOMINATED	single_bioproject_dominance
 top_finding_project_support	mobileelementfinder	database_burden	country	CountryA	3	1	PRJNA_DOMINANT	3	1.0000	WARNING_DOMINATED	single_bioproject_dominance
 top_finding_project_support	plasmidfinder	database_burden	country	CountryA	3	1	PRJNA_DOMINANT	3	1.0000	WARNING_DOMINATED	single_bioproject_dominance
-top_finding_project_support	prophage	database_burden	country	CountryB	3	3	PRJNA_OTHER_6	1	0.3333	PASS	
-top_finding_project_support	sccmecfinder	database_burden	country	CountryB	3	3	PRJNA_OTHER_6	1	0.3333	PASS	
-top_finding_project_support	serotypefinder	database_burden	country	CountryB	3	3	PRJNA_OTHER_6	1	0.3333	PASS	
-top_finding_project_support	defensefinder	database_burden	host	environment	3	3	PRJNA_OTHER_6	1	0.3333	PASS	
-top_finding_project_support	ectyper	database_burden	host	environment	3	3	PRJNA_OTHER_6	1	0.3333	PASS	
-top_finding_project_support	isfinder	database_burden	host	environment	3	3	PRJNA_OTHER_6	1	0.3333	PASS	
-top_finding_project_support	kaptive	database_burden	host	Homo sapiens	3	2	PRJNA_DOMINANT	2	0.6667	PASS	
-top_finding_project_support	kleborate	database_burden	host	Homo sapiens	3	2	PRJNA_DOMINANT	2	0.6667	PASS	
-top_finding_project_support	mobileelementfinder	database_burden	host	Homo sapiens	3	2	PRJNA_DOMINANT	2	0.6667	PASS	
-top_finding_project_support	prophage	database_burden	host	environment	3	3	PRJNA_OTHER_6	1	0.3333	PASS	
-top_finding_project_support	sccmecfinder	database_burden	host	environment	3	3	PRJNA_OTHER_6	1	0.3333	PASS	
+top_finding_project_support	prophage	database_burden	country	CountryB	3	3	PRJNA_OTHER_4	1	0.3333	PASS
+top_finding_project_support	sccmecfinder	database_burden	country	CountryB	3	3	PRJNA_OTHER_4	1	0.3333	PASS
+top_finding_project_support	serotypefinder	database_burden	country	CountryB	3	3	PRJNA_OTHER_4	1	0.3333	PASS
+top_finding_project_support	defensefinder	database_burden	host	environment	3	3	PRJNA_DOMINANT	1	0.3333	PASS
+top_finding_project_support	ectyper	database_burden	host	environment	3	3	PRJNA_DOMINANT	1	0.3333	PASS
+top_finding_project_support	isfinder	database_burden	host	environment	3	3	PRJNA_DOMINANT	1	0.3333	PASS
+top_finding_project_support	kaptive	database_burden	host	Homo sapiens	3	2	PRJNA_DOMINANT	2	0.6667	PASS
+top_finding_project_support	kleborate	database_burden	host	Homo sapiens	3	2	PRJNA_DOMINANT	2	0.6667	PASS
+top_finding_project_support	mobileelementfinder	database_burden	host	Homo sapiens	3	2	PRJNA_DOMINANT	2	0.6667	PASS
+top_finding_project_support	prophage	database_burden	host	environment	3	3	PRJNA_DOMINANT	1	0.3333	PASS
+top_finding_project_support	sccmecfinder	database_burden	host	environment	3	3	PRJNA_DOMINANT	1	0.3333	PASS
