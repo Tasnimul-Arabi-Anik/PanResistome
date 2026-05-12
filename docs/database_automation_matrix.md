@@ -32,7 +32,7 @@ safe to fetch automatically.
 | Kleborate | Yes | `--run_kleborate true` | No | Small biological validation passed on Klebsiella; still opt-in because organism-specific. |
 | MobileElementFinder | Yes, when explicitly enabled | `--panr2_run_mobileelementfinder true` | No | Small 5-genome Klebsiella biological validation passed and produced clean PanR2 feature exports. Still opt-in because broader multi-species/runtime validation is pending. |
 | Kaptive | No | `--run_kaptive true` | Yes | Requires `--kaptive_db`; keep explicit until database setup is validated. |
-| geNomad | Yes, when explicitly enabled | `--run_genomad true` | No, unless offline/restricted | Uses `--genomad_db_dir` under `<outdir>/databases/genomad` and runs `genomad download-database` when no `--genomad_db` is supplied. Still opt-in because the database is large. |
+| geNomad | Helper exists, but not validated as low-hassle | `--run_genomad true` | No in principle, but cached/container setup is recommended | Uses `--genomad_db_dir` under `<outdir>/databases/genomad` and runs `genomad download-database` when no `--genomad_db` is supplied. A 5-genome auto-download validation attempt reached `GENOMAD_PROPHAGE` but spent ~17 minutes in first-run Conda environment creation before DB download, so this is still opt-in and not yet advertised as hassle-free. |
 | ISfinder-compatible BLAST | No | `--run_isfinder true` | Yes | Requires authorized `--isfinder_db_fasta`; PanResistome must not download or redistribute ISfinder. |
 | GTDB-Tk | No | `--run_gtdbtk true` | Yes | Requires large GTDB-Tk reference data; remains off by default. |
 | DefenseFinder | No | `--panr2_run_defensefinder true` | Depends on local installation/database | Kept opt-in until dependency/database setup is stable. |
@@ -43,7 +43,7 @@ safe to fetch automatically.
 The helper paths exist, but these should be validated before changing defaults:
 
 1. **MOB-suite cached DB initialization validation** under `<outdir>/databases/mobsuite`, confirming `mob_init` and `taxa.sqlite` creation on a fresh machine.
-2. **geNomad cached DB download validation**, confirming disk size, download stability, and resume behavior on a fresh machine.
+2. **geNomad cached/container validation**, confirming environment creation time, database size, download stability, and resume behavior on a fresh machine.
 3. **MobileElementFinder broader validation** on another organism and/or a larger subset before considering default inclusion.
 4. **Kaptive database helper** for Klebsiella-focused workflows, but not as a default module because it is organism-specific.
 

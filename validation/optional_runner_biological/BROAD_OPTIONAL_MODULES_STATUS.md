@@ -137,6 +137,20 @@ status file: validation_runs/genomad_missing_db_probe/genomad_database_setup_sta
 
 Interpretation: the geNomad setup helper records an auditable missing-DB state correctly. A true remote-user validation still requires a fresh Conda solve plus `--genomad_auto_download_db true`, or a supplied `--genomad_db`, and should be run first on 2-10 genomes because the geNomad database is large.
 
+Auto-download attempt:
+
+```text
+command reached GENOMAD_PROPHAGE: yes
+environment creation: did not finish in practical validation window
+time before stop: approximately 17 minutes
+database download reached: no
+biological geNomad outputs generated: no
+```
+
+Detailed result: `validation/optional_runner_biological/GENOMAD_AUTO_DOWNLOAD_ATTEMPT_RESULTS.md`
+
+Interpretation: geNomad remains opt-in and should not yet be described as hassle-free automated setup. The next validation should either prebuild/cache the geNomad environment, or validate a container/Apptainer route before attempting the large database download again.
+
 Recommended next command when a real geNomad DB is available:
 
 ```bash
