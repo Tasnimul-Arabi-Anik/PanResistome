@@ -1,6 +1,6 @@
 # Container execution notes
 
-PanResistome currently ships validated Conda/Mamba workflows. Docker and Apptainer/Singularity profiles are present as v0.4.0 deployment scaffolding. A Singularity fixture smoke test has passed, a local Docker build/runtime smoke test of the experimental all-in-one image passes, and a two-genome Klebsiella biological run completed through the Docker profile with the local image. Full remote pull validation of the GHCR image is still pending because the first public pull was network-limited on this machine.
+PanResistome currently ships validated Conda/Mamba workflows. Docker and Apptainer/Singularity profiles are present as v0.4.0 deployment scaffolding. A Singularity fixture smoke test has passed, a local Docker build/runtime smoke test of the experimental all-in-one image passes, a two-genome Klebsiella biological run completed through the Docker profile with the local image, geNomad database download and runner execution now work through Docker with a mounted database path, and a 100-record Klebsiella large-mode Docker run completed with clean PanR2 feature-contract output. Full remote pull validation of the GHCR image is still pending because the public pull was network-limited on this machine.
 
 ## Design goal
 
@@ -68,14 +68,14 @@ Common parameters:
 
 The profiles disable Conda for all processes and assign the supplied image to each process. They also bind the repository path into the container because workflow processes call helper scripts through `${baseDir}`. If no image is supplied, they use the documented experimental GHCR image name. Treat these profiles as experimental until a full remote pull and multi-genome production-image validation are documented.
 
-The scaffold and Singularity fixture-smoke validation status is documented at `validation/deployment/CONTAINER_PROFILE_SCAFFOLD_RESULTS.md`.
+The scaffold, Singularity fixture-smoke, Docker biological, geNomad Docker, and 100-record Docker validation status is documented in `validation/deployment/CONTAINER_PROFILE_SCAFFOLD_RESULTS.md` and `validation/deployment/DOCKER_REMOTE_USER_VALIDATION_RESULTS.md`.
 
 ## Practical first container targets
 
 1. Keep the existing `-profile test` workflow working without containers.
 2. Small Singularity fixture smoke test for local fixtures. Completed with `docker://python:3.11-slim`.
 3. Build or publish a PanResistome image with the real tool stack. Local Docker build/runtime sanity has passed.
-4. Validate the standard comprehensive command without GTDB-Tk through a normal user Docker/Apptainer profile. A two-genome biological Docker run with the local image has passed; a normal-user run still needs local Docker socket permissions or an Apptainer/Singularity route.
+4. Validate the standard comprehensive command without GTDB-Tk through a normal user Docker/Apptainer profile. Two-genome and 100-record biological Docker runs with the local image have passed; a normal-user run still needs local Docker socket permissions or an Apptainer/Singularity route.
 5. Document database mounts for CheckM2 and optional heavy databases.
 6. Only then advertise Docker/Apptainer profiles as supported.
 
@@ -86,6 +86,11 @@ ghcr.io/tasnimul-arabi-anik/panresistome:experimental
 ```
 
 An unauthenticated `docker pull` started successfully on 2026-05-12, which means a GitHub login was not required at the start of the pull. The full pull was stopped on this machine because the network was too slow for the large image. If users see `DENIED`, the GHCR package visibility should be checked in GitHub package settings.
+
+Normal non-sudo Docker is not ready on the validation host because the current
+user is not in the `docker` group. Docker group membership grants broad
+Docker/root-equivalent access, so it should be enabled explicitly by the machine
+owner or administrator and followed by a new login session.
 
 ## Image build and publication
 
@@ -154,6 +159,38 @@ ABRicate ncbi/vfdb/plasmidfinder setup: PASS
 PanR2 handoff HTML pages: generated
 ```
 
+100-record Klebsiella large-mode Docker validation using the local image passed
+on 2026-05-13:
+
+```text
+12/12 Nextflow processes succeeded
+runtime: 22m16s
+CPU hours: 5.0
+input records: 100
+downloaded/analyzed genomes: 99
+failed accession: GCF_055382775.1
+complete standardized feature rows: 11,488
+unmatched/invalid/duplicate feature rows: 0/0/0
+ABRicate ncbi/vfdb/plasmidfinder setup: PASS
+native runner merge audit: PASS
+PanR2 handoff HTML pages: generated
+```
+
+geNomad database download and runner validation also passed through Docker with
+a mounted database path:
+
+```text
+geNomad database v1.9 downloaded and extracted inside Docker
+two-genome geNomad-enabled Nextflow run: 16/16 processes succeeded
+geNomad process: PASS
+prophage.features.tsv: header-only for this tiny dataset
+feature-contract validation: zero unmatched/invalid/duplicate rows
+```
+
+The header-only prophage table means the runner and PanR2 contract path are
+valid, but positive geNomad feature calls still need a prophage-rich validation
+dataset.
+
 Two implementation details matter for reproducibility:
 
 - MobileElementFinder is installed in a separate `mobileelementfinder_env`. Its CLI is `mefinder`, not `mobileelementfinder`, and the environment pins `setuptools<81` because the upstream package still imports `pkg_resources`.
@@ -210,7 +247,9 @@ geNomad is a high-priority container candidate because the 5-genome auto-downloa
 - A 2-10 genome run produces raw geNomad output and `prophage.features.tsv`.
 - `panr2_inputs/features/all_features.tsv` includes prophage/geNomad rows with zero unmatched, invalid, or duplicate feature rows.
 
-Until that is validated, geNomad should remain opt-in and described as table-analysis-ready but runner-validation-pending.
+geNomad remains opt-in. The Docker route now validates database download,
+database mounting, and runner execution, but a prophage-rich dataset is still
+needed before claiming positive biological prophage feature validation.
 
 For a container or host-module geNomad validation, use `-profile genomad_host` so PanResistome does not try to create `envs/genomad.yaml` for the geNomad processes:
 

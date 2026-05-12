@@ -293,6 +293,100 @@ from the host environment, but this sudo environment only had `python3`. The
 pipeline itself completed and produced valid outputs. The hook has since been
 updated to prefer `python3` and fall back to `python`.
 
+## 100-Record Docker Large-Mode Validation
+
+A 100-record Klebsiella validation was executed through the Docker profile with
+the local `panresistome:experimental` image. CheckM2, QUAST, ANI, AMRFinderPlus,
+and GTDB-Tk were disabled for desktop safety; Mash, sequence QC, native feature
+runners, PanR2 comprehensive reporting, handoff export, and final collection
+were enabled.
+
+Result:
+
+```text
+Runtime: 22m16s
+CPU hours: 5.0
+Nextflow processes: 12/12 succeeded
+Input records: 100
+Downloaded/analyzed genomes: 99
+Failed accession: GCF_055382775.1
+Feature rows: 11,488
+Unmatched feature rows: 0
+Invalid feature rows: 0
+Duplicate feature rows: 0
+ABRicate ncbi/vfdb/plasmidfinder setup: PASS
+PanR2 handoff report pages: generated
+Runtime/resource summary: generated
+```
+
+Feature rows by table, excluding headers:
+
+```text
+amr.features.tsv: 1,234
+integronfinder.features.tsv: 418
+mlst.features.tsv: 1,622
+plasmidfinder.features.tsv: 393
+vfdb.features.tsv: 7,821
+all_features.tsv: 11,488
+```
+
+Native-runner merge audit:
+
+```text
+abricate: PASS, expected_raw_tables=297, observed_raw_tables=297, samples_processed=99, feature_rows=9448
+integronfinder: PASS, expected_raw_tables=99, observed_raw_tables=99, samples_processed=99, feature_rows=418
+mlst: PASS, samples_processed=99, feature_rows=763
+mobileelementfinder: SKIPPED, not requested
+```
+
+Runtime/resource observations:
+
+```text
+FETCHM: 7.78m, peak RSS 0.167 GiB, peak VMEM 3.3 GiB
+PANR2_FEATURE_RUNNERS: 11.82m, peak RSS 2.2 GiB, peak VMEM 33.4 GiB
+PANR2_COMPREHENSIVE: 1.95m, peak RSS 1.5 GiB, peak VMEM 5.0 GiB
+```
+
+This validates the main containerized comparative-genomics path at the
+100-record scale using the local image. It does not replace full CheckM2,
+AMRFinderPlus, ANI, or GTDB-Tk container validation.
+
+## geNomad Docker Validation
+
+The real geNomad database downloader was run inside Docker with a mounted
+writable database directory:
+
+```bash
+sudo docker run --rm \
+  -v /tmp/panresistome_genomad_db:/genomad_db \
+  panresistome:experimental \
+  bash -lc 'genomad download-database /genomad_db'
+```
+
+Result:
+
+```text
+geNomad database v1.9 downloaded from NERSC
+Database extracted to /genomad_db/genomad_db
+geNomad database ready
+```
+
+A two-genome geNomad-enabled Docker run then completed:
+
+```text
+Runtime: 5m03s
+Nextflow processes: 16/16 succeeded
+geNomad process: PASS
+Feature rows: 286
+prophage.features.tsv: header-only, 0 biological prophage rows
+Unmatched/invalid/duplicate feature rows: 0/0/0
+geNomad database setup/status: PASS
+```
+
+Interpretation: the geNomad Docker runner, database mount, PanR2 handoff, and
+feature-contract path are valid. Positive geNomad biological feature calls still
+need a prophage-rich validation dataset.
+
 ## GHCR Public Pull Attempt
 
 An unauthenticated public pull was attempted:
@@ -303,8 +397,8 @@ sudo docker pull ghcr.io/tasnimul-arabi-anik/panresistome:experimental
 
 The pull started successfully and downloaded layers without requiring a GitHub
 login, so authentication was not the observed blocker. The pull was stopped
-after roughly ten minutes because the network was too slow for the large image
-on this machine. Full remote pull validation remains open.
+because the network was too slow for the large image on this machine. Full
+remote pull validation remains open.
 
 Important observations:
 
@@ -333,6 +427,9 @@ Experimental PanResistome all-in-one image builds locally
 Experimental image command and runtime sanity checks pass for core optional runners
 Nextflow `test,docker` profile completes with the local image when launched from the repository root
 Two-genome Klebsiella biological run completes through the Docker profile with the local image
+geNomad database download completes inside Docker with a mounted writable path
+Two-genome geNomad-enabled Docker run completes with clean feature-contract validation
+100-record Klebsiella Docker large-mode run completes with clean feature-contract validation
 ```
 
 Not validated:
@@ -343,6 +440,7 @@ Containerized database mounts
 Normal-user Nextflow Docker profile on this host
 Full PanResistome production image pull from GHCR
 ECTyper species-ID sketch readiness
+Positive geNomad biological feature rows on a prophage-rich dataset
 ```
 
 The documented GHCR image started pulling without login on 2026-05-12, but the
@@ -377,10 +475,12 @@ python scripts/check_container_readiness.py \
 ```
 
 The image build now passes locally as `panresistome:experimental`, and the
-local image can run both the Nextflow test profile and a two-genome biological
-Klebsiella validation through Docker. The GitHub Actions workflow should still
-publish a fully pullable GHCR image before Docker, Apptainer, or Singularity
-profiles are advertised as a low-hassle remote-user route.
+local image can run the Nextflow test profile, a two-genome biological
+Klebsiella validation, a two-genome geNomad-enabled validation, and a
+100-record large-mode Klebsiella validation through Docker. The GitHub Actions
+workflow should still publish a fully pullable GHCR image before Docker,
+Apptainer, or Singularity profiles are advertised as a low-hassle remote-user
+route.
 
 ## Next Required Validation
 

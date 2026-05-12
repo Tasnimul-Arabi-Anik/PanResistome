@@ -71,6 +71,8 @@
 - The GHCR container workflow now smoke-tests the published image after build by checking the main tool entry points and runtime startup for MobileElementFinder, geNomad, MOB-suite, ECTyper, and PanR2.
 - A two-genome `Klebsiella pneumoniae` biological validation completed through the Docker profile with the local `panresistome:experimental` image, producing 286 standardized feature rows across AMR, VFDB, PlasmidFinder, and MLST with zero unmatched, invalid, or duplicate feature rows.
 - An unauthenticated GHCR pull for `ghcr.io/tasnimul-arabi-anik/panresistome:experimental` started successfully without a GitHub login, but the full pull was stopped on this machine because the large image download was too slow.
+- geNomad database v1.9 downloaded successfully inside Docker to a mounted writable database directory, and a two-genome geNomad-enabled Docker run completed 16/16 processes with clean PanR2 feature-contract validation.
+- A 100-record `Klebsiella pneumoniae` large-mode Docker validation completed with the local image, producing 11,488 standardized feature rows across AMR, VFDB, PlasmidFinder, IntegronFinder, and MLST with zero unmatched, invalid, or duplicate feature rows.
 
 ### Validated
 - The 100-record `Klebsiella pneumoniae` input completed with `-profile conda,mamba,desktop_parallel,large`, GTDB-Tk disabled, CheckM2 capped, AMRFinderPlus enabled, and parallel native feature runners. The run produced 12,838 complete standardized feature rows, 99 QC PASS calls, zero unmatched/invalid/duplicate feature rows, capped report-facing matrices/summaries, and the expected HTML report set.
