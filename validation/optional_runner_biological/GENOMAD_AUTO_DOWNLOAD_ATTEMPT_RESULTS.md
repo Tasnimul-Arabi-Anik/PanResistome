@@ -84,11 +84,12 @@ Keep geNomad opt-in and do not advertise it as a hassle-free automated runner ye
 
 Recommended next engineering options:
 
-1. Add a documented `--prepare_genomad_env`/preflight route or make `docs/database_automation_matrix.md` explicit that geNomad first-run setup may be slow.
-2. Prefer container/Apptainer validation for geNomad before claiming remote-user ease.
-3. If Conda remains the supported route, test geNomad environment creation separately and document expected solve/install time.
-4. Re-run biological validation only after the geNomad environment is cached or containerized, then test DB auto-download and 2-10 genomes.
-5. Keep `--genomad_db` support for users/HPC systems with prebuilt database paths.
+1. Use `python scripts/check_genomad_readiness.py` before launching geNomad runs.
+2. Use `-profile genomad_host` or `--genomad_use_host_env true` when geNomad is available from a host module, prebuilt Conda environment, or container image.
+3. Prefer container/Apptainer validation for geNomad before claiming remote-user ease.
+4. If Conda remains the supported route, test geNomad environment creation separately and document expected solve/install time.
+5. Re-run biological validation only after the geNomad environment is cached or containerized, then test DB auto-download and 2-10 genomes.
+6. Keep `--genomad_db` support for users/HPC systems with prebuilt database paths.
 
 A future passing validation should document all of these:
 

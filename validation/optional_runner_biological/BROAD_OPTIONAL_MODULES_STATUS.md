@@ -151,6 +151,20 @@ Detailed result: `validation/optional_runner_biological/GENOMAD_AUTO_DOWNLOAD_AT
 
 Interpretation: geNomad remains opt-in and should not yet be described as hassle-free automated setup. The next validation should either prebuild/cache the geNomad environment, or validate a container/Apptainer route before attempting the large database download again.
 
+Host-environment bypass smoke:
+
+```text
+-profile genomad_host: PASS
+GENOMAD_PROPHAGE ran without creating envs/genomad.yaml: yes
+runtime with missing host genomad/database: 0.10s
+auditable missing-database status: PASS
+biological geNomad outputs generated: no, expected for this negative smoke
+```
+
+Detailed result: `validation/optional_runner_biological/GENOMAD_HOST_PROFILE_SMOKE_RESULTS.md`
+
+Interpretation: users with a prebuilt host/module/container `genomad` can now bypass only the geNomad Conda solve using `-profile genomad_host` or `--genomad_use_host_env true`. A positive biological validation still needs a working `genomad` executable and populated database.
+
 Recommended next command when a real geNomad DB is available:
 
 ```bash
