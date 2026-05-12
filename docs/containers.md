@@ -1,6 +1,6 @@
 # Container execution notes
 
-PanResistome currently ships validated Conda/Mamba workflows. Docker and Apptainer/Singularity profiles are present as v0.4.0 deployment scaffolding. A Singularity fixture smoke test has passed, but full production-image and real-data container validation are still pending.
+PanResistome currently ships validated Conda/Mamba workflows. Docker and Apptainer/Singularity profiles are present as v0.4.0 deployment scaffolding. A Singularity fixture smoke test has passed, and a local Docker build/runtime smoke test of the experimental all-in-one image now passes. Full Nextflow production-image and real-data container validation are still pending.
 
 ## Design goal
 
@@ -11,7 +11,7 @@ PanResistome = tool execution, QC, database setup, feature export
 PanR2        = standardized feature analysis and reporting
 ```
 
-Each heavy tool may need its own image or carefully separated environment. A single monolithic image can be convenient, but it can also become difficult to rebuild and debug.
+Each heavy tool may need its own image or carefully separated environment. The experimental all-in-one image keeps separate Conda environments for conflicting tools while exposing their command-line entry points on `PATH`. This is convenient for users, but the image is large and slow to build locally.
 
 ## Database paths
 
@@ -66,7 +66,7 @@ Common parameters:
 --container_run_options
 ```
 
-The profiles disable Conda for all processes and assign the supplied image to each process. They also bind the repository path into the container because workflow processes call helper scripts through `${baseDir}`. If no image is supplied, they use the documented experimental placeholder image name. Do not use these profiles for production until the image has been built and validated.
+The profiles disable Conda for all processes and assign the supplied image to each process. They also bind the repository path into the container because workflow processes call helper scripts through `${baseDir}`. If no image is supplied, they use the documented experimental placeholder image name. Treat these profiles as experimental until a full Nextflow run with the PanResistome image is documented.
 
 The scaffold and Singularity fixture-smoke validation status is documented at `validation/deployment/CONTAINER_PROFILE_SCAFFOLD_RESULTS.md`.
 
@@ -74,8 +74,8 @@ The scaffold and Singularity fixture-smoke validation status is documented at `v
 
 1. Keep the existing `-profile test` workflow working without containers.
 2. Small Singularity fixture smoke test for local fixtures. Completed with `docker://python:3.11-slim`.
-3. Build or publish a PanResistome image with the real tool stack.
-4. Validate the standard comprehensive command without GTDB-Tk.
+3. Build or publish a PanResistome image with the real tool stack. Local Docker build/runtime sanity has passed.
+4. Validate the standard comprehensive command without GTDB-Tk through a normal user Docker/Apptainer profile.
 5. Document database mounts for CheckM2 and optional heavy databases.
 6. Only then advertise Docker/Apptainer profiles as supported.
 
@@ -108,6 +108,24 @@ Build locally on a Docker/Podman-capable machine:
 ```bash
 docker build -f containers/Dockerfile -t panresistome:experimental .
 ```
+
+Local build/runtime status on 2026-05-12:
+
+```text
+Docker install and hello-world: PASS
+panresistome:experimental build: PASS
+Dockerfile command checks: PASS
+runtime checks: mefinder, genomad, mob_recon, ectyper, panr all start
+image content size: about 7.45 GB
+local Docker disk usage during build: about 31.4 GB
+```
+
+Two implementation details matter for reproducibility:
+
+- MobileElementFinder is installed in a separate `mobileelementfinder_env`. Its CLI is `mefinder`, not `mobileelementfinder`, and the environment pins `setuptools<81` because the upstream package still imports `pkg_resources`.
+- PanR2, ABRicate, IntegronFinder, and MLST are installed in `panr2_container_env` without MobileElementFinder to avoid the Biopython version conflict between MobileElementFinder and IntegronFinder.
+
+ECTyper installed and `ectyper --version` starts, but its optional species-identification sketch download timed out during image build. Do not treat ECTyper species-ID data as fully bundled until a dedicated ECTyper database/readiness validation passes.
 
 GitHub Actions workflow:
 

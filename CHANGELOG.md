@@ -22,6 +22,8 @@
 - A reproducible optional-feature analysis validator at `scripts/validate_optional_feature_analysis.py`, with validation evidence under `validation/optional_feature_analysis/`.
 - Experimental all-in-one container image scaffold under `containers/Dockerfile`, plus `.dockerignore` and a GHCR build workflow at `.github/workflows/container.yml`.
 - `--pull-test` support in `scripts/check_container_readiness.py` to verify that Docker, Apptainer, or Singularity can actually pull and execute the requested image.
+- A dedicated `panr2_container_env` for the all-in-one image, keeping PanR2/ABRicate/IntegronFinder/MLST separate from MobileElementFinder.
+- A dedicated `mobileelementfinder_env` for the all-in-one image, using the actual `mefinder` CLI and pinning `setuptools<81` for upstream `pkg_resources` compatibility.
 
 ### Changed
 - PanR2 handoff export now applies configured feature caps to presence/absence matrices and co-occurrence/proximity summaries, preserves complete proximity evidence as `feature_proximity_all.tsv`, and surfaces report-control settings in `panr2_inputs/report/report_controls.html`.
@@ -49,6 +51,7 @@
 - MOB-suite and geNomad remain opt-in, but when explicitly enabled PanResistome now tries to prepare their databases automatically unless a user-provided database path is supplied.
 - MobileElementFinder remains opt-in, but upstream parser failures now produce auditable header-only outputs by default instead of aborting the whole run.
 - Docker, Apptainer, and Singularity profiles now bind the repository path by default so helper scripts referenced through `${baseDir}` are visible inside containers.
+- The experimental Dockerfile now creates tool environments in separate layers, making rebuilds less fragile when one optional environment changes.
 
 ### Tested
 - Synthetic PanR2 contract tests now cover optional table-input exports for MobileElementFinder, ISfinder, MOB-suite, prophage/geNomad, DefenseFinder, Kleborate, Kaptive, ECTyper, SerotypeFinder, and SCCmecFinder.
@@ -61,6 +64,8 @@
 - Broad optional-module status for geNomad/prophage, DefenseFinder, and MobileElementFinder is documented under `validation/optional_runner_biological/BROAD_OPTIONAL_MODULES_STATUS.md`, confirming PanR2 table-analysis parity while keeping unvalidated external runners opt-in.
 - Singularity fixture smoke validation completed with `docker://python:3.11-slim`, proving that the `test,singularity` profile can run `SEQUENCE_QC`, `COMBINED_QC`, and `COLLECT_RESULTS` through a real container runtime.
 - Singularity pull/exec readiness validation passed with `docker://alpine:3.19` using the new `--pull-test` readiness mode.
+- Local Docker installation and `hello-world` runtime smoke passed on 2026-05-12.
+- The experimental `panresistome:experimental` all-in-one Docker image built locally and passed runtime sanity checks for `mefinder`, geNomad, MOB-suite, ECTyper, and PanR2.
 
 ### Validated
 - The 100-record `Klebsiella pneumoniae` input completed with `-profile conda,mamba,desktop_parallel,large`, GTDB-Tk disabled, CheckM2 capped, AMRFinderPlus enabled, and parallel native feature runners. The run produced 12,838 complete standardized feature rows, 99 QC PASS calls, zero unmatched/invalid/duplicate feature rows, capped report-facing matrices/summaries, and the expected HTML report set.

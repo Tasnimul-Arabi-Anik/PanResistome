@@ -103,6 +103,92 @@ This test validates that Nextflow can run PanResistome processes through the
 Singularity profile on local fixture data. The profile required an explicit
 repository bind mount because processes call scripts through `${baseDir}`.
 
+## Local Docker Production Image Build
+
+Docker was installed and started locally after the initial scaffold validation.
+
+Runtime smoke:
+
+```bash
+sudo docker run --rm hello-world
+```
+
+Result:
+
+```text
+Hello from Docker!
+```
+
+Experimental image build:
+
+```bash
+sudo docker build -f containers/Dockerfile -t panresistome:experimental .
+```
+
+Result:
+
+```text
+Successfully built 4fa2a590cc52
+Successfully tagged panresistome:experimental
+```
+
+The Dockerfile command checks found the expected executable entry points:
+
+```text
+abricate
+mlst
+integron_finder
+mefinder
+fetchm2
+fetchM
+seqkit
+amrfinder
+checkm2
+fastANI
+skani
+quast.py
+mash
+mob_recon
+genomad
+kleborate
+kaptive
+ectyper
+panr
+```
+
+Runtime sanity check:
+
+```bash
+sudo docker run --rm panresistome:experimental bash -lc \
+  'set -e; python --version; mefinder --help >/dev/null; genomad --version; mob_recon --version; ectyper --version; panr --version'
+```
+
+Result:
+
+```text
+Python 3.10.20
+geNomad, version 1.12.0
+mob_recon 3.1.9
+ectyper 2.0.0 running database version 1.0
+PanR2 0.1.3-dev
+```
+
+Image size:
+
+```text
+content size: 7.45 GB
+local Docker disk usage after build: 31.4 GB
+```
+
+Important observations:
+
+- The first all-in-one image build exposed a real Biopython conflict: MobileElementFinder requires an older Biopython stack than IntegronFinder. The image now installs MobileElementFinder separately in `mobileelementfinder_env` and keeps PanR2/ABRicate/IntegronFinder/MLST in `panr2_container_env`.
+- The MobileElementFinder executable is `mefinder`, not `mobileelementfinder`.
+- MobileElementFinder imports `pkg_resources`, so `mobileelementfinder_env` pins `setuptools<81`.
+- geNomad installs successfully but is a large layer because it pulls TensorFlow/MMseqs2-related dependencies.
+- ECTyper starts, but its optional ~900 MB species-ID sketch download timed out during build. ECTyper should not be documented as fully self-contained until a dedicated ECTyper database/readiness validation passes.
+- Docker currently requires `sudo` on this host. A normal Nextflow `-profile docker` run should wait until the user is in the `docker` group and has opened a new login/session; running Nextflow itself with `sudo` is not recommended because it can create root-owned work files.
+
 ## Validation Scope
 
 Validated:
@@ -116,16 +202,20 @@ Standard non-container test profile still passes
 Singularity runtime installed and executable
 Singularity can pull and execute a public Docker image
 PanResistome test profile completes through Singularity with docker://python:3.11-slim
+Docker runtime installed and can execute hello-world
+Experimental PanResistome all-in-one image builds locally
+Experimental image command and runtime sanity checks pass for core optional runners
 ```
 
 Not validated:
 
 ```text
-Docker image build or pull
 Apptainer runtime execution
 Containerized database mounts
 Real-data container run
-Full PanResistome production image
+Normal-user Nextflow Docker profile on this host
+Full PanResistome production image from GHCR
+ECTyper species-ID sketch readiness
 ```
 
 The documented placeholder image is not currently publicly pullable:
@@ -163,9 +253,10 @@ python scripts/check_container_readiness.py \
   --out container_readiness.tsv
 ```
 
-The image build itself was not run on this machine because Docker/Podman are not
-installed. The GitHub Actions workflow or another Docker-capable machine should
-perform the first production image build.
+The image build now passes locally as `panresistome:experimental`. The GitHub
+Actions workflow should still publish a pullable GHCR image before Docker,
+Apptainer, or Singularity profiles are advertised as a low-hassle remote-user
+route.
 
 ## Next Required Validation
 
