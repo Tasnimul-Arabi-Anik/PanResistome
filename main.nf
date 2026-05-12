@@ -455,6 +455,8 @@ def helpMessage() {
       --ectyper_dir            Existing ECTyper table directory to pass into PanR2
       --serotypefinder_dir     Existing SerotypeFinder table directory to pass into PanR2
       --sccmecfinder_dir       Existing SCCmecFinder table directory to pass into PanR2
+      --container_image        Experimental container image used by docker/apptainer/singularity profiles
+      --container_run_options  Extra runtime options passed to Docker/Apptainer/Singularity profiles
       --local_samples          Optional directory of prebuilt sample folders for offline tests
       --run_checkm2            Enable CheckM2 QC [default: true]
 
@@ -468,6 +470,9 @@ def helpMessage() {
       lowmem             threads=4, checkm2_threads=1, serial native runners
       desktop_parallel   threads=16, checkm2_threads=2, parallel native runners
       workstation        threads=16, checkm2_threads=4, parallel native runners
+      docker             experimental; pass --container_image and validate first
+      apptainer          experimental; pass --container_image and validate first
+      singularity        experimental; pass --container_image and validate first
 
     Example:
        nextflow run main.nf --input test_small.tsv --outdir results_small -profile conda --threads 8 

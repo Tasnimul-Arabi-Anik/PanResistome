@@ -171,6 +171,26 @@ nextflow run main.nf \
   --run_amrfinderplus true
 ```
 
+Experimental container profiles are available for deployment testing:
+
+```bash
+python scripts/check_container_readiness.py \
+  --runtime apptainer \
+  --image docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
+  --database-paths /path/to/checkm2,/path/to/genomad \
+  --out container_readiness.tsv
+
+nextflow run main.nf \
+  --input validation/delftia_tsuruhatensis_current/ncbi_dataset.tsv \
+  --outdir validation_runs/delftia_container \
+  -profile apptainer,large \
+  --container_image docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
+  --analysis_profile comprehensive \
+  --run_gtdbtk false
+```
+
+These profiles are scaffolding for v0.4.0 deployment validation. Conda/Mamba remains the validated public route until a container smoke test and real-data validation are documented.
+
 `desktop_parallel` sets `--threads 16`, `--checkm2_threads 2`, `--fetchm2_download_workers 2`, and `--panr2_native_feature_runner_mode parallel`. Use `lowmem` for smaller machines and `workstation` when additional RAM is available.
 
 Fresh-clone validation of this command on 2026-05-08 completed all 19 Nextflow processes on 45 current `Delftia tsuruhatensis` assemblies, including CheckM2 database auto-download, AMRFinderPlus database auto-update, ABRicate `ncbi/vfdb/plasmidfinder` setup verification, comprehensive PanR2 analysis, and PanR2 handoff export. See [`validation/delftia_tsuruhatensis_current/FRESH_CLONE_VALIDATION_RESULTS.md`](validation/delftia_tsuruhatensis_current/FRESH_CLONE_VALIDATION_RESULTS.md).
@@ -460,6 +480,8 @@ PanResistome/
 | `--genomad_db_dir` | path | `<outdir>/databases/genomad` | geNomad database download/cache directory when `--genomad_db` is not supplied |
 | `--genomad_auto_download_db` | bool | true | Run `genomad download-database` into `--genomad_db_dir` when `--run_genomad true` and no `--genomad_db` is supplied |
 | `--genomad_use_host_env` | bool | false | Use a prebuilt host/container `genomad` executable instead of creating the geNomad Conda env; also available as `-profile genomad_host` |
+| `--container_image` | path/image | - | Experimental image used by `docker`, `apptainer`, or `singularity` profiles |
+| `--container_run_options` | str | - | Extra runtime options passed to Docker/Apptainer/Singularity profiles |
 | `--run_organism_specific_typing` | bool | false | Run available organism-specific typing helpers |
 | `--run_kleborate` | bool | false | Run Kleborate when available |
 | `--kleborate_dir` | path | - | Existing Kleborate table directory to pass into PanR2 |

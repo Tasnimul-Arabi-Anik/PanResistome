@@ -14,6 +14,7 @@ from normalize_fetchm2_output import normalize_fetchm2_output
 from export_panr2_inputs import parse_version_line
 from panr2_contract import export_contract
 from check_genomad_readiness import resolve_database_dir
+from check_container_readiness import as_list as container_as_list
 
 
 class FetchM2AdapterTests(unittest.TestCase):
@@ -25,6 +26,12 @@ class FetchM2AdapterTests(unittest.TestCase):
             (nested / "marker.tsv").write_text("ok\n", encoding="utf-8")
 
             self.assertEqual(resolve_database_dir(root), nested)
+
+    def test_container_readiness_parses_comma_separated_paths(self):
+        self.assertEqual(
+            container_as_list(" /db/checkm2 , /db/genomad ,, "),
+            ["/db/checkm2", "/db/genomad"],
+        )
 
     def test_parses_tool_named_version_lines(self):
         self.assertEqual(

@@ -1,6 +1,6 @@
 # Container execution notes
 
-PanResistome currently ships validated Conda/Mamba workflows. Docker and Apptainer/Singularity execution are v0.4.0 deployment targets and should be treated as experimental until a container smoke test and real-data validation are documented.
+PanResistome currently ships validated Conda/Mamba workflows. Docker and Apptainer/Singularity profiles are present as v0.4.0 deployment scaffolding and should be treated as experimental until a container smoke test and real-data validation are documented.
 
 ## Design goal
 
@@ -24,6 +24,41 @@ Containerized runs must mount large external databases into the container:
 - authorized ISfinder FASTA/BLAST database, if enabled
 
 Keep these databases outside `work/` and outside generated result folders.
+
+## Readiness check
+
+Before launching a container run, check the runtime, image string, and host database paths:
+
+```bash
+python scripts/check_container_readiness.py \
+  --runtime apptainer \
+  --image docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
+  --database-paths /path/to/checkm2,/path/to/genomad \
+  --out container_readiness.tsv
+```
+
+The checker does not pull images or run Nextflow. It prevents the common failure where a workflow starts before the runtime, image, or database mounts are actually ready.
+
+## Experimental profiles
+
+Profiles:
+
+```text
+docker
+apptainer
+singularity
+```
+
+Common parameters:
+
+```text
+--container_image
+--container_run_options
+```
+
+The profiles disable Conda for all processes and assign the supplied image to each process. If no image is supplied, they use the documented experimental placeholder image name. Do not use these profiles for production until the image has been built and validated.
+
+The scaffold validation status is documented at `validation/deployment/CONTAINER_PROFILE_SCAFFOLD_RESULTS.md`.
 
 ## Practical first container targets
 
@@ -65,6 +100,7 @@ nextflow run main.nf \
   --input validation/delftia_tsuruhatensis_current/ncbi_dataset.tsv \
   --outdir validation_runs/delftia_container \
   -profile apptainer,large \
+  --container_image docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
   --analysis_profile comprehensive \
   --qc_filter true \
   --run_gtdbtk false \

@@ -41,6 +41,20 @@ nextflow run main.nf \
 
 No stable SLURM profile is advertised yet. A future profile should define executor settings, queue/account placeholders, process labels, and database mount/cache guidance without changing the default local Conda/Mamba workflows.
 
+## Container profile status
+
+Experimental Docker, Apptainer, and Singularity profiles exist for v0.4.0 deployment testing. On HPC, prefer Apptainer/Singularity with shared database mounts. Validate readiness before submitting a job:
+
+```bash
+python scripts/check_container_readiness.py \
+  --runtime apptainer \
+  --image docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
+  --database-paths /shared/db/checkm2,/shared/db/genomad \
+  --out container_readiness.tsv
+```
+
+The profiles are not yet release-grade. They need a small fixture smoke test, then a real-data validation, before replacing the Conda/Mamba route in documentation.
+
 ## Outputs to inspect first
 
 After a run, start with:
