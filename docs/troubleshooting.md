@@ -194,6 +194,15 @@ For restricted networks or shared systems, pre-download the database once and pa
 --run_genomad true --genomad_db /path/to/genomad_db
 ```
 
+If `genomad` is already available from a host module, prebuilt Conda environment, or container image, bypass only the geNomad Conda solve:
+
+```bash
+nextflow run main.nf \
+  -profile conda,mamba,genomad_host \
+  --run_genomad true \
+  --genomad_db /path/to/genomad_db
+```
+
 The first validated auto-download attempt on this machine reached the `GENOMAD_PROPHAGE` process, but remained in first-run Conda/Mamba environment creation for about 17 minutes and did not reach database download. For now, treat geNomad as opt-in and prefer a cached Conda environment, container/Apptainer route, or explicitly supplied `--genomad_db` for real validations.
 
 ## Report Has Too Many Features

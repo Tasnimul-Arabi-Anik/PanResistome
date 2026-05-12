@@ -459,6 +459,7 @@ PanResistome/
 | `--genomad_db` | path | - | Existing geNomad database directory; if omitted and `--run_genomad true`, PanResistome uses `--genomad_db_dir` |
 | `--genomad_db_dir` | path | `<outdir>/databases/genomad` | geNomad database download/cache directory when `--genomad_db` is not supplied |
 | `--genomad_auto_download_db` | bool | true | Run `genomad download-database` into `--genomad_db_dir` when `--run_genomad true` and no `--genomad_db` is supplied |
+| `--genomad_use_host_env` | bool | false | Use a prebuilt host/container `genomad` executable instead of creating the geNomad Conda env; also available as `-profile genomad_host` |
 | `--run_organism_specific_typing` | bool | false | Run available organism-specific typing helpers |
 | `--run_kleborate` | bool | false | Run Kleborate when available |
 | `--kleborate_dir` | path | - | Existing Kleborate table directory to pass into PanR2 |

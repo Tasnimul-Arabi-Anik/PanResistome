@@ -126,6 +126,7 @@ params.prophage_dir = null
 params.genomad_db = null
 params.genomad_db_dir = null
 params.genomad_auto_download_db = true
+params.genomad_use_host_env = false
 params.run_organism_specific_typing = false
 params.run_kleborate = false
 params.kleborate_dir = null
@@ -441,6 +442,7 @@ def helpMessage() {
       --genomad_db             geNomad database directory, required when --run_genomad true
       --genomad_db_dir         geNomad database download/cache directory when --genomad_db is not supplied [default: <outdir>/databases/genomad]
       --genomad_auto_download_db Download geNomad database into --genomad_db_dir when --run_genomad true and --genomad_db is not supplied [default: true]
+      --genomad_use_host_env   Do not create the geNomad Conda env; use a prebuilt host/container geNomad executable [default: false]
       --run_organism_specific_typing Run organism-specific typing helpers where applicable [default: false]
       --run_kleborate          Run Kleborate and pass outputs to PanR2 [default: false]
       --kleborate_dir          Existing Kleborate table directory to pass into PanR2

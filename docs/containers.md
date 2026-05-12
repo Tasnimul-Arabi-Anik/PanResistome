@@ -45,6 +45,17 @@ geNomad is a high-priority container candidate because the 5-genome auto-downloa
 
 Until that is validated, geNomad should remain opt-in and described as table-analysis-ready but runner-validation-pending.
 
+For a container or host-module geNomad validation, use `-profile genomad_host` so PanResistome does not try to create `envs/genomad.yaml` for the geNomad processes:
+
+```bash
+nextflow run main.nf \
+  -profile conda,mamba,genomad_host \
+  --run_genomad true \
+  --genomad_db /databases/genomad
+```
+
+This only changes the geNomad processes. Other Conda-backed processes still use the normal selected profile.
+
 ## Example future pattern
 
 This is a planning example, not a validated command:
