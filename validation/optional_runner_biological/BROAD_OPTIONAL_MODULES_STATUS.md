@@ -18,9 +18,9 @@ Status: PARTIAL PASS
 
 PanR2 analysis path: PASS
 
-Runner biological validation on this machine: NOT COMPLETED
+Runner biological validation on this machine: PARTIAL PASS
 
-Reason: the active shell did not have the external runner commands available:
+The active shell did not have the external runner commands available:
 
 ```text
 genomad: not found
@@ -28,7 +28,9 @@ defense-finder: not found
 mefinder: not found
 ```
 
-This means the current validation can honestly prove that standardized outputs from these modules are analyzed correctly by PanR2, but it cannot claim that geNomad, DefenseFinder, or MobileElementFinder biologically ran on this machine.
+However, cached Nextflow Conda environments were available from prior workflow runs. Those cached environments allowed a small real MobileElementFinder validation on 5 `Klebsiella pneumoniae` genomes. geNomad and DefenseFinder still did not pass real biological runner validation in this round.
+
+This means the current validation can honestly prove that standardized outputs from all three modules are analyzed correctly by PanR2, and can now additionally claim that MobileElementFinder biologically ran on a small real Klebsiella subset and fed PanR2 clean standardized outputs.
 
 ## PanR2 Analysis Validation
 
@@ -124,6 +126,17 @@ fresh remote-user database download time/disk behavior
 prophage feature quality on bacterial genomes
 ```
 
+Additional local probe:
+
+```text
+genomad executable in active shell: false
+auto-download requested: false
+database status: FAIL, as expected without a DB
+status file: validation_runs/genomad_missing_db_probe/genomad_database_setup_status.tsv
+```
+
+Interpretation: the geNomad setup helper records an auditable missing-DB state correctly. A true remote-user validation still requires a fresh Conda solve plus `--genomad_auto_download_db true`, or a supplied `--genomad_db`, and should be run first on 2-10 genomes because the geNomad database is large.
+
 Recommended next command when a real geNomad DB is available:
 
 ```bash
@@ -176,6 +189,16 @@ fresh install/database setup for DefenseFinder
 real biological run on bacterial genomes in this environment
 ```
 
+Additional local probe:
+
+```text
+cached defense-finder executable found: true
+cached CLI import status: FAIL
+failure: ModuleNotFoundError: No module named 'macsypy'
+```
+
+Interpretation: this confirms that DefenseFinder should remain a table-input path for now. It should not be advertised as a PanResistome-owned runner until a clean environment and database setup path can be validated.
+
 Recommended near-term path: keep DefenseFinder as stable table input. Add a PanResistome-owned runner only after its database/environment setup can be made reproducible and audited.
 
 Recommended status: stable table input, runner not default.
@@ -197,10 +220,26 @@ auditable nonfatal failure path in native feature-runner layer: implemented
 optional module matrix documents upstream parser fragility
 ```
 
-What is not yet validated:
+What is now biologically validated:
 
 ```text
-clean real biological runner output on a controlled 5-10 genome subset
+direct runner on 5 Klebsiella genomes: PASS
+raw MobileElementFinder CSV files: 5/5
+PanR2 table export: PASS
+Nextflow integration with amr_basic + MobileElementFinder: PASS
+Nextflow processes succeeded: 6/6
+final feature rows: 753
+databases_seen: amr,mobileelementfinder
+unmatched_feature_rows: 0
+invalid_feature_rows: 0
+duplicate_feature_rows: 0
+```
+
+Detailed result: `validation/optional_runner_biological/KLEBSIELLA_5_MOBILEELEMENTFINDER_RESULTS.md`
+
+What is still not validated:
+
+```text
 upstream parser stability across valid assemblies
 large-scale runtime behavior
 ```
@@ -229,7 +268,7 @@ nextflow run main.nf \
   --capture_versions false
 ```
 
-Recommended status: keep opt-in and nonfatal by default.
+Recommended status: biologically validated opt-in runner on a small Klebsiella subset; keep opt-in and nonfatal by default until multi-species and larger-scale behavior are validated.
 
 ## Practical Conclusion
 
@@ -243,5 +282,4 @@ Current honest support level:
 | --- | --- | --- | --- |
 | geNomad/prophage | PASS | Experimental opt-in, needs real DB validation | No |
 | DefenseFinder | PASS | Table-input recommended | No |
-| MobileElementFinder | PASS | Experimental opt-in, nonfatal failure path | No |
-
+| MobileElementFinder | PASS | Biologically validated small opt-in runner, nonfatal failure path | No |

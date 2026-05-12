@@ -30,6 +30,7 @@ safe to fetch automatically.
 | Mash | Yes | `--run_mash true` | No | Tool only. |
 | MOB-suite | Yes, when explicitly enabled | `--run_mobsuite true` | No, unless offline/restricted | Uses `--mobsuite_db_dir` under `<outdir>/databases/mobsuite`, runs `mob_init` when needed, and attempts ETE `taxa.sqlite` initialization. Still opt-in. |
 | Kleborate | Yes | `--run_kleborate true` | No | Small biological validation passed on Klebsiella; still opt-in because organism-specific. |
+| MobileElementFinder | Yes, when explicitly enabled | `--panr2_run_mobileelementfinder true` | No | Small 5-genome Klebsiella biological validation passed and produced clean PanR2 feature exports. Still opt-in because broader multi-species/runtime validation is pending. |
 | Kaptive | No | `--run_kaptive true` | Yes | Requires `--kaptive_db`; keep explicit until database setup is validated. |
 | geNomad | Yes, when explicitly enabled | `--run_genomad true` | No, unless offline/restricted | Uses `--genomad_db_dir` under `<outdir>/databases/genomad` and runs `genomad download-database` when no `--genomad_db` is supplied. Still opt-in because the database is large. |
 | ISfinder-compatible BLAST | No | `--run_isfinder true` | Yes | Requires authorized `--isfinder_db_fasta`; PanResistome must not download or redistribute ISfinder. |
@@ -43,13 +44,14 @@ The helper paths exist, but these should be validated before changing defaults:
 
 1. **MOB-suite cached DB initialization validation** under `<outdir>/databases/mobsuite`, confirming `mob_init` and `taxa.sqlite` creation on a fresh machine.
 2. **geNomad cached DB download validation**, confirming disk size, download stability, and resume behavior on a fresh machine.
-3. **Kaptive database helper** for Klebsiella-focused workflows, but not as a default module because it is organism-specific.
+3. **MobileElementFinder broader validation** on another organism and/or a larger subset before considering default inclusion.
+4. **Kaptive database helper** for Klebsiella-focused workflows, but not as a default module because it is organism-specific.
 
 Do not automate by default:
 
 1. **ISfinder**, because users need authorization for the database.
 2. **GTDB-Tk**, because the reference database is very large and belongs in an explicit user/HPC setup path.
-3. **Fragile optional runners** such as MobileElementFinder or DefenseFinder until their dependency stacks are stable in fresh installs.
+3. **DefenseFinder runner mode** until its dependency stack and database setup are stable in fresh installs.
 
 ## User-Facing Recommendation
 
