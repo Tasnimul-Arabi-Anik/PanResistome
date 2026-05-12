@@ -1,6 +1,6 @@
 # Container execution notes
 
-PanResistome currently ships validated Conda/Mamba workflows. Docker and Apptainer/Singularity profiles are present as v0.4.0 deployment scaffolding and should be treated as experimental until a container smoke test and real-data validation are documented.
+PanResistome currently ships validated Conda/Mamba workflows. Docker and Apptainer/Singularity profiles are present as v0.4.0 deployment scaffolding. A Singularity fixture smoke test has passed, but full production-image and real-data container validation are still pending.
 
 ## Design goal
 
@@ -56,17 +56,28 @@ Common parameters:
 --container_run_options
 ```
 
-The profiles disable Conda for all processes and assign the supplied image to each process. If no image is supplied, they use the documented experimental placeholder image name. Do not use these profiles for production until the image has been built and validated.
+The profiles disable Conda for all processes and assign the supplied image to each process. They also bind the repository path into the container because workflow processes call helper scripts through `${baseDir}`. If no image is supplied, they use the documented experimental placeholder image name. Do not use these profiles for production until the image has been built and validated.
 
-The scaffold validation status is documented at `validation/deployment/CONTAINER_PROFILE_SCAFFOLD_RESULTS.md`.
+The scaffold and Singularity fixture-smoke validation status is documented at `validation/deployment/CONTAINER_PROFILE_SCAFFOLD_RESULTS.md`.
 
 ## Practical first container targets
 
 1. Keep the existing `-profile test` workflow working without containers.
-2. Add a small container smoke test for local fixtures.
-3. Validate the standard comprehensive command without GTDB-Tk.
-4. Document database mounts for CheckM2 and optional heavy databases.
-5. Only then advertise Docker/Apptainer profiles as supported.
+2. Small Singularity fixture smoke test for local fixtures. Completed with `docker://python:3.11-slim`.
+3. Build or publish a PanResistome image with the real tool stack.
+4. Validate the standard comprehensive command without GTDB-Tk.
+5. Document database mounts for CheckM2 and optional heavy databases.
+6. Only then advertise Docker/Apptainer profiles as supported.
+
+The current placeholder image is not publicly pullable from GHCR:
+
+```text
+docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental
+DENIED: requested access to the resource is denied
+```
+
+Until that is fixed, pass a known image explicitly with `--container_image` for
+smoke testing.
 
 ## geNomad-specific note
 

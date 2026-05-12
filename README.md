@@ -189,7 +189,7 @@ nextflow run main.nf \
   --run_gtdbtk false
 ```
 
-These profiles are scaffolding for v0.4.0 deployment validation. Conda/Mamba remains the validated public route until a container smoke test and real-data validation are documented.
+These profiles are scaffolding for v0.4.0 deployment validation. A Singularity fixture smoke test has passed with `docker://python:3.11-slim`, but Conda/Mamba remains the validated public route until a production PanResistome image and real-data container validation are documented.
 
 `desktop_parallel` sets `--threads 16`, `--checkm2_threads 2`, `--fetchm2_download_workers 2`, and `--panr2_native_feature_runner_mode parallel`. Use `lowmem` for smaller machines and `workstation` when additional RAM is available.
 

@@ -43,7 +43,7 @@ No stable SLURM profile is advertised yet. A future profile should define execut
 
 ## Container profile status
 
-Experimental Docker, Apptainer, and Singularity profiles exist for v0.4.0 deployment testing. On HPC, prefer Apptainer/Singularity with shared database mounts. Validate readiness before submitting a job:
+Experimental Docker, Apptainer, and Singularity profiles exist for v0.4.0 deployment testing. A local Singularity fixture smoke test has passed with `docker://python:3.11-slim`, but full production-image and real-data validation are still pending. On HPC, prefer Apptainer/Singularity with shared database mounts. Validate readiness before submitting a job:
 
 ```bash
 python scripts/check_container_readiness.py \
