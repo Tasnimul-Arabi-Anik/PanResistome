@@ -116,6 +116,7 @@ Docker install and hello-world: PASS
 panresistome:experimental build: PASS
 Dockerfile command checks: PASS
 runtime checks: mefinder, genomad, mob_recon, ectyper, panr all start
+Nextflow test,docker profile with local image: PASS
 image content size: about 7.45 GB
 local Docker disk usage during build: about 31.4 GB
 ```
@@ -140,6 +141,11 @@ ghcr.io/tasnimul-arabi-anik/panresistome:experimental
 ghcr.io/tasnimul-arabi-anik/panresistome:<git-tag>
 ghcr.io/tasnimul-arabi-anik/panresistome:sha-<commit>
 ```
+
+After the image is pushed, the workflow runs the same command-availability and
+runtime sanity checks used locally. The smoke test checks the core CLI entry
+points and verifies that `mefinder`, geNomad, MOB-suite, ECTyper, and PanR2 can
+start inside the published image.
 
 After the first GHCR push, confirm the package visibility is public in GitHub
 package settings. If the package remains private, Singularity/Apptainer pulls

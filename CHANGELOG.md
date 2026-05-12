@@ -66,6 +66,8 @@
 - Singularity pull/exec readiness validation passed with `docker://alpine:3.19` using the new `--pull-test` readiness mode.
 - Local Docker installation and `hello-world` runtime smoke passed on 2026-05-12.
 - The experimental `panresistome:experimental` all-in-one Docker image built locally and passed runtime sanity checks for `mefinder`, geNomad, MOB-suite, ECTyper, and PanR2.
+- The local `panresistome:experimental` image completed the Nextflow `test,docker` profile with work and output directories under `/tmp`.
+- The GHCR container workflow now smoke-tests the published image after build by checking the main tool entry points and runtime startup for MobileElementFinder, geNomad, MOB-suite, ECTyper, and PanR2.
 
 ### Validated
 - The 100-record `Klebsiella pneumoniae` input completed with `-profile conda,mamba,desktop_parallel,large`, GTDB-Tk disabled, CheckM2 capped, AMRFinderPlus enabled, and parallel native feature runners. The run produced 12,838 complete standardized feature rows, 99 QC PASS calls, zero unmatched/invalid/duplicate feature rows, capped report-facing matrices/summaries, and the expected HTML report set.

@@ -58,5 +58,40 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Smoke test published image
+        run: |
+          set -euo pipefail
+          IMAGE="$(echo "${{ steps.meta.outputs.tags }}" | head -n 1)"
+          docker run --rm "${IMAGE}" bash -lc '
+            set -euo pipefail
+            for tool in \
+              abricate \
+              mlst \
+              integron_finder \
+              mefinder \
+              fetchm2 \
+              fetchM \
+              seqkit \
+              amrfinder \
+              checkm2 \
+              fastANI \
+              skani \
+              quast.py \
+              mash \
+              mob_recon \
+              genomad \
+              kleborate \
+              kaptive \
+              ectyper \
+              panr; do
+              command -v "${tool}"
+            done
+            mefinder --help >/dev/null
+            genomad --version
+            mob_recon --version
+            ectyper --version
+            panr --version
+          '
+
       - name: Print image tags
         run: echo "${{ steps.meta.outputs.tags }}"

@@ -173,6 +173,31 @@ ectyper 2.0.0 running database version 1.0
 PanR2 0.1.3-dev
 ```
 
+Nextflow Docker-profile test using the local image:
+
+```bash
+sudo nextflow run main.nf \
+  -profile test,docker \
+  --container_image panresistome:experimental \
+  --outdir /tmp/panresistome_container_test_output \
+  -w /tmp/panresistome_container_test_work
+```
+
+Result:
+
+```text
+SEQUENCE_QC: PASS
+COMBINED_QC: PASS
+COLLECT_RESULTS: PASS
+Pipeline completed.
+Results saved to: /tmp/panresistome_container_test_output
+```
+
+The first attempt was launched from `/tmp` using an absolute `main.nf` path and
+failed because the `test` profile resolved fixture paths relative to `/tmp`.
+The passing run was launched from the repository root while keeping work and
+output directories in `/tmp`.
+
 Image size:
 
 ```text
@@ -205,6 +230,7 @@ PanResistome test profile completes through Singularity with docker://python:3.1
 Docker runtime installed and can execute hello-world
 Experimental PanResistome all-in-one image builds locally
 Experimental image command and runtime sanity checks pass for core optional runners
+Nextflow `test,docker` profile completes with the local image when launched from the repository root
 ```
 
 Not validated:
@@ -253,10 +279,10 @@ python scripts/check_container_readiness.py \
   --out container_readiness.tsv
 ```
 
-The image build now passes locally as `panresistome:experimental`. The GitHub
-Actions workflow should still publish a pullable GHCR image before Docker,
-Apptainer, or Singularity profiles are advertised as a low-hassle remote-user
-route.
+The image build now passes locally as `panresistome:experimental`, and the
+local image can run the Nextflow test profile through Docker. The GitHub Actions
+workflow should still publish a pullable GHCR image before Docker, Apptainer, or
+Singularity profiles are advertised as a low-hassle remote-user route.
 
 ## Next Required Validation
 
