@@ -118,6 +118,9 @@ params.mobsuite_db = null
 params.mobsuite_db_dir = null
 params.mobsuite_auto_init_db = true
 params.mobsuite_auto_init_taxa = true
+params.mobsuite_jobs = null
+params.mobsuite_threads_per_sample = 1
+params.mobsuite_reuse_existing = true
 params.run_genomad = false
 params.prophage_dir = null
 params.genomad_db = null
@@ -126,6 +129,8 @@ params.genomad_auto_download_db = true
 params.run_organism_specific_typing = false
 params.run_kleborate = false
 params.kleborate_dir = null
+params.kleborate_jobs = null
+params.kleborate_reuse_existing = true
 params.run_kaptive = false
 params.kaptive_dir = null
 params.kaptive_db = null
@@ -428,6 +433,9 @@ def helpMessage() {
       --mobsuite_db_dir        MOB-suite database cache/init directory when --mobsuite_db is not supplied [default: <outdir>/databases/mobsuite]
       --mobsuite_auto_init_db  Run mob_init for the MOB-suite cache directory when needed [default: true]
       --mobsuite_auto_init_taxa Initialize ETE taxa.sqlite for MOB-suite cache when needed [default: true]
+      --mobsuite_jobs          Parallel MOB-suite sample jobs [default: min(--threads, 8)]
+      --mobsuite_threads_per_sample Threads used by each MOB-suite sample job [default: 1]
+      --mobsuite_reuse_existing Reuse existing non-empty per-sample MOB-suite outputs on resumed runs [default: true]
       --run_genomad            Run geNomad viral/prophage annotation and pass outputs to PanR2 [default: false]
       --prophage_dir           Existing prophage/viral-region table directory to pass into PanR2
       --genomad_db             geNomad database directory, required when --run_genomad true
@@ -436,6 +444,8 @@ def helpMessage() {
       --run_organism_specific_typing Run organism-specific typing helpers where applicable [default: false]
       --run_kleborate          Run Kleborate and pass outputs to PanR2 [default: false]
       --kleborate_dir          Existing Kleborate table directory to pass into PanR2
+      --kleborate_jobs         Parallel Kleborate sample jobs [default: min(--threads, 8)]
+      --kleborate_reuse_existing Reuse existing non-empty per-sample Kleborate outputs on resumed runs [default: true]
       --run_kaptive            Run Kaptive when --kaptive_db is provided [default: false]
       --kaptive_dir            Existing Kaptive table directory to pass into PanR2
       --kaptive_db             Kaptive database path
@@ -1816,8 +1826,9 @@ process MOBSUITE_ANALYSIS {
 
     script:
     def mobsuiteDbPath = effectiveMobsuiteDbPath()
-    def mobsuiteDbArg = "--database_directory ${shellQuote(mobsuiteDbPath)}"
     def mobsuiteAutoInit = params.mobsuite_db ? "false" : params.mobsuite_auto_init_db
+    def jobs = params.mobsuite_jobs ? params.mobsuite_jobs as int : Math.min(params.threads as int, 8)
+    def threadsPerSample = params.mobsuite_threads_per_sample ? params.mobsuite_threads_per_sample as int : 1
     """
     sequence_dir="${sample_dir}/sequence"
     if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
@@ -1841,19 +1852,21 @@ process MOBSUITE_ANALYSIS {
     samples_failed=0
     if [ "\${db_setup_status}" = "FAIL" ]; then
         echo "MOB-suite database setup failed; inspect ${sample_dir}/mobsuite/mobsuite_database_setup_status.tsv." > ${sample_dir}/mobsuite/tables/mobsuite_warning.txt
-    elif command -v mob_recon >/dev/null 2>&1 && [ -d "\${sequence_dir}" ]; then
-        for fasta in \$(find "\${sequence_dir}" -name "*.fna" | sort); do
-            samples_input=\$((samples_input + 1))
-            prefix=\$(basename "\${fasta}" .fna)
-            mkdir -p "${sample_dir}/mobsuite/raw/\${prefix}"
-            if mob_recon --infile "\${fasta}" --outdir "${sample_dir}/mobsuite/raw/\${prefix}" --num_threads ${params.threads} --force ${mobsuiteDbArg} > "${sample_dir}/mobsuite/raw/\${prefix}/mob_recon.stdout" 2> "${sample_dir}/mobsuite/raw/\${prefix}/mob_recon.stderr"; then
-                samples_processed=\$((samples_processed + 1))
-            else
-                samples_failed=\$((samples_failed + 1))
-            fi
-        done
+    elif [ -d "\${sequence_dir}" ]; then
+        echo "Running MOB-suite with ${jobs} parallel sample job(s) and ${threadsPerSample} thread(s) per sample."
+        python ${baseDir}/scripts/run_mobsuite_parallel.py \\
+            --sequence-dir "\${sequence_dir}" \\
+            --raw-dir ${sample_dir}/mobsuite/raw \\
+            --status-file ${sample_dir}/mobsuite/tables/mobsuite_sample_status.tsv \\
+            --database-directory ${shellQuote(mobsuiteDbPath)} \\
+            --jobs ${jobs} \\
+            --threads-per-sample ${threadsPerSample} \\
+            --reuse-existing ${params.mobsuite_reuse_existing} || true
+        samples_input=\$(awk 'NR > 1 {count++} END {print count + 0}' ${sample_dir}/mobsuite/tables/mobsuite_sample_status.tsv 2>/dev/null || echo 0)
+        samples_failed=\$(awk -F '\\t' 'NR > 1 && \$4 == "FAIL" {count++} END {print count + 0}' ${sample_dir}/mobsuite/tables/mobsuite_sample_status.tsv 2>/dev/null || echo 0)
+        samples_processed=\$(awk -F '\\t' 'NR > 1 && (\$4 == "PASS" || \$4 == "REUSED") {count++} END {print count + 0}' ${sample_dir}/mobsuite/tables/mobsuite_sample_status.tsv 2>/dev/null || echo 0)
     else
-        echo "MOB-suite executable mob_recon was not available or no sequence directory was found." > ${sample_dir}/mobsuite/tables/mobsuite_warning.txt
+        echo "No sequence directory was found for MOB-suite." > ${sample_dir}/mobsuite/tables/mobsuite_warning.txt
     fi
     python ${baseDir}/scripts/collect_optional_tool_tables.py \\
         --raw-dir ${sample_dir}/mobsuite/raw \\
@@ -2049,6 +2062,7 @@ process ORGANISM_SPECIFIC_TYPING {
     def runKaptive = (params.run_organism_specific_typing || params.run_kaptive) ? "true" : "false"
     def runEctyper = (params.run_organism_specific_typing || params.run_ectyper) ? "true" : "false"
     def kaptiveDbCheck = params.kaptive_db ? "true" : "false"
+    def kleborateJobs = params.kleborate_jobs ? params.kleborate_jobs as int : Math.min(params.threads as int, 8)
     """
     sequence_dir="${sample_dir}/sequence"
     if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
@@ -2058,12 +2072,44 @@ process ORGANISM_SPECIFIC_TYPING {
 
     if [ "${runKleborate}" = "true" ]; then
         mkdir -p ${sample_dir}/kleborate/raw ${sample_dir}/kleborate/tables
+        kleborate_status_file=${sample_dir}/kleborate/module_status.tsv
+        printf "module\\tenabled\\tstarted\\tcompleted\\tstatus\\tsamples_input\\tsamples_processed\\tsamples_failed\\traw_tables_created\\tfeature_rows_created\\tunique_features_created\\toutput_dir\\tmessage\\n" > "\${kleborate_status_file}"
+        kleborate_started=\$(date -u +"%Y-%m-%dT%H:%M:%SZ")
         if command -v kleborate >/dev/null 2>&1 && [ -n "\${fasta_files}" ]; then
-            kleborate -a \${fasta_files} -o ${sample_dir}/kleborate/raw --preset kpsc || true
+            echo "Running Kleborate with ${kleborateJobs} parallel sample job(s)."
+            python ${baseDir}/scripts/run_kleborate_parallel.py \\
+                --sequence-dir "\${sequence_dir}" \\
+                --raw-dir ${sample_dir}/kleborate/raw \\
+                --status-file ${sample_dir}/kleborate/tables/kleborate_sample_status.tsv \\
+                --jobs ${kleborateJobs} \\
+                --reuse-existing ${params.kleborate_reuse_existing} || true
             python ${baseDir}/scripts/collect_optional_tool_tables.py --raw-dir ${sample_dir}/kleborate/raw --out ${sample_dir}/kleborate/tables/kleborate.tsv --tool kleborate
+            kleborate_samples_input=\$(awk 'NR > 1 {count++} END {print count + 0}' ${sample_dir}/kleborate/tables/kleborate_sample_status.tsv 2>/dev/null || echo 0)
+            kleborate_samples_failed=\$(awk -F '\\t' 'NR > 1 && \$4 == "FAIL" {count++} END {print count + 0}' ${sample_dir}/kleborate/tables/kleborate_sample_status.tsv 2>/dev/null || echo 0)
+            kleborate_samples_processed=\$(awk -F '\\t' 'NR > 1 && (\$4 == "PASS" || \$4 == "REUSED") {count++} END {print count + 0}' ${sample_dir}/kleborate/tables/kleborate_sample_status.tsv 2>/dev/null || echo 0)
         else
             printf "sample_id\\tstatus\\n" > ${sample_dir}/kleborate/tables/kleborate.tsv
+            kleborate_samples_input=0
+            kleborate_samples_processed=0
+            kleborate_samples_failed=0
         fi
+        kleborate_feature_rows=\$(awk 'NR > 1 {count++} END {print count + 0}' ${sample_dir}/kleborate/tables/kleborate.tsv 2>/dev/null || echo 0)
+        kleborate_unique_features=\$(awk -F '\\t' 'NR > 1 {for (i=1; i<=NF; i++) if (\$i != "") seen[\$i]=1} END {print length(seen)}' ${sample_dir}/kleborate/tables/kleborate.tsv 2>/dev/null || echo 0)
+        kleborate_status=PASS
+        kleborate_message="Kleborate completed and parseable tables were collected."
+        if [ "\${kleborate_samples_input}" -eq 0 ]; then
+            kleborate_status=WARNING_EMPTY
+            kleborate_message="Kleborate executable was unavailable or no FASTA files were found."
+        elif [ "\${kleborate_samples_failed}" -gt 0 ]; then
+            kleborate_status=WARNING_PARTIAL
+            kleborate_message="Kleborate had sample failures; inspect kleborate/raw/*/kleborate.stderr."
+        fi
+        if [ "\${kleborate_feature_rows}" -eq 0 ]; then
+            kleborate_status=WARNING_EMPTY
+            kleborate_message="\${kleborate_message} No Kleborate feature rows were collected."
+        fi
+        printf "kleborate\\ttrue\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n" \\
+            "\${kleborate_started}" "\$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "\${kleborate_status}" "\${kleborate_samples_input}" "\${kleborate_samples_processed}" "\${kleborate_samples_failed}" "\${kleborate_samples_processed}" "\${kleborate_feature_rows}" "\${kleborate_unique_features}" "${sample_dir}/kleborate" "\${kleborate_message}" >> "\${kleborate_status_file}"
     fi
 
     if [ "${runKaptive}" = "true" ]; then

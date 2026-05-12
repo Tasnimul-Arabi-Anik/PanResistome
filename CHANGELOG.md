@@ -27,6 +27,8 @@
 - AMRFinderPlus now runs independent assemblies concurrently by default using `--threads` as the sample-job count and one AMRFinderPlus thread per sample, avoiding the previous serial per-genome bottleneck.
 - AMRFinderPlus per-sample execution now reuses existing non-empty TSV outputs, making interrupted large runs safer to resume without recomputing completed assemblies.
 - AMRFinderPlus now prints periodic per-sample progress and records per-sample runtime in `amrfinderplus_sample_status.tsv`.
+- MOB-suite now dispatches `mob_recon` per genome with `--mobsuite_jobs`, `--mobsuite_threads_per_sample`, per-sample status capture, and reusable per-sample outputs for interrupted or resumed optional-runner validations.
+- Kleborate now dispatches per genome with `--kleborate_jobs`, per-sample status capture, reusable outputs, and a `kleborate/module_status.tsv` entry for PanR2 manifest auditing.
 - In large-dataset mode, ANI `auto` strategy skips all-vs-all ANI above 200 genomes by default instead of silently launching a long FastANI/skani all-vs-all run; users can force full ANI with `--ani_large_run_strategy all`.
 - PanR2 contract export now preserves non-ABRicate tool names for optional ABRicate-style table inputs such as ISfinder, MOB-suite, prophage/geNomad, DefenseFinder, and organism-specific typing tables.
 - Optional runner CPU requests for MOB-suite, geNomad, and organism-specific typing now scale with `--threads`, with 1-CPU test-profile overrides for fast smoke validation.

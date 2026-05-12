@@ -451,6 +451,9 @@ PanResistome/
 | `--mobsuite_db_dir` | path | `<outdir>/databases/mobsuite` | MOB-suite database cache/init directory when `--mobsuite_db` is not supplied |
 | `--mobsuite_auto_init_db` | bool | true | Run `mob_init` for the MOB-suite cache directory when needed |
 | `--mobsuite_auto_init_taxa` | bool | true | Initialize MOB-suite ETE `taxa.sqlite` in the cache directory when needed |
+| `--mobsuite_jobs` | int | `min(--threads, 8)` | Parallel MOB-suite sample jobs |
+| `--mobsuite_threads_per_sample` | int | 1 | Threads used by each MOB-suite sample job |
+| `--mobsuite_reuse_existing` | bool | true | Reuse non-empty per-sample MOB-suite outputs on resumed/interrupted runs |
 | `--run_genomad` | bool | false | Run geNomad and pass prophage/viral-region tables into PanR2 |
 | `--prophage_dir` | path | - | Existing prophage/viral-region table directory to pass into PanR2 |
 | `--genomad_db` | path | - | Existing geNomad database directory; if omitted and `--run_genomad true`, PanResistome uses `--genomad_db_dir` |
@@ -459,6 +462,8 @@ PanResistome/
 | `--run_organism_specific_typing` | bool | false | Run available organism-specific typing helpers |
 | `--run_kleborate` | bool | false | Run Kleborate when available |
 | `--kleborate_dir` | path | - | Existing Kleborate table directory to pass into PanR2 |
+| `--kleborate_jobs` | int | `min(--threads, 8)` | Parallel Kleborate sample jobs |
+| `--kleborate_reuse_existing` | bool | true | Reuse non-empty per-sample Kleborate outputs on resumed/interrupted runs |
 | `--run_kaptive` | bool | false | Run Kaptive when `--kaptive_db` is provided |
 | `--kaptive_dir` | path | - | Existing Kaptive table directory to pass into PanR2 |
 | `--kaptive_db` | path | - | Kaptive database path |
