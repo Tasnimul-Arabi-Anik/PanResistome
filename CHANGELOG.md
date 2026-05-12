@@ -51,11 +51,13 @@
 - Optional-feature analysis validation completed on local fixture tables for AMR, VFDB, PlasmidFinder, MobileElementFinder, ISfinder, MOB-suite, prophage/geNomad, DefenseFinder, Kleborate, Kaptive, ECTyper, SerotypeFinder, and SCCmecFinder, producing 23 standardized feature rows, 13 feature tables, feature matrices, co-occurrence/proximity outputs, metadata summaries, top findings, and HTML handoff pages with zero unmatched/invalid/duplicate feature rows.
 - Kleborate biological validation completed on two complete `Klebsiella pneumoniae` assemblies, producing 25 standardized `kleborate.features.tsv` rows with zero unmatched, invalid, or duplicate feature rows.
 - MOB-suite biological validation completed on the same two assemblies after preinitializing `taxa.sqlite`, processing 2/2 samples and producing 253 standardized `mobsuite.features.tsv` rows plus 25 Kleborate rows with zero unmatched, invalid, or duplicate feature rows.
+- 100-genome real optional-runner validation completed for MOB-suite and Kleborate on `Klebsiella pneumoniae`, producing 17,490 standardized feature rows across 100 metadata-matched genomes with zero unmatched, invalid, or duplicate feature rows.
 
 ### Validated
 - The 100-record `Klebsiella pneumoniae` input completed with `-profile conda,mamba,desktop_parallel,large`, GTDB-Tk disabled, CheckM2 capped, AMRFinderPlus enabled, and parallel native feature runners. The run produced 12,838 complete standardized feature rows, 99 QC PASS calls, zero unmatched/invalid/duplicate feature rows, capped report-facing matrices/summaries, and the expected HTML report set.
 - The 300-record `Klebsiella pneumoniae` large-mode validation completed with CheckM2, GTDB-Tk, ANI, and AMRFinderPlus disabled for desktop safety. It downloaded 299 genomes, produced 299 QC PASS calls, generated 36,638 standardized feature rows across AMR, VFDB, PlasmidFinder, IntegronFinder, and MLST, kept zero unmatched/invalid/duplicate feature rows, and generated compact large-mode reports.
 - The same 300-record validation identified two scale-sensitive optional steps: FastANI all-vs-all and AMRFinderPlus nucleotide `tblastn`. Both should be treated as separate workstation/HPC or optimized-strategy targets for 300+ genome runs.
+- The 100-genome MOB-suite/Kleborate optional-runner validation identified another scale-sensitive area: MOB-suite and Kleborate are biologically valid at this scale, but currently run as single batch/loop processes and should be parallelized per genome or chunk before larger validations.
 
 ## 0.3.1 - 2026-05-09
 
