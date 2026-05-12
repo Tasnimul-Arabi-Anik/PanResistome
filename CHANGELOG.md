@@ -54,6 +54,7 @@
 - Kleborate biological validation completed on two complete `Klebsiella pneumoniae` assemblies, producing 25 standardized `kleborate.features.tsv` rows with zero unmatched, invalid, or duplicate feature rows.
 - MOB-suite biological validation completed on the same two assemblies after preinitializing `taxa.sqlite`, processing 2/2 samples and producing 253 standardized `mobsuite.features.tsv` rows plus 25 Kleborate rows with zero unmatched, invalid, or duplicate feature rows.
 - 100-genome real optional-runner validation completed for MOB-suite and Kleborate on `Klebsiella pneumoniae`, producing 17,490 standardized feature rows across 100 metadata-matched genomes with zero unmatched, invalid, or duplicate feature rows.
+- 100-genome parallel optional-runner revalidation completed for MOB-suite and Kleborate on `Klebsiella pneumoniae`, preserving the same 17,490 standardized feature rows and zero unmatched/invalid/duplicate rows while reducing total runtime from 1h44m49s to 1h00m13s.
 
 ### Validated
 - The 100-record `Klebsiella pneumoniae` input completed with `-profile conda,mamba,desktop_parallel,large`, GTDB-Tk disabled, CheckM2 capped, AMRFinderPlus enabled, and parallel native feature runners. The run produced 12,838 complete standardized feature rows, 99 QC PASS calls, zero unmatched/invalid/duplicate feature rows, capped report-facing matrices/summaries, and the expected HTML report set.

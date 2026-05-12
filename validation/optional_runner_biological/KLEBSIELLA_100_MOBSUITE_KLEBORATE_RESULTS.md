@@ -215,7 +215,7 @@ top_findings.tsv rows: 50 findings
 
 ## Bottlenecks Learned
 
-MOB-suite completed successfully, but it is currently a serial loop inside one Nextflow process. At 100 genomes this is usable, but slow:
+The first 100-genome validation showed that MOB-suite and Kleborate were biologically useful and PanR2-compatible, but the original runner implementation was too serial/batch-heavy for routine larger validation:
 
 ```text
 MOB-suite started: 2026-05-12T02:54:42Z
@@ -237,6 +237,161 @@ Split MOB-suite per genome into independent Nextflow tasks.
 Split Kleborate into per-genome or chunked Nextflow tasks.
 Merge raw outputs and PanR2 feature tables after parallel execution.
 ```
+
+## Parallel Optional-Runner Revalidation
+
+Date: 2026-05-12
+
+Purpose: revalidate the same 100-genome biological MOB-suite/Kleborate workflow after adding per-genome parallel dispatch for both optional runners.
+
+Command:
+
+```bash
+nextflow run main.nf \
+  -profile conda,mamba,desktop_parallel,large \
+  --local_samples validation_runs/optional_real_100_input \
+  --outdir validation_runs/optional_real_100_klebsiella_mobsuite_kleborate_parallel \
+  --sequence_qc_engine python \
+  --qc_filter true \
+  --stop_after_qc false \
+  --run_checkm2 false \
+  --run_gtdbtk false \
+  --run_quast false \
+  --run_ani false \
+  --run_mash false \
+  --run_amrfinderplus false \
+  --run_panr2_comprehensive false \
+  --run_abricate false \
+  --export_panr2_inputs true \
+  --run_mobsuite true \
+  --mobsuite_db validation_runs/mobsuite_db_test \
+  --mobsuite_jobs 8 \
+  --mobsuite_threads_per_sample 1 \
+  --run_kleborate true \
+  --kleborate_jobs 8 \
+  --run_kaptive false \
+  --run_ectyper false \
+  --run_genomad false \
+  --threads 8 \
+  --capture_versions false
+```
+
+Status: PASS
+
+Completed processes:
+
+```text
+SEQUENCE_QC
+COMBINED_QC
+MOBSUITE_ANALYSIS
+ORGANISM_SPECIFIC_TYPING
+EXPORT_PANR2_INPUTS
+COLLECT_RESULTS
+```
+
+Runtime comparison:
+
+| Run | Total duration | CPU hours | MOB-suite stage | Kleborate/typing stage |
+| --- | ---: | ---: | ---: | ---: |
+| Original serial/batch optional run | 1h 44m 49s | 13.7 | ~1h 25m | ~17m combined / ~28m Kleborate-only |
+| Parallel optional-runner run | 1h 00m 13s | 7.9 | 55.63m | 3.78m |
+
+The parallel run preserved the same PanR2-standardized feature contract result:
+
+```text
+feature_files_checked=2
+feature_rows=17490
+databases_seen=kleborate,mobsuite
+samples_seen=100
+metadata_accessions=100
+unmatched_feature_rows=0
+invalid_feature_rows=0
+duplicate_feature_rows=0
+```
+
+Per-sample runner status:
+
+| Module | Samples input | Samples processed | Samples failed | Status |
+| --- | ---: | ---: | ---: | --- |
+| MOB-suite | 100 | 100 | 0 | PASS |
+| Kleborate | 100 | 100 | 0 | PASS |
+
+Feature completeness audit:
+
+| Database | Feature rows | Unique features | Samples with features | Status |
+| --- | ---: | ---: | ---: | --- |
+| `mobsuite` | 16,332 | 489 | 100 | PASS |
+| `kleborate` | 1,158 | 263 | 96 | PASS |
+
+PanR2 analysis parity with AMR/VFDB-style analysis was confirmed. The optional outputs generated:
+
+```text
+panr2_inputs/features/mobsuite.features.tsv
+panr2_inputs/features/kleborate.features.tsv
+panr2_inputs/features/all_features.tsv
+panr2_inputs/feature_matrices/mobsuite_presence_absence.tsv
+panr2_inputs/feature_matrices/kleborate_presence_absence.tsv
+panr2_inputs/feature_matrices/all_features_presence_absence.tsv
+panr2_inputs/metadata_feature_analysis/feature_metadata_associations.tsv
+panr2_inputs/metadata_feature_analysis/database_burden_by_sample.tsv
+panr2_inputs/metadata_feature_analysis/database_burden_metadata_associations.tsv
+panr2_inputs/metadata_feature_analysis/category_burden_by_sample.tsv
+panr2_inputs/metadata_feature_analysis/category_metadata_associations.tsv
+panr2_inputs/metadata_feature_analysis/top_features_by_database.tsv
+panr2_inputs/metadata_feature_analysis/top_findings.tsv
+panr2_inputs/metadata_feature_analysis/prevalence_tables/
+panr2_inputs/cross_database/feature_cooccurrence.tsv
+panr2_inputs/cross_database/database_cooccurrence_summary.tsv
+panr2_inputs/cross_database/feature_proximity.tsv
+panr2_inputs/report/panr2_handoff_index.html
+panr2_inputs/report/top_findings.html
+panr2_inputs/report/metadata_quality_and_bias.html
+panr2_inputs/report/database_burden_by_metadata.html
+panr2_inputs/report/cross_database_interpretation.html
+```
+
+Selected analysis output sizes:
+
+```text
+all_features_presence_absence.tsv: 100 samples plus header
+mobsuite_presence_absence.tsv: 100 samples plus header
+kleborate_presence_absence.tsv: 100 samples plus header
+feature_cooccurrence.tsv: 11,175 data rows
+top_findings.tsv: 50 findings
+top_features_by_database.tsv: 50 MOB-suite + 50 Kleborate rows
+prevalence_tables: 12 metadata-stratified tables
+```
+
+Top MOB-suite features by sample prevalence included:
+
+```text
+molecule_type_chromosome
+16s-rRNA
+23s-rRNA
+MPF_T
+ISKpn1
+molecule_type_plasmid
+IncFIB
+MPF_F
+conjugative
+Enterobacterales
+```
+
+Top Kleborate features by sample prevalence included:
+
+```text
+SHV-11
+resistance_score_2
+OL2alpha.1 / OL2alpha.2
+aerobactin_iuc_1
+resistance_score_0
+O2alpha
+yersiniabactin_ybt_9
+virulence_score_1
+ST11
+```
+
+Interpretation: MOB-suite and Kleborate now behave like other PanR2 feature databases once their raw outputs are converted into standardized feature tables. PanR2 can summarize them by prevalence, burden, metadata association, co-occurrence, and report pages. The remaining limitation is scientific, not architectural: MOB-suite output should be interpreted as plasmid reconstruction/typing context, and Kleborate is organism-specific to Klebsiella-like analyses.
 
 ## Scope Limit
 
