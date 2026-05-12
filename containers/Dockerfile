@@ -53,22 +53,24 @@ ENV PYTHONNOUSERSITE=1
 COPY . /opt/panresistome
 
 RUN python --version && \
-    nextflow_missing=0 && \
-    command -v abricate && \
-    command -v mlst && \
-    command -v integron_finder && \
-    command -v amrfinder && \
-    command -v checkm2 && \
-    command -v fastANI && \
-    command -v skani && \
-    command -v quast.py && \
-    command -v mash && \
-    command -v mob_recon && \
-    command -v genomad && \
-    command -v kleborate && \
-    command -v kaptive && \
-    command -v ectyper && \
-    command -v panr || true
+    for tool in \
+        abricate \
+        mlst \
+        integron_finder \
+        amrfinder \
+        checkm2 \
+        fastANI \
+        skani \
+        quast.py \
+        mash \
+        mob_recon \
+        genomad \
+        kleborate \
+        kaptive \
+        ectyper \
+        panr; do \
+        command -v "${tool}"; \
+    done
 
 WORKDIR /work
 CMD ["bash"]
