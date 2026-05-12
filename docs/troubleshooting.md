@@ -178,11 +178,23 @@ The setup audit is:
 <sample>/prophage/genomad_database_setup_status.tsv
 ```
 
+Before launching a geNomad run, use the fast readiness check:
+
+```bash
+python scripts/check_genomad_readiness.py \
+  --db-dir /path/to/genomad_db \
+  --out genomad_readiness.tsv
+```
+
+This check does not download the database. It reports whether `genomad` is available in the current environment and whether the database path already contains files.
+
 For restricted networks or shared systems, pre-download the database once and pass:
 
 ```bash
 --run_genomad true --genomad_db /path/to/genomad_db
 ```
+
+The first validated auto-download attempt on this machine reached the `GENOMAD_PROPHAGE` process, but remained in first-run Conda/Mamba environment creation for about 17 minutes and did not reach database download. For now, treat geNomad as opt-in and prefer a cached Conda environment, container/Apptainer route, or explicitly supplied `--genomad_db` for real validations.
 
 ## Report Has Too Many Features
 

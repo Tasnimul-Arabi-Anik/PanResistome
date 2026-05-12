@@ -33,6 +33,18 @@ Keep these databases outside `work/` and outside generated result folders.
 4. Document database mounts for CheckM2 and optional heavy databases.
 5. Only then advertise Docker/Apptainer profiles as supported.
 
+## geNomad-specific note
+
+geNomad is a high-priority container candidate because the 5-genome auto-download validation attempt reached `GENOMAD_PROPHAGE` but remained in first-run Conda/Mamba environment creation for about 17 minutes before database download began. A useful container validation should prove:
+
+- `genomad --version` works inside the image.
+- `genomad download-database` can write to a mounted database path.
+- The mounted database path can be reused with `--genomad_db`.
+- A 2-10 genome run produces raw geNomad output and `prophage.features.tsv`.
+- `panr2_inputs/features/all_features.tsv` includes prophage/geNomad rows with zero unmatched, invalid, or duplicate feature rows.
+
+Until that is validated, geNomad should remain opt-in and described as table-analysis-ready but runner-validation-pending.
+
 ## Example future pattern
 
 This is a planning example, not a validated command:
@@ -50,4 +62,3 @@ nextflow run main.nf \
 ```
 
 Do not assume host database paths are visible inside a container. Mounts must expose the same paths that the Nextflow command passes to PanResistome.
-

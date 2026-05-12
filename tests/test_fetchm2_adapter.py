@@ -13,9 +13,19 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from normalize_fetchm2_output import normalize_fetchm2_output
 from export_panr2_inputs import parse_version_line
 from panr2_contract import export_contract
+from check_genomad_readiness import resolve_database_dir
 
 
 class FetchM2AdapterTests(unittest.TestCase):
+    def test_resolves_nested_genomad_database_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "genomad_cache"
+            nested = root / "genomad_db"
+            nested.mkdir(parents=True)
+            (nested / "marker.tsv").write_text("ok\n", encoding="utf-8")
+
+            self.assertEqual(resolve_database_dir(root), nested)
+
     def test_parses_tool_named_version_lines(self):
         self.assertEqual(
             parse_version_line("seqkit v2.13.0", "fetchm_env_versions"),
