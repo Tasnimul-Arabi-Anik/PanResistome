@@ -2788,8 +2788,18 @@ workflow.onComplete {
     }
     def summaryPath = "${params.outdir}/pipeline_runtime_summary.tsv"
     def taskPath = "${params.outdir}/pipeline_runtime_tasks.tsv"
+    def pythonExe = "python3"
+    try {
+        def pythonCheck = [pythonExe, "--version"].execute()
+        pythonCheck.waitFor()
+        if (pythonCheck.exitValue() != 0) {
+            pythonExe = "python"
+        }
+    } catch (Exception ignored) {
+        pythonExe = "python"
+    }
     def command = [
-        "python",
+        pythonExe,
         "${baseDir}/scripts/summarize_nextflow_trace.py",
         "--trace",
         tracePath,

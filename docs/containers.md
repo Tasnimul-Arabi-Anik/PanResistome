@@ -1,6 +1,6 @@
 # Container execution notes
 
-PanResistome currently ships validated Conda/Mamba workflows. Docker and Apptainer/Singularity profiles are present as v0.4.0 deployment scaffolding. A Singularity fixture smoke test has passed, and a local Docker build/runtime smoke test of the experimental all-in-one image now passes. Full Nextflow production-image and real-data container validation are still pending.
+PanResistome currently ships validated Conda/Mamba workflows. Docker and Apptainer/Singularity profiles are present as v0.4.0 deployment scaffolding. A Singularity fixture smoke test has passed, a local Docker build/runtime smoke test of the experimental all-in-one image passes, and a two-genome Klebsiella biological run completed through the Docker profile with the local image. Full remote pull validation of the GHCR image is still pending because the first public pull was network-limited on this machine.
 
 ## Design goal
 
@@ -66,7 +66,7 @@ Common parameters:
 --container_run_options
 ```
 
-The profiles disable Conda for all processes and assign the supplied image to each process. They also bind the repository path into the container because workflow processes call helper scripts through `${baseDir}`. If no image is supplied, they use the documented experimental placeholder image name. Treat these profiles as experimental until a full Nextflow run with the PanResistome image is documented.
+The profiles disable Conda for all processes and assign the supplied image to each process. They also bind the repository path into the container because workflow processes call helper scripts through `${baseDir}`. If no image is supplied, they use the documented experimental GHCR image name. Treat these profiles as experimental until a full remote pull and multi-genome production-image validation are documented.
 
 The scaffold and Singularity fixture-smoke validation status is documented at `validation/deployment/CONTAINER_PROFILE_SCAFFOLD_RESULTS.md`.
 
@@ -75,19 +75,17 @@ The scaffold and Singularity fixture-smoke validation status is documented at `v
 1. Keep the existing `-profile test` workflow working without containers.
 2. Small Singularity fixture smoke test for local fixtures. Completed with `docker://python:3.11-slim`.
 3. Build or publish a PanResistome image with the real tool stack. Local Docker build/runtime sanity has passed.
-4. Validate the standard comprehensive command without GTDB-Tk through a normal user Docker/Apptainer profile.
+4. Validate the standard comprehensive command without GTDB-Tk through a normal user Docker/Apptainer profile. A two-genome biological Docker run with the local image has passed; a normal-user run still needs local Docker socket permissions or an Apptainer/Singularity route.
 5. Document database mounts for CheckM2 and optional heavy databases.
 6. Only then advertise Docker/Apptainer profiles as supported.
 
-The current placeholder image is not publicly pullable from GHCR:
+The current GHCR image name is:
 
 ```text
-docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental
-DENIED: requested access to the resource is denied
+ghcr.io/tasnimul-arabi-anik/panresistome:experimental
 ```
 
-Until that is fixed, pass a known image explicitly with `--container_image` for
-smoke testing.
+An unauthenticated `docker pull` started successfully on 2026-05-12, which means a GitHub login was not required at the start of the pull. The full pull was stopped on this machine because the network was too slow for the large image. If users see `DENIED`, the GHCR package visibility should be checked in GitHub package settings.
 
 ## Image build and publication
 
@@ -121,6 +119,41 @@ image content size: about 7.45 GB
 local Docker disk usage during build: about 31.4 GB
 ```
 
+Two-genome biological Docker-profile validation using the local image also passed on 2026-05-12:
+
+```bash
+sudo nextflow run main.nf \
+  --input /tmp/klebsiella_2_container_ncbi_dataset.tsv \
+  --outdir /tmp/panresistome_klebsiella_2_docker_bio \
+  -profile docker,large \
+  --container_image panresistome:experimental \
+  --analysis_profile comprehensive \
+  --qc_filter true \
+  --run_gtdbtk false \
+  --run_checkm2 false \
+  --run_quast false \
+  --run_ani true \
+  --run_mash true \
+  --run_amrfinderplus false \
+  --panr2_native_feature_runners true \
+  --panr2_native_feature_runner_mode parallel \
+  --threads 4 \
+  --fetchm2_download_workers 2 \
+  -w /tmp/panresistome_klebsiella_2_docker_bio_work
+```
+
+Result:
+
+```text
+14/14 Nextflow processes succeeded
+2/2 genomes downloaded and QC-passed
+286 standardized feature rows
+databases detected: amr, vfdb, plasmidfinder, mlst
+unmatched/invalid/duplicate feature rows: 0/0/0
+ABRicate ncbi/vfdb/plasmidfinder setup: PASS
+PanR2 handoff HTML pages: generated
+```
+
 Two implementation details matter for reproducibility:
 
 - MobileElementFinder is installed in a separate `mobileelementfinder_env`. Its CLI is `mefinder`, not `mobileelementfinder`, and the environment pins `setuptools<81` because the upstream package still imports `pkg_resources`.
@@ -147,8 +180,8 @@ runtime sanity checks used locally. The smoke test checks the core CLI entry
 points and verifies that `mefinder`, geNomad, MOB-suite, ECTyper, and PanR2 can
 start inside the published image.
 
-After the first GHCR push, confirm the package visibility is public in GitHub
-package settings. If the package remains private, Singularity/Apptainer pulls
+After each GHCR push, confirm the package visibility is public in GitHub
+package settings. If the package is private, Docker/Singularity/Apptainer pulls
 will fail with `DENIED: requested access to the resource is denied`.
 
 The first production-image validation should be:

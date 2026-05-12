@@ -205,6 +205,107 @@ content size: 7.45 GB
 local Docker disk usage after build: 31.4 GB
 ```
 
+## Real Biological Docker-Profile Validation
+
+A two-genome Klebsiella run was executed through the Docker profile with the
+local `panresistome:experimental` image. CheckM2, QUAST, AMRFinderPlus, and
+GTDB-Tk were disabled to keep this as a fast container/runtime validation while
+still exercising FetchM2 download, sequence QC, ANI/Mash pairwise logic,
+PanResistome-native ABRicate/IntegronFinder/MLST runners, PanR2 comprehensive
+analysis, handoff export, and final collection.
+
+Command:
+
+```bash
+sudo nextflow run main.nf \
+  --input /tmp/klebsiella_2_container_ncbi_dataset.tsv \
+  --outdir /tmp/panresistome_klebsiella_2_docker_bio \
+  -profile docker,large \
+  --container_image panresistome:experimental \
+  --analysis_profile comprehensive \
+  --qc_filter true \
+  --run_gtdbtk false \
+  --run_checkm2 false \
+  --run_quast false \
+  --run_ani true \
+  --run_mash true \
+  --run_amrfinderplus false \
+  --panr2_native_feature_runners true \
+  --panr2_native_feature_runner_mode parallel \
+  --threads 4 \
+  --fetchm2_download_workers 2 \
+  -w /tmp/panresistome_klebsiella_2_docker_bio_work
+```
+
+Result:
+
+```text
+Runtime: 2m58s
+Nextflow processes: 14/14 succeeded
+Downloaded genomes: 2
+QC PASS: 2
+Feature rows: 286
+Databases seen: amr, mlst, plasmidfinder, vfdb
+Unmatched feature rows: 0
+Invalid feature rows: 0
+Duplicate feature rows: 0
+Database setup failures: 0
+ABRicate ncbi/vfdb/plasmidfinder setup: PASS
+PanR2 handoff report pages: generated
+```
+
+Feature rows by table, excluding headers:
+
+```text
+amr.features.tsv: 9
+mlst.features.tsv: 34
+plasmidfinder.features.tsv: 3
+vfdb.features.tsv: 240
+all_features.tsv: 286
+```
+
+Native-runner merge audit:
+
+```text
+abricate: PASS, expected_raw_tables=6, observed_raw_tables=6, feature_rows=252
+integronfinder: PASS, expected_raw_tables=2, observed_raw_tables=2, feature_rows=0
+mlst: PASS, expected_raw_tables=1, observed_raw_tables=1, feature_rows=16
+mobileelementfinder: SKIPPED, not requested
+```
+
+The run generated the expected PanR2 handoff HTML pages, including:
+
+```text
+panr2_inputs/report/index.html
+panr2_inputs/report/panr2_handoff_index.html
+panr2_inputs/report/top_findings.html
+panr2_inputs/report/metadata_quality_and_bias.html
+panr2_inputs/report/database_setup_and_contract.html
+panr2_inputs/report/report_controls.html
+panr2_inputs/report/bioproject_bias.html
+panr2_inputs/report/amrfinder_abricate_concordance.html
+panr2_inputs/report/cross_database_interpretation.html
+```
+
+The only warning was outside the biological pipeline result: the optional
+workflow `onComplete` runtime/resource summary hook tried to execute `python`
+from the host environment, but this sudo environment only had `python3`. The
+pipeline itself completed and produced valid outputs. The hook has since been
+updated to prefer `python3` and fall back to `python`.
+
+## GHCR Public Pull Attempt
+
+An unauthenticated public pull was attempted:
+
+```bash
+sudo docker pull ghcr.io/tasnimul-arabi-anik/panresistome:experimental
+```
+
+The pull started successfully and downloaded layers without requiring a GitHub
+login, so authentication was not the observed blocker. The pull was stopped
+after roughly ten minutes because the network was too slow for the large image
+on this machine. Full remote pull validation remains open.
+
 Important observations:
 
 - The first all-in-one image build exposed a real Biopython conflict: MobileElementFinder requires an older Biopython stack than IntegronFinder. The image now installs MobileElementFinder separately in `mobileelementfinder_env` and keeps PanR2/ABRicate/IntegronFinder/MLST in `panr2_container_env`.
@@ -231,6 +332,7 @@ Docker runtime installed and can execute hello-world
 Experimental PanResistome all-in-one image builds locally
 Experimental image command and runtime sanity checks pass for core optional runners
 Nextflow `test,docker` profile completes with the local image when launched from the repository root
+Two-genome Klebsiella biological run completes through the Docker profile with the local image
 ```
 
 Not validated:
@@ -238,21 +340,16 @@ Not validated:
 ```text
 Apptainer runtime execution
 Containerized database mounts
-Real-data container run
 Normal-user Nextflow Docker profile on this host
-Full PanResistome production image from GHCR
+Full PanResistome production image pull from GHCR
 ECTyper species-ID sketch readiness
 ```
 
-The documented placeholder image is not currently publicly pullable:
-
-```text
-docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental
-GET https://ghcr.io/token?... DENIED: requested access to the resource is denied
-```
-
-That means the next deployment blocker is image publication/build validation,
-not Singularity profile wiring.
+The documented GHCR image started pulling without login on 2026-05-12, but the
+full pull was not completed because of local network speed and image size. If
+future pulls return `DENIED`, the GitHub package visibility should be checked.
+The next deployment blocker is full remote image pull validation, not Nextflow
+Docker/Singularity profile wiring.
 
 ## Production Image Scaffold
 
@@ -280,14 +377,15 @@ python scripts/check_container_readiness.py \
 ```
 
 The image build now passes locally as `panresistome:experimental`, and the
-local image can run the Nextflow test profile through Docker. The GitHub Actions
-workflow should still publish a pullable GHCR image before Docker, Apptainer, or
-Singularity profiles are advertised as a low-hassle remote-user route.
+local image can run both the Nextflow test profile and a two-genome biological
+Klebsiella validation through Docker. The GitHub Actions workflow should still
+publish a fully pullable GHCR image before Docker, Apptainer, or Singularity
+profiles are advertised as a low-hassle remote-user route.
 
 ## Next Required Validation
 
-A full real-data container validation requires a built/pullable PanResistome
-image with the required tools installed.
+A full remote-user container validation requires a fully pulled PanResistome
+image from GHCR or an Apptainer/Singularity cache on the target machine.
 
 Recommended first command on that host:
 

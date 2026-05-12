@@ -52,6 +52,7 @@
 - MobileElementFinder remains opt-in, but upstream parser failures now produce auditable header-only outputs by default instead of aborting the whole run.
 - Docker, Apptainer, and Singularity profiles now bind the repository path by default so helper scripts referenced through `${baseDir}` are visible inside containers.
 - The experimental Dockerfile now creates tool environments in separate layers, making rebuilds less fragile when one optional environment changes.
+- The optional runtime/resource summary hook now prefers `python3` and falls back to `python`, avoiding host-side summary warnings on systems without a `python` executable.
 
 ### Tested
 - Synthetic PanR2 contract tests now cover optional table-input exports for MobileElementFinder, ISfinder, MOB-suite, prophage/geNomad, DefenseFinder, Kleborate, Kaptive, ECTyper, SerotypeFinder, and SCCmecFinder.
@@ -68,6 +69,8 @@
 - The experimental `panresistome:experimental` all-in-one Docker image built locally and passed runtime sanity checks for `mefinder`, geNomad, MOB-suite, ECTyper, and PanR2.
 - The local `panresistome:experimental` image completed the Nextflow `test,docker` profile with work and output directories under `/tmp`.
 - The GHCR container workflow now smoke-tests the published image after build by checking the main tool entry points and runtime startup for MobileElementFinder, geNomad, MOB-suite, ECTyper, and PanR2.
+- A two-genome `Klebsiella pneumoniae` biological validation completed through the Docker profile with the local `panresistome:experimental` image, producing 286 standardized feature rows across AMR, VFDB, PlasmidFinder, and MLST with zero unmatched, invalid, or duplicate feature rows.
+- An unauthenticated GHCR pull for `ghcr.io/tasnimul-arabi-anik/panresistome:experimental` started successfully without a GitHub login, but the full pull was stopped on this machine because the large image download was too slow.
 
 ### Validated
 - The 100-record `Klebsiella pneumoniae` input completed with `-profile conda,mamba,desktop_parallel,large`, GTDB-Tk disabled, CheckM2 capped, AMRFinderPlus enabled, and parallel native feature runners. The run produced 12,838 complete standardized feature rows, 99 QC PASS calls, zero unmatched/invalid/duplicate feature rows, capped report-facing matrices/summaries, and the expected HTML report set.
