@@ -20,6 +20,8 @@
 - Audited geNomad database download/cache helpers through `--genomad_db_dir`, `--genomad_auto_download_db`, and `prophage/genomad_database_setup_status.tsv`.
 - `--panr2_mobileelementfinder_allow_failure` to keep opt-in MobileElementFinder failures nonfatal while preserving module/audit status.
 - A reproducible optional-feature analysis validator at `scripts/validate_optional_feature_analysis.py`, with validation evidence under `validation/optional_feature_analysis/`.
+- Experimental all-in-one container image scaffold under `containers/Dockerfile`, plus `.dockerignore` and a GHCR build workflow at `.github/workflows/container.yml`.
+- `--pull-test` support in `scripts/check_container_readiness.py` to verify that Docker, Apptainer, or Singularity can actually pull and execute the requested image.
 
 ### Changed
 - PanR2 handoff export now applies configured feature caps to presence/absence matrices and co-occurrence/proximity summaries, preserves complete proximity evidence as `feature_proximity_all.tsv`, and surfaces report-control settings in `panr2_inputs/report/report_controls.html`.
@@ -46,6 +48,7 @@
 - ABRicate database force-refresh is now enabled by default for comprehensive/native PanR2 feature-runner setup; set `--panr2_update_abricate_db false` for offline, cached, or fully frozen-database reruns.
 - MOB-suite and geNomad remain opt-in, but when explicitly enabled PanResistome now tries to prepare their databases automatically unless a user-provided database path is supplied.
 - MobileElementFinder remains opt-in, but upstream parser failures now produce auditable header-only outputs by default instead of aborting the whole run.
+- Docker, Apptainer, and Singularity profiles now bind the repository path by default so helper scripts referenced through `${baseDir}` are visible inside containers.
 
 ### Tested
 - Synthetic PanR2 contract tests now cover optional table-input exports for MobileElementFinder, ISfinder, MOB-suite, prophage/geNomad, DefenseFinder, Kleborate, Kaptive, ECTyper, SerotypeFinder, and SCCmecFinder.
@@ -56,6 +59,8 @@
 - 100-genome real optional-runner validation completed for MOB-suite and Kleborate on `Klebsiella pneumoniae`, producing 17,490 standardized feature rows across 100 metadata-matched genomes with zero unmatched, invalid, or duplicate feature rows.
 - 100-genome parallel optional-runner revalidation completed for MOB-suite and Kleborate on `Klebsiella pneumoniae`, preserving the same 17,490 standardized feature rows and zero unmatched/invalid/duplicate rows while reducing total runtime from 1h44m49s to 1h00m13s.
 - Broad optional-module status for geNomad/prophage, DefenseFinder, and MobileElementFinder is documented under `validation/optional_runner_biological/BROAD_OPTIONAL_MODULES_STATUS.md`, confirming PanR2 table-analysis parity while keeping unvalidated external runners opt-in.
+- Singularity fixture smoke validation completed with `docker://python:3.11-slim`, proving that the `test,singularity` profile can run `SEQUENCE_QC`, `COMBINED_QC`, and `COLLECT_RESULTS` through a real container runtime.
+- Singularity pull/exec readiness validation passed with `docker://alpine:3.19` using the new `--pull-test` readiness mode.
 
 ### Validated
 - The 100-record `Klebsiella pneumoniae` input completed with `-profile conda,mamba,desktop_parallel,large`, GTDB-Tk disabled, CheckM2 capped, AMRFinderPlus enabled, and parallel native feature runners. The run produced 12,838 complete standardized feature rows, 99 QC PASS calls, zero unmatched/invalid/duplicate feature rows, capped report-facing matrices/summaries, and the expected HTML report set.

@@ -37,7 +37,17 @@ python scripts/check_container_readiness.py \
   --out container_readiness.tsv
 ```
 
-The checker does not pull images or run Nextflow. It prevents the common failure where a workflow starts before the runtime, image, or database mounts are actually ready.
+By default, the checker does not pull images or run Nextflow. It prevents the common failure where a workflow starts before the runtime, image, or database mounts are actually ready.
+
+To verify that the runtime can also pull and execute the image, add `--pull-test`:
+
+```bash
+python scripts/check_container_readiness.py \
+  --runtime singularity \
+  --image docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
+  --pull-test \
+  --out container_readiness.tsv
+```
 
 ## Experimental profiles
 
@@ -78,6 +88,60 @@ DENIED: requested access to the resource is denied
 
 Until that is fixed, pass a known image explicitly with `--container_image` for
 smoke testing.
+
+## Image build and publication
+
+The experimental all-in-one image definition is:
+
+```text
+containers/Dockerfile
+```
+
+It pre-creates the existing PanResistome tool environments inside the image and
+exposes their `bin` directories on `PATH`, allowing the Nextflow container
+profiles to run with `conda.enabled=false`. GTDB-Tk is intentionally excluded
+from the first image target because its database and runtime footprint are too
+large for the default deployment route.
+
+Build locally on a Docker/Podman-capable machine:
+
+```bash
+docker build -f containers/Dockerfile -t panresistome:experimental .
+```
+
+GitHub Actions workflow:
+
+```text
+.github/workflows/container.yml
+```
+
+The workflow publishes:
+
+```text
+ghcr.io/tasnimul-arabi-anik/panresistome:experimental
+ghcr.io/tasnimul-arabi-anik/panresistome:<git-tag>
+ghcr.io/tasnimul-arabi-anik/panresistome:sha-<commit>
+```
+
+After the first GHCR push, confirm the package visibility is public in GitHub
+package settings. If the package remains private, Singularity/Apptainer pulls
+will fail with `DENIED: requested access to the resource is denied`.
+
+The first production-image validation should be:
+
+```bash
+python scripts/check_container_readiness.py \
+  --runtime singularity \
+  --image docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
+  --pull-test \
+  --out container_readiness.tsv
+
+env NXF_SINGULARITY_CACHEDIR=/tmp/panresistome_singularity_cache \
+  nextflow run main.nf \
+    -profile test,singularity \
+    --container_image docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
+    --outdir validation_runs/container_panresistome_test_profile
+```
 
 ## geNomad-specific note
 

@@ -15,6 +15,7 @@ from export_panr2_inputs import parse_version_line
 from panr2_contract import export_contract
 from check_genomad_readiness import resolve_database_dir
 from check_container_readiness import as_list as container_as_list
+from check_container_readiness import image_exec_command
 
 
 class FetchM2AdapterTests(unittest.TestCase):
@@ -31,6 +32,16 @@ class FetchM2AdapterTests(unittest.TestCase):
         self.assertEqual(
             container_as_list(" /db/checkm2 , /db/genomad ,, "),
             ["/db/checkm2", "/db/genomad"],
+        )
+
+    def test_container_readiness_builds_runtime_pull_test_commands(self):
+        self.assertEqual(
+            image_exec_command("singularity", "/usr/bin/singularity", "docker://alpine:3.19"),
+            ["/usr/bin/singularity", "exec", "docker://alpine:3.19", "true"],
+        )
+        self.assertEqual(
+            image_exec_command("docker", "/usr/bin/docker", "alpine:3.19"),
+            ["/usr/bin/docker", "run", "--rm", "--entrypoint", "true", "alpine:3.19"],
         )
 
     def test_parses_tool_named_version_lines(self):

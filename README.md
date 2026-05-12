@@ -180,6 +180,8 @@ python scripts/check_container_readiness.py \
   --database-paths /path/to/checkm2,/path/to/genomad \
   --out container_readiness.tsv
 
+# Add --pull-test to verify that the runtime can pull and execute the image.
+
 nextflow run main.nf \
   --input validation/delftia_tsuruhatensis_current/ncbi_dataset.tsv \
   --outdir validation_runs/delftia_container \
@@ -188,6 +190,9 @@ nextflow run main.nf \
   --analysis_profile comprehensive \
   --run_gtdbtk false
 ```
+
+The experimental image definition is in [`containers/Dockerfile`](containers/Dockerfile),
+and the GHCR build workflow is in [`.github/workflows/container.yml`](.github/workflows/container.yml).
 
 These profiles are scaffolding for v0.4.0 deployment validation. A Singularity fixture smoke test has passed with `docker://python:3.11-slim`, but Conda/Mamba remains the validated public route until a production PanResistome image and real-data container validation are documented.
 

@@ -55,6 +55,10 @@ python scripts/check_container_readiness.py \
 
 The profiles are not yet release-grade. They need a small fixture smoke test, then a real-data validation, before replacing the Conda/Mamba route in documentation.
 
+Add `--pull-test` on a login/development node when image pulls are allowed.
+Avoid running large database downloads or full biological validations on a login
+node; use the pull test only to confirm that the runtime and image are usable.
+
 ## Outputs to inspect first
 
 After a run, start with:

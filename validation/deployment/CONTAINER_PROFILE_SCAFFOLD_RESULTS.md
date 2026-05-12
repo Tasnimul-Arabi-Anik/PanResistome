@@ -138,6 +138,35 @@ GET https://ghcr.io/token?... DENIED: requested access to the resource is denied
 That means the next deployment blocker is image publication/build validation,
 not Singularity profile wiring.
 
+## Production Image Scaffold
+
+Added:
+
+```text
+containers/Dockerfile
+.github/workflows/container.yml
+.dockerignore
+```
+
+The image definition creates the existing PanResistome tool environments inside
+one image and exposes their command-line tools on `PATH`, matching the
+`conda.enabled=false` behavior of the container profiles. GTDB-Tk is excluded
+from the first image target because it remains an opt-in large-database mode.
+
+The readiness helper now supports a real pull/exec check:
+
+```bash
+python scripts/check_container_readiness.py \
+  --runtime singularity \
+  --image docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
+  --pull-test \
+  --out container_readiness.tsv
+```
+
+The image build itself was not run on this machine because Docker/Podman are not
+installed. The GitHub Actions workflow or another Docker-capable machine should
+perform the first production image build.
+
 ## Next Required Validation
 
 A full real-data container validation requires a built/pullable PanResistome

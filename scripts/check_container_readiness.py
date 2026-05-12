@@ -16,6 +16,8 @@ FIELDS = [
     "runtime_path",
     "image",
     "image_supplied",
+    "pull_test_requested",
+    "pull_test_passed",
     "database_paths_checked",
     "missing_database_paths",
     "status",
@@ -50,6 +52,32 @@ def capture(command: list[str]) -> str:
     return output.splitlines()[0] if output else "unavailable"
 
 
+def image_exec_command(runtime: str, runtime_path: str, image: str) -> list[str]:
+    if runtime == "docker":
+        return [runtime_path, "run", "--rm", "--entrypoint", "true", image]
+    return [runtime_path, "exec", image, "true"]
+
+
+def run_image_pull_test(runtime: str, runtime_path: str, image: str) -> tuple[bool, str]:
+    command = image_exec_command(runtime, runtime_path, image)
+    try:
+        completed = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            check=False,
+            timeout=300,
+        )
+    except Exception as exc:  # pragma: no cover - defensive CLI helper
+        return False, f"container pull/exec test could not run: {exc}"
+    output = (completed.stdout or "").strip()
+    if completed.returncode == 0:
+        return True, "container pull/exec test passed."
+    detail = output.splitlines()[-1] if output else f"exit_status={completed.returncode}"
+    return False, f"container pull/exec test failed: {detail}"
+
+
 def write_report(path: Path, row: dict[str, str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
@@ -67,6 +95,11 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="Comma-separated database paths that must exist on the host.",
     )
+    parser.add_argument(
+        "--pull-test",
+        action="store_true",
+        help="Run a small container pull/exec test with the requested runtime and image.",
+    )
     parser.add_argument("--out", default="", help="Optional TSV report path.")
     return parser.parse_args()
 
@@ -77,8 +110,18 @@ def main() -> int:
     db_paths = as_list(args.database_paths)
     missing_paths = [path for path in db_paths if not Path(path).exists()]
     image = args.image.strip()
+    pull_test_passed = ""
 
-    if runtime_path and image and not missing_paths:
+    if runtime_path and image and not missing_paths and args.pull_test:
+        pull_ok, pull_message = run_image_pull_test(args.runtime, runtime_path, image)
+        pull_test_passed = str(pull_ok).lower()
+        if pull_ok:
+            status = "PASS"
+            message = f"{args.runtime} is available: {capture([runtime_path, '--version'])}; {pull_message}"
+        else:
+            status = "FAIL_PULL_TEST"
+            message = pull_message
+    elif runtime_path and image and not missing_paths:
         status = "PASS"
         message = f"{args.runtime} is available: {capture([runtime_path, '--version'])}"
     elif not runtime_path:
@@ -97,6 +140,8 @@ def main() -> int:
         "runtime_path": runtime_path or "",
         "image": image,
         "image_supplied": str(bool(image)).lower(),
+        "pull_test_requested": str(bool(args.pull_test)).lower(),
+        "pull_test_passed": pull_test_passed,
         "database_paths_checked": ",".join(db_paths),
         "missing_database_paths": ",".join(missing_paths),
         "status": status,
