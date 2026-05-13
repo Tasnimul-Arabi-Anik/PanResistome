@@ -156,6 +156,21 @@ invalid_feature_rows=0
 duplicate_feature_rows=0
 ```
 
+## Singularity/Apptainer Note
+
+HPC users usually prefer Singularity or Apptainer instead of Docker. The same
+GHCR image has been validated with Singularity CE for a two-genome
+geNomad-enabled workflow. Use a persistent cache before first run:
+
+```bash
+export NXF_SINGULARITY_CACHEDIR=/shared/cache/panresistome/singularity
+```
+
+Then use `-profile singularity,large` and keep optional database paths mounted
+with `--container_run_options`. The Singularity/Apptainer profiles default to
+frozen ABRicate databases with `--panr2_update_abricate_db false` because SIF
+images are read-only.
+
 ## Current Caveats
 
 ```text

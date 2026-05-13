@@ -402,6 +402,108 @@ two-genome geNomad-enabled Docker biological validation. The detailed remote
 Docker validation result is recorded in
 `validation/deployment/DOCKER_REMOTE_USER_VALIDATION_RESULTS.md`.
 
+## Singularity GHCR Pull And Biological Validation
+
+Singularity CE was available on the validation host:
+
+```text
+singularity-ce version 4.1.1
+```
+
+The repository readiness helper initially timed out at its 300 second pull-test
+limit while converting the large GHCR Docker image into Singularity's local SIF
+cache. A direct `singularity exec` was then allowed to continue:
+
+```bash
+singularity exec docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental true
+```
+
+Result:
+
+```text
+Singularity GHCR pull/exec: PASS
+Approximate first conversion time: 1h15m
+Observed cache growth: about 7.3 GB before extraction/SIF creation
+Follow-up readiness helper with --pull-test: PASS
+```
+
+The first biological Singularity attempt reached FetchM2, sequence QC, ANI,
+Mash, combined QC, and geNomad successfully, then failed in the PanR2 native
+feature-runner stage because the default ABRicate force-refresh tried to update
+databases inside the read-only Singularity image:
+
+```text
+Failure point: PANR2_FEATURE_RUNNERS
+Cause: --panr2_update_abricate_db true tried to run abricate-get_db --force
+inside the read-only SIF/container filesystem.
+ABRicate DB presence before update: true
+Correct mode for Singularity: frozen/cached ABRicate DBs
+```
+
+The Apptainer and Singularity profiles now set:
+
+```text
+params.panr2_update_abricate_db = false
+env.MPLCONFIGDIR = /tmp
+```
+
+This keeps ABRicate databases frozen inside read-only SIF execution unless a
+user explicitly chooses a writable database strategy, and prevents matplotlib
+from trying to create config files under a read-only home path.
+
+The same two-genome geNomad-enabled biological workflow then completed through
+the Singularity profile using the GHCR image without an explicit
+`--panr2_update_abricate_db false` command-line override:
+
+```bash
+nextflow run main.nf \
+  --input /tmp/klebsiella_2_container_ncbi_dataset.tsv \
+  --outdir /tmp/panresistome_klebsiella_2_singularity_genomad_profile_default \
+  -profile singularity,large \
+  --container_image docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
+  --container_run_options '-B /tmp/panresistome_genomad_db:/tmp/panresistome_genomad_db' \
+  --analysis_profile comprehensive \
+  --qc_filter true \
+  --run_gtdbtk false \
+  --run_checkm2 false \
+  --run_quast false \
+  --run_ani true \
+  --run_mash true \
+  --run_amrfinderplus false \
+  --run_genomad true \
+  --genomad_use_host_env true \
+  --genomad_db /tmp/panresistome_genomad_db/genomad_db \
+  --panr2_native_feature_runners true \
+  --panr2_native_feature_runner_mode parallel \
+  --threads 4 \
+  --fetchm2_download_workers 2 \
+  -w /tmp/panresistome_klebsiella_2_singularity_genomad_profile_default_work
+```
+
+Result:
+
+```text
+Runtime after image availability: 2m08s
+Nextflow processes: 16/16 succeeded
+Downloaded genomes: 2
+QC PASS: 2
+Feature rows: 286
+Feature tables checked: 5
+Databases with standardized feature rows: amr, mlst, plasmidfinder, vfdb
+Unmatched feature rows: 0
+Invalid feature rows: 0
+Duplicate feature rows: 0
+ABRicate database setup/status: PASS
+geNomad database setup/status: PASS
+PanR2 handoff report: generated
+Runtime/resource summary: generated
+```
+
+Interpretation: the GHCR image is now validated through both Docker and
+Singularity for a real two-genome geNomad-enabled biological workflow. The main
+Singularity caveat is first-use image conversion time and the need to treat
+in-image ABRicate databases as frozen/read-only by default.
+
 Important observations:
 
 - The first all-in-one image build exposed a real Biopython conflict: MobileElementFinder requires an older Biopython stack than IntegronFinder. The image now installs MobileElementFinder separately in `mobileelementfinder_env` and keeps PanR2/ABRicate/IntegronFinder/MLST in `panr2_container_env`.
@@ -430,6 +532,8 @@ Experimental image command and runtime sanity checks pass for core optional runn
 Nextflow `test,docker` profile completes with the local image when launched from the repository root
 Two-genome Klebsiella biological run completes through the Docker profile with the local image
 geNomad database download completes inside Docker with a mounted writable path
+GHCR image pull/exec completes through Singularity
+Two-genome geNomad-enabled biological run completes through Singularity with the GHCR image
 Two-genome geNomad-enabled Docker run completes with clean feature-contract validation
 100-record Klebsiella Docker large-mode run completes with clean feature-contract validation
 ```

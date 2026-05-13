@@ -43,7 +43,7 @@ No stable SLURM profile is advertised yet. A future profile should define execut
 
 ## Container profile status
 
-Experimental Docker, Apptainer, and Singularity profiles exist for v0.4.0 deployment testing. A local Singularity fixture smoke test has passed with `docker://python:3.11-slim`, and Docker validation has passed for two-genome, geNomad-enabled, and 100-record Klebsiella workflows using the built `panresistome:experimental` image. The public GHCR image has also been pulled successfully and used for a two-genome geNomad-enabled Docker biological validation. Apptainer/Singularity biological validation with the PanResistome image is still pending. On HPC, prefer Apptainer/Singularity with shared database mounts. Validate readiness before submitting a job:
+Experimental Docker, Apptainer, and Singularity profiles exist for v0.4.0 deployment testing. A local Singularity fixture smoke test has passed with `docker://python:3.11-slim`, and Docker validation has passed for two-genome, geNomad-enabled, and 100-record Klebsiella workflows using the built `panresistome:experimental` image. The public GHCR image has also been pulled successfully and used for two-genome geNomad-enabled biological validation through both Docker and Singularity CE. Apptainer biological validation remains pending. On HPC, prefer Apptainer/Singularity with shared database mounts. Validate readiness before submitting a job:
 
 ```bash
 python scripts/check_container_readiness.py \
@@ -58,6 +58,19 @@ The profiles are not yet release-grade. They need a small fixture smoke test, th
 Add `--pull-test` on a login/development node when image pulls are allowed.
 Avoid running large database downloads or full biological validations on a login
 node; use the pull test only to confirm that the runtime and image are usable.
+
+For Singularity/Apptainer, use a persistent cache path before running Nextflow:
+
+```bash
+export NXF_SINGULARITY_CACHEDIR=/shared/cache/panresistome/singularity
+```
+
+The first GHCR-to-SIF conversion took about 1h15m on the validation host. A
+shared cache prevents every run directory from materializing its own copy of the
+large image. Apptainer and Singularity profiles default
+`--panr2_update_abricate_db false` because the packaged ABRicate databases are
+read-only inside SIF images. Use Docker or a future writable database strategy
+when a forced ABRicate database refresh is required.
 
 ## Outputs to inspect first
 
