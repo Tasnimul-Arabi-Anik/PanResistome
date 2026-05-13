@@ -203,7 +203,13 @@ nextflow run main.nf \
   --genomad_db /path/to/genomad_db
 ```
 
-The first validated auto-download attempt on this machine reached the `GENOMAD_PROPHAGE` process, but remained in first-run Conda/Mamba environment creation for about 17 minutes and did not reach database download. For now, treat geNomad as opt-in and prefer a cached Conda environment, container/Apptainer route, or explicitly supplied `--genomad_db` for real validations.
+The first Conda-based auto-download attempt on this machine reached the
+`GENOMAD_PROPHAGE` process, but remained in first-run Conda/Mamba environment
+creation for about 17 minutes and did not reach database download. The Docker
+route later downloaded geNomad DB v1.9 successfully into a mounted directory and
+completed a two-genome geNomad-enabled biological run with clean PanR2
+feature-contract validation. For practical use, prefer Docker/Apptainer, a
+cached Conda environment, or an explicitly supplied `--genomad_db`.
 
 ## Report Has Too Many Features
 

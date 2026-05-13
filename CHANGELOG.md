@@ -24,6 +24,7 @@
 - `--pull-test` support in `scripts/check_container_readiness.py` to verify that Docker, Apptainer, or Singularity can actually pull and execute the requested image.
 - A dedicated `panr2_container_env` for the all-in-one image, keeping PanR2/ABRicate/IntegronFinder/MLST separate from MobileElementFinder.
 - A dedicated `mobileelementfinder_env` for the all-in-one image, using the actual `mefinder` CLI and pinning `setuptools<81` for upstream `pkg_resources` compatibility.
+- A Docker quickstart at `docs/docker_quickstart.md`, covering GHCR image use, Docker permissions, large-image caveats, geNomad database mounts, and the validated 100-record Docker command.
 
 ### Changed
 - PanR2 handoff export now applies configured feature caps to presence/absence matrices and co-occurrence/proximity summaries, preserves complete proximity evidence as `feature_proximity_all.tsv`, and surfaces report-control settings in `panr2_inputs/report/report_controls.html`.
@@ -53,6 +54,7 @@
 - Docker, Apptainer, and Singularity profiles now bind the repository path by default so helper scripts referenced through `${baseDir}` are visible inside containers.
 - The experimental Dockerfile now creates tool environments in separate layers, making rebuilds less fragile when one optional environment changes.
 - The optional runtime/resource summary hook now prefers `python3` and falls back to `python`, avoiding host-side summary warnings on systems without a `python` executable.
+- README, container, HPC, troubleshooting, optional-module, and database automation docs now reflect the completed Docker biological, 100-record, and geNomad database-download validations.
 
 ### Tested
 - Synthetic PanR2 contract tests now cover optional table-input exports for MobileElementFinder, ISfinder, MOB-suite, prophage/geNomad, DefenseFinder, Kleborate, Kaptive, ECTyper, SerotypeFinder, and SCCmecFinder.

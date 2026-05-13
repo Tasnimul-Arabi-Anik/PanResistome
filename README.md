@@ -171,7 +171,12 @@ nextflow run main.nf \
   --run_amrfinderplus true
 ```
 
-Experimental container profiles are available for deployment testing:
+Experimental container profiles are available for deployment testing. The Docker
+route now has local-image biological validation, including a two-genome run, a
+geNomad database/download runner test, and a 100-record Klebsiella large-mode
+run with clean PanR2 feature-contract output. The remaining deployment caveat is
+the large first GHCR pull, which started without GitHub login on the validation
+host but did not complete there because the network was slow.
 
 ```bash
 python scripts/check_container_readiness.py \
@@ -183,18 +188,30 @@ python scripts/check_container_readiness.py \
 # Add --pull-test to verify that the runtime can pull and execute the image.
 
 nextflow run main.nf \
-  --input validation/delftia_tsuruhatensis_current/ncbi_dataset.tsv \
-  --outdir validation_runs/delftia_container \
-  -profile apptainer,large \
-  --container_image docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
+  --input validation/klebsiella_pneumoniae_100/ncbi_dataset.tsv \
+  --outdir validation_runs/klebsiella_100_docker_large \
+  -profile docker,large \
+  --container_image ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
   --analysis_profile comprehensive \
-  --run_gtdbtk false
+  --qc_filter true \
+  --run_gtdbtk false \
+  --run_checkm2 false \
+  --run_quast false \
+  --run_ani false \
+  --run_mash true \
+  --run_amrfinderplus false \
+  --panr2_native_feature_runners true \
+  --panr2_native_feature_runner_mode parallel \
+  --threads 8 \
+  --fetchm2_download_workers 2
 ```
 
 The experimental image definition is in [`containers/Dockerfile`](containers/Dockerfile),
 and the GHCR build workflow is in [`.github/workflows/container.yml`](.github/workflows/container.yml).
 
-These profiles are scaffolding for v0.4.0 deployment validation. A Singularity fixture smoke test has passed with `docker://python:3.11-slim`, but Conda/Mamba remains the validated public route until a production PanResistome image and real-data container validation are documented.
+The Docker image is large. For the shortest user-facing container instructions,
+see [`docs/docker_quickstart.md`](docs/docker_quickstart.md). For full
+deployment evidence, see [`validation/deployment/DOCKER_REMOTE_USER_VALIDATION_RESULTS.md`](validation/deployment/DOCKER_REMOTE_USER_VALIDATION_RESULTS.md).
 
 `desktop_parallel` sets `--threads 16`, `--checkm2_threads 2`, `--fetchm2_download_workers 2`, and `--panr2_native_feature_runner_mode parallel`. Use `lowmem` for smaller machines and `workstation` when additional RAM is available.
 
@@ -202,7 +219,7 @@ Fresh-clone validation of this command on 2026-05-08 completed all 19 Nextflow p
 
 For the fresh-user validation path, see [`docs/remote_user_validation.md`](docs/remote_user_validation.md). For the 20 release gates used to judge whether the public comprehensive workflow is reliable, see [`docs/release_reliability_checklist.md`](docs/release_reliability_checklist.md).
 
-For v0.3.0 validation status, see [`docs/validation_matrix.md`](docs/validation_matrix.md), [`docs/release_checklist_v0.3.0.md`](docs/release_checklist_v0.3.0.md), [`docs/troubleshooting.md`](docs/troubleshooting.md), and [`docs/example_klebsiella_interpretation.md`](docs/example_klebsiella_interpretation.md). For v0.4.0 large-dataset and deployment planning, see [`docs/roadmap_v0.4.0.md`](docs/roadmap_v0.4.0.md), [`validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md`](validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md), [`docs/hpc.md`](docs/hpc.md), and [`docs/containers.md`](docs/containers.md). For optional module runner/table-input status, see [`docs/optional_module_validation_matrix.md`](docs/optional_module_validation_matrix.md), [`validation/optional_feature_analysis/VALIDATION_RESULTS.md`](validation/optional_feature_analysis/VALIDATION_RESULTS.md), [`validation/optional_runner_smoke/OPTIONAL_RUNNER_SMOKE_RESULTS.md`](validation/optional_runner_smoke/OPTIONAL_RUNNER_SMOKE_RESULTS.md), [`validation/optional_runner_biological/KLEBSIELLA_2_OPTIONAL_RUNNER_RESULTS.md`](validation/optional_runner_biological/KLEBSIELLA_2_OPTIONAL_RUNNER_RESULTS.md), and [`validation/optional_runner_biological/KLEBSIELLA_100_MOBSUITE_KLEBORATE_RESULTS.md`](validation/optional_runner_biological/KLEBSIELLA_100_MOBSUITE_KLEBORATE_RESULTS.md).
+For v0.3.0 validation status, see [`docs/validation_matrix.md`](docs/validation_matrix.md), [`docs/release_checklist_v0.3.0.md`](docs/release_checklist_v0.3.0.md), [`docs/troubleshooting.md`](docs/troubleshooting.md), and [`docs/example_klebsiella_interpretation.md`](docs/example_klebsiella_interpretation.md). For v0.4.0 large-dataset and deployment planning, see [`docs/roadmap_v0.4.0.md`](docs/roadmap_v0.4.0.md), [`validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md`](validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md), [`docs/hpc.md`](docs/hpc.md), [`docs/containers.md`](docs/containers.md), [`docs/docker_quickstart.md`](docs/docker_quickstart.md), and [`validation/deployment/DOCKER_REMOTE_USER_VALIDATION_RESULTS.md`](validation/deployment/DOCKER_REMOTE_USER_VALIDATION_RESULTS.md). For optional module runner/table-input status, see [`docs/optional_module_validation_matrix.md`](docs/optional_module_validation_matrix.md), [`validation/optional_feature_analysis/VALIDATION_RESULTS.md`](validation/optional_feature_analysis/VALIDATION_RESULTS.md), [`validation/optional_runner_smoke/OPTIONAL_RUNNER_SMOKE_RESULTS.md`](validation/optional_runner_smoke/OPTIONAL_RUNNER_SMOKE_RESULTS.md), [`validation/optional_runner_biological/KLEBSIELLA_2_OPTIONAL_RUNNER_RESULTS.md`](validation/optional_runner_biological/KLEBSIELLA_2_OPTIONAL_RUNNER_RESULTS.md), and [`validation/optional_runner_biological/KLEBSIELLA_100_MOBSUITE_KLEBORATE_RESULTS.md`](validation/optional_runner_biological/KLEBSIELLA_100_MOBSUITE_KLEBORATE_RESULTS.md).
 
 ### Module Stability
 
