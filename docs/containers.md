@@ -46,6 +46,7 @@ python scripts/check_container_readiness.py \
   --runtime singularity \
   --image docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
   --pull-test \
+  --pull-test-timeout 7200 \
   --out container_readiness.tsv
 ```
 
@@ -94,9 +95,14 @@ singularity exec docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental 
 ```
 
 The first conversion took about 1h15m on the validation host. Subsequent
-Nextflow biological validation succeeded once the image was available, but users
-should set `NXF_SINGULARITY_CACHEDIR` to a persistent shared cache on HPC so the
-large SIF conversion is not repeated in each work directory.
+Nextflow biological validations succeeded once the image was available,
+including a 100-record Klebsiella large-mode run. Users should set
+`NXF_SINGULARITY_CACHEDIR` to a persistent shared cache on HPC so the large SIF
+conversion is not repeated in each work directory.
+
+```bash
+export NXF_SINGULARITY_CACHEDIR=/shared/cache/panresistome/singularity
+```
 
 Normal non-sudo Docker is not ready on the validation host because the current
 user is not in the `docker` group. Docker group membership grants broad
@@ -232,20 +238,30 @@ After each GHCR push, confirm the package visibility is public in GitHub
 package settings. If the package is private, Docker/Singularity/Apptainer pulls
 will fail with `DENIED: requested access to the resource is denied`.
 
-The first production-image validation should be:
+The validated Singularity readiness pattern is:
 
 ```bash
 python scripts/check_container_readiness.py \
   --runtime singularity \
   --image docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
   --pull-test \
+  --pull-test-timeout 7200 \
   --out container_readiness.tsv
 
 env NXF_SINGULARITY_CACHEDIR=/tmp/panresistome_singularity_cache \
   nextflow run main.nf \
-    -profile test,singularity \
+    -profile singularity,large \
     --container_image docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
-    --outdir validation_runs/container_panresistome_test_profile
+    --input validation/klebsiella_pneumoniae_100/ncbi_dataset.tsv \
+    --outdir validation_runs/klebsiella_100_singularity_large \
+    --analysis_profile comprehensive \
+    --qc_filter true \
+    --run_gtdbtk false \
+    --run_checkm2 false \
+    --run_quast false \
+    --run_ani false \
+    --run_mash true \
+    --run_amrfinderplus false
 ```
 
 ## geNomad-specific note
@@ -256,7 +272,7 @@ geNomad is a high-priority container candidate because the 5-genome auto-downloa
 - `genomad download-database` can write to a mounted database path.
 - The mounted database path can be reused with `--genomad_db`.
 - A 2-10 genome run produces raw geNomad output and `prophage.features.tsv`.
-- `panr2_inputs/features/all_features.tsv` includes prophage/geNomad rows with zero unmatched, invalid, or duplicate feature rows.
+- A prophage-rich dataset produces positive prophage/geNomad rows with zero unmatched, invalid, or duplicate feature rows.
 
 geNomad remains opt-in. The Docker route now validates database download,
 database mounting, and runner execution, but a prophage-rich dataset is still

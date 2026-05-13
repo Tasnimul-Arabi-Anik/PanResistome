@@ -17,6 +17,7 @@ FIELDS = [
     "image",
     "image_supplied",
     "pull_test_requested",
+    "pull_test_timeout_seconds",
     "pull_test_passed",
     "database_paths_checked",
     "missing_database_paths",
@@ -58,7 +59,12 @@ def image_exec_command(runtime: str, runtime_path: str, image: str) -> list[str]
     return [runtime_path, "exec", image, "true"]
 
 
-def run_image_pull_test(runtime: str, runtime_path: str, image: str) -> tuple[bool, str]:
+def run_image_pull_test(
+    runtime: str,
+    runtime_path: str,
+    image: str,
+    timeout_seconds: int,
+) -> tuple[bool, str]:
     command = image_exec_command(runtime, runtime_path, image)
     try:
         completed = subprocess.run(
@@ -67,7 +73,7 @@ def run_image_pull_test(runtime: str, runtime_path: str, image: str) -> tuple[bo
             stderr=subprocess.STDOUT,
             text=True,
             check=False,
-            timeout=300,
+            timeout=timeout_seconds,
         )
     except Exception as exc:  # pragma: no cover - defensive CLI helper
         return False, f"container pull/exec test could not run: {exc}"
@@ -86,7 +92,7 @@ def write_report(path: Path, row: dict[str, str]) -> None:
         writer.writerow(row)
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime", choices=sorted(RUNTIME_COMMANDS), required=True)
     parser.add_argument("--image", default="", help="Container image passed to --container_image.")
@@ -100,8 +106,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run a small container pull/exec test with the requested runtime and image.",
     )
+    parser.add_argument(
+        "--pull-test-timeout",
+        type=int,
+        default=300,
+        help=(
+            "Seconds to allow for --pull-test. Large Singularity/Apptainer "
+            "image conversion can require much longer than the default."
+        ),
+    )
     parser.add_argument("--out", default="", help="Optional TSV report path.")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def main() -> int:
@@ -113,7 +128,12 @@ def main() -> int:
     pull_test_passed = ""
 
     if runtime_path and image and not missing_paths and args.pull_test:
-        pull_ok, pull_message = run_image_pull_test(args.runtime, runtime_path, image)
+        pull_ok, pull_message = run_image_pull_test(
+            args.runtime,
+            runtime_path,
+            image,
+            max(1, int(args.pull_test_timeout)),
+        )
         pull_test_passed = str(pull_ok).lower()
         if pull_ok:
             status = "PASS"
@@ -141,6 +161,7 @@ def main() -> int:
         "image": image,
         "image_supplied": str(bool(image)).lower(),
         "pull_test_requested": str(bool(args.pull_test)).lower(),
+        "pull_test_timeout_seconds": str(max(1, int(args.pull_test_timeout))),
         "pull_test_passed": pull_test_passed,
         "database_paths_checked": ",".join(db_paths),
         "missing_database_paths": ",".join(missing_paths),

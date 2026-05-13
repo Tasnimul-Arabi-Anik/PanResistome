@@ -27,6 +27,8 @@
 - A Docker quickstart at `docs/docker_quickstart.md`, covering GHCR image use, Docker permissions, large-image caveats, geNomad database mounts, and the validated 100-record Docker command.
 - GHCR Docker remote-user validation evidence showing the public image can be pulled without GitHub login and can complete a two-genome geNomad-enabled biological workflow with clean PanR2 feature-contract output.
 - Singularity CE validation evidence showing the GHCR image can be pulled, converted to SIF, and used for the same two-genome geNomad-enabled biological workflow with clean PanR2 feature-contract output.
+- A 100-record Singularity/GHCR large-mode validation report under `validation/deployment/SINGULARITY_GHCR_VALIDATION_RESULTS.md`.
+- `--pull-test-timeout` for `scripts/check_container_readiness.py`, allowing long first-time Singularity/Apptainer image conversions to be validated instead of failing at the previous fixed 300 second limit.
 
 ### Changed
 - PanR2 handoff export now applies configured feature caps to presence/absence matrices and co-occurrence/proximity summaries, preserves complete proximity evidence as `feature_proximity_all.tsv`, and surfaces report-control settings in `panr2_inputs/report/report_controls.html`.
@@ -78,6 +80,7 @@
 - An unauthenticated GHCR pull for `ghcr.io/tasnimul-arabi-anik/panresistome:experimental` completed successfully without a GitHub login on the validation host.
 - The pulled GHCR image completed a two-genome geNomad-enabled Docker biological validation in 7m21s with 16/16 Nextflow processes succeeded, 286 standardized feature rows, zero unmatched/invalid/duplicate feature rows, ABRicate setup PASS, geNomad database setup PASS, and PanR2 handoff reports generated.
 - Singularity CE 4.1.1 completed GHCR image pull/exec validation. First GHCR-to-SIF conversion took about 1h15m on the validation host; a profile-default two-genome geNomad-enabled biological run then completed 16/16 Nextflow processes in 2m08s with 286 standardized feature rows, zero unmatched/invalid/duplicate rows, ABRicate setup PASS, geNomad database setup PASS, and PanR2 handoff reports generated.
+- A 100-record Klebsiella large-mode Singularity validation completed with the cached GHCR image in 21m12s, producing 11,488 standardized feature rows across AMR, VFDB, PlasmidFinder, IntegronFinder, and MLST with zero unmatched, invalid, or duplicate rows.
 - geNomad database v1.9 downloaded successfully inside Docker to a mounted writable database directory, and a two-genome geNomad-enabled Docker run completed 16/16 processes with clean PanR2 feature-contract validation.
 - A 100-record `Klebsiella pneumoniae` large-mode Docker validation completed with the local image, producing 11,488 standardized feature rows across AMR, VFDB, PlasmidFinder, IntegronFinder, and MLST with zero unmatched, invalid, or duplicate feature rows.
 

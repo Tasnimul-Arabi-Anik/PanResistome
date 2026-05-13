@@ -172,11 +172,13 @@ nextflow run main.nf \
 ```
 
 Experimental container profiles are available for deployment testing. The Docker
-route now has local-image biological validation, including a two-genome run, a
-geNomad database/download runner test, and a 100-record Klebsiella large-mode
-run with clean PanR2 feature-contract output. The remaining deployment caveat is
-the large first GHCR pull, which started without GitHub login on the validation
-host but did not complete there because the network was slow.
+route now has local-image and GHCR-image biological validation, including a
+two-genome run, a geNomad database/download runner test, and a 100-record
+Klebsiella large-mode run with clean PanR2 feature-contract output. Singularity
+CE has also validated the GHCR image on two-genome geNomad-enabled and
+100-record large-mode biological workflows. The main deployment caveat is the
+large first GHCR pull or GHCR-to-SIF conversion; use a persistent
+`NXF_SINGULARITY_CACHEDIR` on HPC.
 
 ```bash
 python scripts/check_container_readiness.py \
@@ -186,6 +188,8 @@ python scripts/check_container_readiness.py \
   --out container_readiness.tsv
 
 # Add --pull-test to verify that the runtime can pull and execute the image.
+# For first-time Singularity/Apptainer conversion of the large all-in-one image,
+# use --pull-test-timeout 7200 or another site-appropriate timeout.
 
 nextflow run main.nf \
   --input validation/klebsiella_pneumoniae_100/ncbi_dataset.tsv \

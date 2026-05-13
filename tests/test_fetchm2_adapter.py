@@ -16,6 +16,7 @@ from panr2_contract import export_contract
 from check_genomad_readiness import resolve_database_dir
 from check_container_readiness import as_list as container_as_list
 from check_container_readiness import image_exec_command
+from check_container_readiness import parse_args as parse_container_args
 
 
 class FetchM2AdapterTests(unittest.TestCase):
@@ -43,6 +44,20 @@ class FetchM2AdapterTests(unittest.TestCase):
             image_exec_command("docker", "/usr/bin/docker", "alpine:3.19"),
             ["/usr/bin/docker", "run", "--rm", "--entrypoint", "true", "alpine:3.19"],
         )
+
+    def test_container_readiness_accepts_long_pull_test_timeout(self):
+        args = parse_container_args(
+            [
+                "--runtime",
+                "singularity",
+                "--image",
+                "docker://example/image:latest",
+                "--pull-test",
+                "--pull-test-timeout",
+                "7200",
+            ]
+        )
+        self.assertEqual(args.pull_test_timeout, 7200)
 
     def test_parses_tool_named_version_lines(self):
         self.assertEqual(
