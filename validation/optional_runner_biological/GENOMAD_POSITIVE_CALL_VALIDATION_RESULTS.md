@@ -111,3 +111,67 @@ DefenseFinder runner execution
 ```
 
 Those remain separate validation targets.
+
+## Follow-up 2-Genome Scale Check
+
+Date: 2026-05-13
+
+Purpose: confirm that the positive-call route works beyond one assembly before attempting larger geNomAD validation.
+
+Command pattern:
+
+```bash
+nextflow run main.nf \
+  --input /tmp/panresistome_genomad_positive/klebsiella_2.tsv \
+  --outdir validation_runs/genomad_positive_klebsiella_2_ghcr \
+  -profile docker,large,genomad_host \
+  --container_image ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
+  --container_run_options '-v /tmp/panresistome_genomad_db:/tmp/panresistome_genomad_db' \
+  --analysis_profile comprehensive \
+  --qc_filter true \
+  --run_gtdbtk false \
+  --run_checkm2 false \
+  --run_quast false \
+  --run_ani false \
+  --run_mash false \
+  --run_amrfinderplus false \
+  --run_abricate false \
+  --panr2_native_feature_runners false \
+  --run_genomad true \
+  --genomad_use_host_env true \
+  --genomad_db /tmp/panresistome_genomad_db/genomad_db \
+  --genomad_splits 8 \
+  --genomad_sensitivity 3.0 \
+  --threads 1 \
+  --fetchm2_download_workers 1
+```
+
+Result:
+
+```text
+Nextflow processes succeeded: 11/11
+runtime: 19m37s
+CPU hours: 1.3
+GENOMAD_PROPHAGE runtime: 14.52m
+GENOMAD_PROPHAGE max RSS: 2.8 GB
+GENOMAD_PROPHAGE max vmem: 11.4 GB
+geNomAD database status: PASS, provided/cached DB
+geNomAD samples input: 2
+geNomAD samples processed: 2
+geNomAD samples failed: 0
+geNomAD collected region rows: 6
+prophage.features.tsv rows: 6
+all_features.tsv rows: 292
+unmatched feature rows: 0
+invalid feature rows: 0
+duplicate feature rows: 0
+```
+
+Positive calls:
+
+```text
+GCF_041200225.2: 2 viral/prophage regions, 1 plasmid-like region
+GCF_041200245.2: 2 viral/prophage regions, 1 plasmid-like region
+```
+
+Interpretation: the Docker/GHCR geNomAD path is now validated for a small positive 2-genome biological run with mounted cached DB and memory-safe MMseqs splitting. The next scale step should be 5-10 genomes on a machine where a 1-2 hour optional-module validation is acceptable.

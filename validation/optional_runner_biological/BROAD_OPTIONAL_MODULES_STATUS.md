@@ -180,6 +180,21 @@ positive calls: 2 viral/prophage regions, 1 plasmid-like region
 schema unmatched/invalid/duplicate rows: 0/0/0
 ```
 
+Follow-up scale check:
+
+```text
+input: 2 Klebsiella pneumoniae genomes
+low-memory settings: --threads 1 --genomad_splits 8 --genomad_sensitivity 3.0
+Nextflow processes succeeded: 11/11
+runtime: 19m37s
+GENOMAD_PROPHAGE: PASS
+geNomAD samples processed: 2/2
+geNomAD feature rows collected: 6
+prophage.features.tsv rows: 6
+positive calls: 4 viral/prophage regions, 2 plasmid-like regions
+schema unmatched/invalid/duplicate rows: 0/0/0
+```
+
 Detailed result: `validation/optional_runner_biological/GENOMAD_POSITIVE_CALL_VALIDATION_RESULTS.md`
 
 Important lesson: default `genomad end-to-end` failed on this desktop because MMseqs `prefilter` was killed by `SIGKILL`, even at one thread. geNomAD's `--splits` option fixed this validation by reducing memory pressure. PanResistome now exposes `--genomad_splits` and `--genomad_sensitivity`.
@@ -211,7 +226,7 @@ nextflow run main.nf \
   --capture_versions false
 ```
 
-Recommended status: geNomAD can be described as opt-in runner validated for a small positive Docker/GHCR biological run with a cached/mounted DB. Keep it opt-in until 2-10 genome and larger scalability validations pass.
+Recommended status: geNomAD can be described as opt-in runner validated for small positive Docker/GHCR biological runs with a cached/mounted DB. Keep it opt-in until 5-10 genome and larger scalability validations pass.
 
 ### DefenseFinder
 
