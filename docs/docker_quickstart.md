@@ -58,6 +58,15 @@ user to the `docker` group and opening a new login session. Docker group
 membership grants broad Docker/root-equivalent access, so this should be an
 explicit administrative decision.
 
+After group membership is changed, the current shell usually still cannot use
+Docker without `sudo`. Log out and back in, or open a fresh login session, then
+rerun `docker ps`.
+
+On the PanResistome validation host, user `anik` has been added to the `docker`
+group and the Docker socket has been configured with group `docker`. A fresh
+login session is still required before normal non-sudo Docker commands inherit
+that permission.
+
 ## Main Workflow
 
 Example 100-record validation-style run:
@@ -160,7 +169,8 @@ duplicate_feature_rows=0
 
 HPC users usually prefer Singularity or Apptainer instead of Docker. The same
 GHCR image has been validated with Singularity CE for a two-genome
-geNomad-enabled workflow. Use a persistent cache before first run:
+geNomad-enabled workflow and a 100-record large-mode workflow. Use a persistent
+cache before first run:
 
 ```bash
 export NXF_SINGULARITY_CACHEDIR=/shared/cache/panresistome/singularity
@@ -178,7 +188,8 @@ The image is large; first pull can be slow.
 GTDB-Tk remains external/opt-in because its database is very large.
 ISfinder still requires a user-supplied authorized FASTA.
 CheckM2 and AMRFinderPlus work in the pipeline, but the 100-genome Docker scale validation intentionally disabled them for desktop safety.
-Normal Docker use requires Docker socket permission or sudo.
+Normal Docker use requires Docker socket permission or sudo; Docker group changes require a new login session.
+GHCR Docker is validated for two-genome geNomad biological execution; the 100-record Docker scale validation used the local image, while Singularity validated the GHCR image at 100-record scale.
 ```
 
 More detail is available in:

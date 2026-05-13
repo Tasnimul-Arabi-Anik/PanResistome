@@ -43,7 +43,16 @@ No stable SLURM profile is advertised yet. A future profile should define execut
 
 ## Container profile status
 
-Experimental Docker, Apptainer, and Singularity profiles exist for v0.4.0 deployment testing. A local Singularity fixture smoke test has passed with `docker://python:3.11-slim`, and Docker validation has passed for two-genome, geNomad-enabled, and 100-record Klebsiella workflows using the built `panresistome:experimental` image. The public GHCR image has also been pulled successfully and used for two-genome geNomad-enabled biological validation through both Docker and Singularity CE. Apptainer biological validation remains pending. On HPC, prefer Apptainer/Singularity with shared database mounts. Validate readiness before submitting a job:
+Experimental Docker, Apptainer, and Singularity profiles exist for v0.4.0
+deployment testing. A local Singularity fixture smoke test has passed with
+`docker://python:3.11-slim`, and Docker validation has passed for two-genome,
+geNomad-enabled, and 100-record Klebsiella workflows using the built
+`panresistome:experimental` image. The public GHCR image has also been pulled
+successfully and used for two-genome geNomad-enabled biological validation
+through both Docker and Singularity CE, and Singularity CE has validated the
+GHCR image on a 100-record large-mode workflow. Apptainer biological validation
+remains pending. On HPC, prefer Apptainer/Singularity with shared database
+mounts. Validate readiness before submitting a job:
 
 ```bash
 python scripts/check_container_readiness.py \
@@ -53,7 +62,10 @@ python scripts/check_container_readiness.py \
   --out container_readiness.tsv
 ```
 
-The profiles are not yet release-grade. They need a small fixture smoke test, then a real-data validation, before replacing the Conda/Mamba route in documentation.
+The profiles are still v0.4.0 deployment-stage paths rather than the only
+documented route. Docker and Singularity now have biological validation
+evidence; Apptainer still needs a small fixture smoke test and real-data
+validation before it should be advertised as validated.
 
 Add `--pull-test --pull-test-timeout 7200` on a login/development node when
 image pulls are allowed.
