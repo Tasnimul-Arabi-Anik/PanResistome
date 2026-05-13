@@ -43,7 +43,7 @@ No stable SLURM profile is advertised yet. A future profile should define execut
 
 ## Container profile status
 
-Experimental Docker, Apptainer, and Singularity profiles exist for v0.4.0 deployment testing. A local Singularity fixture smoke test has passed with `docker://python:3.11-slim`, and local Docker validation has passed for two-genome, geNomad-enabled, and 100-record Klebsiella workflows using the built `panresistome:experimental` image. Full GHCR pull and Apptainer/Singularity biological validation with the PanResistome image are still pending. On HPC, prefer Apptainer/Singularity with shared database mounts. Validate readiness before submitting a job:
+Experimental Docker, Apptainer, and Singularity profiles exist for v0.4.0 deployment testing. A local Singularity fixture smoke test has passed with `docker://python:3.11-slim`, and Docker validation has passed for two-genome, geNomad-enabled, and 100-record Klebsiella workflows using the built `panresistome:experimental` image. The public GHCR image has also been pulled successfully and used for a two-genome geNomad-enabled Docker biological validation. Apptainer/Singularity biological validation with the PanResistome image is still pending. On HPC, prefer Apptainer/Singularity with shared database mounts. Validate readiness before submitting a job:
 
 ```bash
 python scripts/check_container_readiness.py \

@@ -33,9 +33,8 @@ ghcr.io/tasnimul-arabi-anik/panresistome:experimental
 ```
 
 If the GHCR package remains public, users do not need a GitHub login to pull it.
-The validation host confirmed that unauthenticated pull starts successfully, but
-the full pull did not complete there because the image is large and the network
-was slow.
+The validation host confirmed that unauthenticated pull completes successfully,
+but the image is large and first pull can still be slow on weak networks.
 
 Pull explicitly:
 
@@ -129,9 +128,12 @@ nextflow run main.nf \
 ```
 
 The Docker geNomad path has been validated for database download, database
-mounting, runner execution, and clean PanR2 feature-contract export. The small
-two-genome validation produced a header-only `prophage.features.tsv`, so a
-prophage-rich dataset is still needed to validate positive prophage calls.
+mounting, runner execution, and clean PanR2 feature-contract export. The pulled
+GHCR image also completed a two-genome geNomad-enabled biological run with 286
+standardized feature rows and zero unmatched, invalid, or duplicate feature
+rows. The small two-genome validation produced a header-only
+`prophage.features.tsv`, so a prophage-rich dataset is still needed to validate
+positive prophage calls.
 
 ## Output To Check
 

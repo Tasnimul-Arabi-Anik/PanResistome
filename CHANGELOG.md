@@ -25,6 +25,7 @@
 - A dedicated `panr2_container_env` for the all-in-one image, keeping PanR2/ABRicate/IntegronFinder/MLST separate from MobileElementFinder.
 - A dedicated `mobileelementfinder_env` for the all-in-one image, using the actual `mefinder` CLI and pinning `setuptools<81` for upstream `pkg_resources` compatibility.
 - A Docker quickstart at `docs/docker_quickstart.md`, covering GHCR image use, Docker permissions, large-image caveats, geNomad database mounts, and the validated 100-record Docker command.
+- GHCR Docker remote-user validation evidence showing the public image can be pulled without GitHub login and can complete a two-genome geNomad-enabled biological workflow with clean PanR2 feature-contract output.
 
 ### Changed
 - PanR2 handoff export now applies configured feature caps to presence/absence matrices and co-occurrence/proximity summaries, preserves complete proximity evidence as `feature_proximity_all.tsv`, and surfaces report-control settings in `panr2_inputs/report/report_controls.html`.
@@ -54,7 +55,7 @@
 - Docker, Apptainer, and Singularity profiles now bind the repository path by default so helper scripts referenced through `${baseDir}` are visible inside containers.
 - The experimental Dockerfile now creates tool environments in separate layers, making rebuilds less fragile when one optional environment changes.
 - The optional runtime/resource summary hook now prefers `python3` and falls back to `python`, avoiding host-side summary warnings on systems without a `python` executable.
-- README, container, HPC, troubleshooting, optional-module, and database automation docs now reflect the completed Docker biological, 100-record, and geNomad database-download validations.
+- README, container, HPC, troubleshooting, optional-module, and database automation docs now reflect the completed Docker biological, 100-record, geNomad database-download, and GHCR-image biological validations.
 
 ### Tested
 - Synthetic PanR2 contract tests now cover optional table-input exports for MobileElementFinder, ISfinder, MOB-suite, prophage/geNomad, DefenseFinder, Kleborate, Kaptive, ECTyper, SerotypeFinder, and SCCmecFinder.
@@ -72,7 +73,8 @@
 - The local `panresistome:experimental` image completed the Nextflow `test,docker` profile with work and output directories under `/tmp`.
 - The GHCR container workflow now smoke-tests the published image after build by checking the main tool entry points and runtime startup for MobileElementFinder, geNomad, MOB-suite, ECTyper, and PanR2.
 - A two-genome `Klebsiella pneumoniae` biological validation completed through the Docker profile with the local `panresistome:experimental` image, producing 286 standardized feature rows across AMR, VFDB, PlasmidFinder, and MLST with zero unmatched, invalid, or duplicate feature rows.
-- An unauthenticated GHCR pull for `ghcr.io/tasnimul-arabi-anik/panresistome:experimental` started successfully without a GitHub login, but the full pull was stopped on this machine because the large image download was too slow.
+- An unauthenticated GHCR pull for `ghcr.io/tasnimul-arabi-anik/panresistome:experimental` completed successfully without a GitHub login on the validation host.
+- The pulled GHCR image completed a two-genome geNomad-enabled Docker biological validation in 7m21s with 16/16 Nextflow processes succeeded, 286 standardized feature rows, zero unmatched/invalid/duplicate feature rows, ABRicate setup PASS, geNomad database setup PASS, and PanR2 handoff reports generated.
 - geNomad database v1.9 downloaded successfully inside Docker to a mounted writable database directory, and a two-genome geNomad-enabled Docker run completed 16/16 processes with clean PanR2 feature-contract validation.
 - A 100-record `Klebsiella pneumoniae` large-mode Docker validation completed with the local image, producing 11,488 standardized feature rows across AMR, VFDB, PlasmidFinder, IntegronFinder, and MLST with zero unmatched, invalid, or duplicate feature rows.
 

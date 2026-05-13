@@ -8,8 +8,8 @@ deployment blockers honestly.
 
 ## Summary
 
-The Docker route is now biologically functional with the local
-`panresistome:experimental` image:
+The Docker route is now biologically functional with both the local
+`panresistome:experimental` image and the pulled GHCR image:
 
 ```text
 Docker test profile: PASS
@@ -18,7 +18,8 @@ geNomad database download inside Docker: PASS
 Two-genome geNomad Docker biological run: PASS
 100-record Klebsiella Docker large-mode run: PASS
 GHCR unauthenticated pull starts: PASS
-GHCR full pull on this machine: NOT COMPLETED, network/image-size limited
+GHCR full pull on this machine: PASS
+Two-genome GHCR geNomad Docker biological run: PASS
 Normal non-sudo Docker on this machine: NOT READY, user is not in docker group
 ```
 
@@ -44,7 +45,7 @@ owner or administrator.
 
 ## GHCR Pull Status
 
-Command attempted:
+Command:
 
 ```bash
 sudo docker pull ghcr.io/tasnimul-arabi-anik/panresistome:experimental
@@ -54,14 +55,90 @@ Result:
 
 ```text
 Authentication/visibility: PASS, pull started without GitHub login.
-Full pull: NOT COMPLETED on this machine.
-Observed bottleneck: large image layers downloaded very slowly.
+Full pull: PASS on this machine.
+Image ID: sha256:66da115ec47fbb91d56a0773ebe054c5d3aac0c3aaa200a1b05e228bf655c7ca
+Image size: 7.45 GB
 ```
 
-Interpretation: GHCR package visibility was not the blocker in this attempt.
-The remaining issue is first-pull size and network speed. Remote users on good
-networks should not need to log in if the GHCR package remains public, but the
-image is large enough that first pull can be slow.
+Interpretation: GHCR package visibility and image pull are validated for the
+experimental image. Remote users should not need to log in if the GHCR package
+remains public, but the image is large enough that first pull can still be slow
+on weak networks.
+
+## Two-Genome geNomad GHCR Docker Biological Run
+
+Command:
+
+```bash
+sudo nextflow run main.nf \
+  --input /tmp/klebsiella_2_container_ncbi_dataset.tsv \
+  --outdir /tmp/panresistome_klebsiella_2_ghcr_genomad \
+  -profile docker,large \
+  --container_image ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
+  --container_run_options '-v /tmp/panresistome_genomad_db:/tmp/panresistome_genomad_db' \
+  --analysis_profile comprehensive \
+  --qc_filter true \
+  --run_gtdbtk false \
+  --run_checkm2 false \
+  --run_quast false \
+  --run_ani true \
+  --run_mash true \
+  --run_amrfinderplus false \
+  --run_genomad true \
+  --genomad_use_host_env true \
+  --genomad_db /tmp/panresistome_genomad_db/genomad_db \
+  --panr2_native_feature_runners true \
+  --panr2_native_feature_runner_mode parallel \
+  --threads 4 \
+  --fetchm2_download_workers 2 \
+  -w /tmp/panresistome_klebsiella_2_ghcr_genomad_work
+```
+
+Result:
+
+```text
+Runtime: 7m21s
+CPU hours: 0.6
+Nextflow processes: 16/16 succeeded
+Downloaded genomes: 2
+QC PASS: 2
+Feature rows: 286
+Feature tables checked: 5
+Databases with standardized feature rows: amr, mlst, plasmidfinder, vfdb
+Unmatched feature rows: 0
+Invalid feature rows: 0
+Duplicate feature rows: 0
+ABRicate database setup/status: PASS
+geNomad database setup/status: PASS
+PanR2 handoff report: generated
+Runtime/resource summary: generated
+```
+
+Runtime/resource observations:
+
+```text
+GENOMAD_PROPHAGE: 3.90m, peak RSS 2.7 GiB, peak VMEM 23.5 GiB
+PANR2_FEATURE_RUNNERS: 2.02m, peak RSS 0.62 GiB, peak VMEM 10.9 GiB
+PANR2_COMPREHENSIVE: 40.80s, peak RSS 0.416 GiB, peak VMEM 3.9 GiB
+```
+
+Feature table result:
+
+```text
+amr.features.tsv: 9 rows
+mlst.features.tsv: 34 rows
+plasmidfinder.features.tsv: 3 rows
+prophage.features.tsv: header-only, 0 biological prophage rows
+vfdb.features.tsv: 240 rows
+all_features.tsv: 286 rows
+```
+
+Interpretation: the pulled GHCR image can execute the real Nextflow Docker
+profile, use a mounted geNomad database, run geNomad, run native feature
+runners, export PanR2-compatible standardized feature tables, and generate clean
+schema validation. As with the local-image geNomad run, these two Klebsiella
+genomes did not yield standardized prophage feature rows, so positive geNomad
+feature validation still needs a prophage-rich dataset.
 
 ## geNomad Docker Database Download
 

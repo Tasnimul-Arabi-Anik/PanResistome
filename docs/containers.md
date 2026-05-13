@@ -1,6 +1,6 @@
 # Container execution notes
 
-PanResistome currently ships validated Conda/Mamba workflows. Docker and Apptainer/Singularity profiles are present as v0.4.0 deployment scaffolding. A Singularity fixture smoke test has passed, a local Docker build/runtime smoke test of the experimental all-in-one image passes, a two-genome Klebsiella biological run completed through the Docker profile with the local image, geNomad database download and runner execution now work through Docker with a mounted database path, and a 100-record Klebsiella large-mode Docker run completed with clean PanR2 feature-contract output. Full remote pull validation of the GHCR image is still pending because the public pull was network-limited on this machine.
+PanResistome currently ships validated Conda/Mamba workflows. Docker and Apptainer/Singularity profiles are present as v0.4.0 deployment scaffolding. A Singularity fixture smoke test has passed, a local Docker build/runtime smoke test of the experimental all-in-one image passes, a two-genome Klebsiella biological run completed through the Docker profile with the local image, geNomad database download and runner execution work through Docker with a mounted database path, a 100-record Klebsiella large-mode Docker run completed with clean PanR2 feature-contract output, and the public GHCR image has now completed a pull plus two-genome geNomad-enabled biological validation. Apptainer/Singularity biological validation with the PanResistome image is still pending.
 
 ## Design goal
 
@@ -74,8 +74,8 @@ The scaffold, Singularity fixture-smoke, Docker biological, geNomad Docker, and 
 
 1. Keep the existing `-profile test` workflow working without containers.
 2. Small Singularity fixture smoke test for local fixtures. Completed with `docker://python:3.11-slim`.
-3. Build or publish a PanResistome image with the real tool stack. Local Docker build/runtime sanity has passed.
-4. Validate the standard comprehensive command without GTDB-Tk through a normal user Docker/Apptainer profile. Two-genome and 100-record biological Docker runs with the local image have passed; a normal-user run still needs local Docker socket permissions or an Apptainer/Singularity route.
+3. Build or publish a PanResistome image with the real tool stack. Local Docker build/runtime sanity has passed, and the GHCR image can be pulled and executed.
+4. Validate the standard comprehensive command without GTDB-Tk through a normal user Docker/Apptainer profile. Two-genome and 100-record biological Docker runs with the local image have passed, and a two-genome geNomad-enabled run has passed with the pulled GHCR image. A normal-user run still needs local Docker socket permissions or an Apptainer/Singularity route.
 5. Document database mounts for CheckM2 and optional heavy databases.
 6. Only then advertise Docker/Apptainer profiles as supported.
 
@@ -85,7 +85,7 @@ The current GHCR image name is:
 ghcr.io/tasnimul-arabi-anik/panresistome:experimental
 ```
 
-An unauthenticated `docker pull` started successfully on 2026-05-12, which means a GitHub login was not required at the start of the pull. The full pull was stopped on this machine because the network was too slow for the large image. If users see `DENIED`, the GHCR package visibility should be checked in GitHub package settings.
+An unauthenticated `docker pull` completed successfully on 2026-05-13, which means a GitHub login was not required for the public experimental image on the validation host. If users see `DENIED`, the GHCR package visibility should be checked in GitHub package settings.
 
 Normal non-sudo Docker is not ready on the validation host because the current
 user is not in the `docker` group. Docker group membership grants broad

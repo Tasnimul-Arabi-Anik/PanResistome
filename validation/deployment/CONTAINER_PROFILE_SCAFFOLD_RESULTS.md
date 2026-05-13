@@ -387,18 +387,20 @@ Interpretation: the geNomad Docker runner, database mount, PanR2 handoff, and
 feature-contract path are valid. Positive geNomad biological feature calls still
 need a prophage-rich validation dataset.
 
-## GHCR Public Pull Attempt
+## GHCR Public Pull Status
 
-An unauthenticated public pull was attempted:
+An unauthenticated public pull was initially attempted:
 
 ```bash
 sudo docker pull ghcr.io/tasnimul-arabi-anik/panresistome:experimental
 ```
 
-The pull started successfully and downloaded layers without requiring a GitHub
-login, so authentication was not the observed blocker. The pull was stopped
-because the network was too slow for the large image on this machine. Full
-remote pull validation remains open.
+The initial pull started successfully and downloaded layers without requiring a
+GitHub login, so authentication was not the observed blocker. The pull was later
+rerun to completion on 2026-05-13, and the pulled GHCR image completed a
+two-genome geNomad-enabled Docker biological validation. The detailed remote
+Docker validation result is recorded in
+`validation/deployment/DOCKER_REMOTE_USER_VALIDATION_RESULTS.md`.
 
 Important observations:
 
