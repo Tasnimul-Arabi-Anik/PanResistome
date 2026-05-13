@@ -18,6 +18,7 @@
 - A database automation matrix documenting which databases are automatic, opt-in, path-required, restricted, or still validation targets.
 - Audited MOB-suite database cache helpers through `--mobsuite_db_dir`, `--mobsuite_auto_init_db`, `--mobsuite_auto_init_taxa`, and `mobsuite/mobsuite_database_setup_status.tsv`.
 - Audited geNomad database download/cache helpers through `--genomad_db_dir`, `--genomad_auto_download_db`, and `prophage/genomad_database_setup_status.tsv`.
+- Bounded per-genome geNomad parallelism through `--genomad_jobs`, `--genomad_threads_per_sample`, and `--genomad_reuse_existing`, with per-sample audit output in `prophage/genomad_sample_status.tsv`.
 - `--panr2_mobileelementfinder_allow_failure` to keep opt-in MobileElementFinder failures nonfatal while preserving module/audit status.
 - A reproducible optional-feature analysis validator at `scripts/validate_optional_feature_analysis.py`, with validation evidence under `validation/optional_feature_analysis/`.
 - Experimental all-in-one container image scaffold under `containers/Dockerfile`, plus `.dockerignore` and a GHCR build workflow at `.github/workflows/container.yml`.

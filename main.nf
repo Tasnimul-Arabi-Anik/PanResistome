@@ -129,6 +129,9 @@ params.genomad_auto_download_db = true
 params.genomad_use_host_env = false
 params.genomad_splits = null
 params.genomad_sensitivity = null
+params.genomad_jobs = null
+params.genomad_threads_per_sample = 1
+params.genomad_reuse_existing = true
 params.run_organism_specific_typing = false
 params.run_kleborate = false
 params.kleborate_dir = null
@@ -447,6 +450,9 @@ def helpMessage() {
       --genomad_use_host_env   Do not create the geNomad Conda env; use a prebuilt host/container geNomad executable [default: false]
       --genomad_splits         Split geNomad/MMseqs searches to reduce memory usage; higher is slower but safer [default: geNomad default]
       --genomad_sensitivity    geNomAD/MMseqs marker-search sensitivity; lower can reduce memory/time [default: geNomad default]
+      --genomad_jobs           Parallel geNomad sample jobs inside GENOMAD_PROPHAGE [default: min(--threads, 2)]
+      --genomad_threads_per_sample Threads used by each geNomad sample job [default: 1]
+      --genomad_reuse_existing Reuse existing non-empty per-sample geNomad summaries on resumed/interrupted runs [default: true]
       --run_organism_specific_typing Run organism-specific typing helpers where applicable [default: false]
       --run_kleborate          Run Kleborate and pass outputs to PanR2 [default: false]
       --kleborate_dir          Existing Kleborate table directory to pass into PanR2
@@ -1929,6 +1935,9 @@ process GENOMAD_PROPHAGE {
         genomadExtraArgs << "--sensitivity ${params.genomad_sensitivity}"
     }
     def genomadExtraArgString = genomadExtraArgs.join(' ')
+    def genomadJobs = params.genomad_jobs ? params.genomad_jobs as int : Math.min(params.threads as int, 2)
+    def genomadThreadsPerSample = params.genomad_threads_per_sample ? params.genomad_threads_per_sample as int : 1
+    def genomadReuseExisting = params.genomad_reuse_existing
     """
     sequence_dir="${sample_dir}/sequence"
     if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
@@ -1937,7 +1946,9 @@ process GENOMAD_PROPHAGE {
 
     mkdir -p ${sample_dir}/prophage/raw ${sample_dir}/prophage/tables
     status_file=${sample_dir}/prophage/module_status.tsv
+    sample_status_file=${sample_dir}/prophage/genomad_sample_status.tsv
     printf "module\\tenabled\\tstarted\\tcompleted\\tstatus\\tsamples_input\\tsamples_processed\\tsamples_failed\\traw_tables_created\\tfeature_rows_created\\tunique_features_created\\toutput_dir\\tmessage\\n" > "\${status_file}"
+    printf "sample_id\\tstatus\\tseconds\\toutput_dir\\tmessage\\n" > "\${sample_status_file}"
     started=\$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     python ${baseDir}/scripts/setup_genomad_database.py \\
         --db-dir ${shellQuote(genomadDbPath)} \\
@@ -1951,16 +1962,43 @@ process GENOMAD_PROPHAGE {
     if [ "\${db_setup_status}" = "FAIL" ]; then
         echo "geNomad database setup failed; inspect ${sample_dir}/prophage/genomad_database_setup_status.tsv." > ${sample_dir}/prophage/tables/genomad_warning.txt
     elif command -v genomad >/dev/null 2>&1 && [ -d "\${sequence_dir}" ]; then
+        genomad_jobs=${genomadJobs}
+        if [ "\${genomad_jobs}" -lt 1 ]; then
+            genomad_jobs=1
+        fi
+        run_genomad_one() {
+            fasta="\$1"
+            prefix=\$(basename "\${fasta}" .fna)
+            outdir="${sample_dir}/prophage/raw/\${prefix}"
+            start_epoch=\$(date +%s)
+            mkdir -p "\${outdir}"
+            if [ "${genomadReuseExisting}" = "true" ] && find "\${outdir}" -name "*_summary.tsv" -size +0 -print -quit | grep -q .; then
+                seconds=\$((\$(date +%s) - start_epoch))
+                printf "%s\\tPASS_REUSED\\t%s\\t%s\\t%s\\n" "\${prefix}" "\${seconds}" "\${outdir}" "existing geNomad summary reused" >> "\${sample_status_file}"
+            elif genomad end-to-end "\${fasta}" "\${outdir}" "\${genomad_db_path}" --threads ${genomadThreadsPerSample} ${genomadExtraArgString}; then
+                seconds=\$((\$(date +%s) - start_epoch))
+                printf "%s\\tPASS\\t%s\\t%s\\t%s\\n" "\${prefix}" "\${seconds}" "\${outdir}" "geNomad completed" >> "\${sample_status_file}"
+            else
+                seconds=\$((\$(date +%s) - start_epoch))
+                printf "%s\\tFAIL\\t%s\\t%s\\t%s\\n" "\${prefix}" "\${seconds}" "\${outdir}" "geNomad failed; inspect raw output/logs" >> "\${sample_status_file}"
+            fi
+        }
+        active_jobs=0
         for fasta in \$(find "\${sequence_dir}" -name "*.fna" | sort); do
             samples_input=\$((samples_input + 1))
-            prefix=\$(basename "\${fasta}" .fna)
-            mkdir -p "${sample_dir}/prophage/raw/\${prefix}"
-            if genomad end-to-end "\${fasta}" "${sample_dir}/prophage/raw/\${prefix}" "\${genomad_db_path}" --threads ${params.threads} ${genomadExtraArgString}; then
-                samples_processed=\$((samples_processed + 1))
-            else
-                samples_failed=\$((samples_failed + 1))
+            run_genomad_one "\${fasta}" &
+            active_jobs=\$((active_jobs + 1))
+            if [ "\${active_jobs}" -ge "\${genomad_jobs}" ]; then
+                wait -n || true
+                active_jobs=\$((active_jobs - 1))
             fi
         done
+        while [ "\${active_jobs}" -gt 0 ]; do
+            wait -n || true
+            active_jobs=\$((active_jobs - 1))
+        done
+        samples_processed=\$(awk -F '\\t' 'NR > 1 && (\$2 == "PASS" || \$2 == "PASS_REUSED") {count++} END {print count + 0}' "\${sample_status_file}" 2>/dev/null || echo 0)
+        samples_failed=\$(awk -F '\\t' 'NR > 1 && \$2 == "FAIL" {count++} END {print count + 0}' "\${sample_status_file}" 2>/dev/null || echo 0)
     else
         echo "geNomad executable was not available or no sequence directory was found." > ${sample_dir}/prophage/tables/genomad_warning.txt
     fi

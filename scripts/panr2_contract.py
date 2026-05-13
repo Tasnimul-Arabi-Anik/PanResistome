@@ -831,6 +831,12 @@ def discover_raw_feature_databases(sample_dir: Path) -> set[str]:
     ]
     if any(path.exists() and any(child.is_file() for child in path.rglob("*")) for path in mlst_dirs):
         raw_databases.add("mlst")
+    integronfinder_dirs = [
+        sample_dir / "integronfinder",
+        sample_dir / "tool_results" / "integronfinder",
+    ]
+    if any(path.exists() and any(child.is_file() for child in path.rglob("*")) for path in integronfinder_dirs):
+        raw_databases.add("integronfinder")
     for database in OPTIONAL_TABLE_DATABASES:
         dirs = [
             sample_dir / database,

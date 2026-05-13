@@ -509,6 +509,9 @@ PanResistome/
 | `--genomad_use_host_env` | bool | false | Use a prebuilt host/container `genomad` executable instead of creating the geNomad Conda env; also available as `-profile genomad_host` |
 | `--genomad_splits` | int | geNomad default | Split geNomad/MMseqs searches to reduce memory usage; try `--genomad_splits 8` or higher if MMseqs is killed |
 | `--genomad_sensitivity` | float | geNomad default | geNomad/MMseqs marker-search sensitivity; lower values can reduce memory/time at the cost of sensitivity |
+| `--genomad_jobs` | int | `min(--threads, 2)` | Parallel geNomad sample jobs inside the `GENOMAD_PROPHAGE` process |
+| `--genomad_threads_per_sample` | int | 1 | Threads used by each geNomAD sample job; keep this low when running multiple jobs |
+| `--genomad_reuse_existing` | bool | true | Reuse non-empty per-sample geNomad summary outputs on resumed/interrupted runs |
 | `--container_image` | path/image | - | Experimental image used by `docker`, `apptainer`, or `singularity` profiles |
 | `--container_run_options` | str | - | Extra runtime options passed to Docker/Apptainer/Singularity profiles |
 | `--run_organism_specific_typing` | bool | false | Run available organism-specific typing helpers |

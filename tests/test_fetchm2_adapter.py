@@ -283,6 +283,27 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertEqual(set(present["status"]), {"WARNING_EMPTY"})
             self.assertEqual(set(present["feature_table_found"]), {True})
 
+    def test_integronfinder_raw_output_without_features_creates_header_only_table(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_dir = Path(tmpdir) / "Klebsiella_pneumoniae"
+            metadata_dir = sample_dir / "metadata_output"
+            raw_dir = sample_dir / "tool_results" / "integronfinder" / "panr2_inputs"
+            metadata_dir.mkdir(parents=True)
+            raw_dir.mkdir(parents=True)
+            pd.DataFrame(
+                [{"Assembly Accession": "GCF_000000001.1", "Organism Name": "Klebsiella pneumoniae"}]
+            ).to_csv(metadata_dir / "ncbi_clean.csv", index=False)
+            (raw_dir / "integronfinder_summary.tab").write_text("sample_id\tstatus\n", encoding="utf-8")
+
+            outputs = export_contract(sample_dir, sample_dir / "panr2_inputs")
+            self.assertIn("integronfinder", outputs)
+            table = pd.read_csv(outputs["integronfinder"], sep="\t")
+            self.assertEqual(len(table), 0)
+
+            audit = pd.read_csv(outputs["feature_completeness_audit"], sep="\t")
+            status = audit.loc[audit["database"] == "integronfinder", "status"].iloc[0]
+            self.assertEqual(status, "WARNING_EMPTY")
+
     def test_genomad_summary_collection_exports_clean_region_features(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             sample_dir = Path(tmpdir) / "Klebsiella_pneumoniae"

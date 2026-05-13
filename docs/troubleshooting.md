@@ -227,6 +227,22 @@ way to split MMseqs searches and lower memory use. Higher values are slower.
 Lower `--genomad_sensitivity` can reduce memory/time, but may reduce marker
 detection sensitivity.
 
+For multiple genomes, PanResistome can run several one-thread geNomad jobs at
+the same time. This usually improves wall time more safely than giving one
+geNomad job many threads:
+
+```bash
+--run_genomad true \
+--threads 2 \
+--genomad_jobs 2 \
+--genomad_threads_per_sample 1 \
+--genomad_splits 8 \
+--genomad_sensitivity 3.0
+```
+
+On memory-constrained desktops, increase `--genomad_jobs` slowly. The per-sample
+audit table is written to `prophage/genomad_sample_status.tsv`.
+
 ## Report Has Too Many Features
 
 Use the large-dataset report safeguards first. Complete TSV outputs are still written, but report-facing matrices and co-occurrence summaries are capped:

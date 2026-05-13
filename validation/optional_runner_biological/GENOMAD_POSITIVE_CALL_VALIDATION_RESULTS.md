@@ -175,3 +175,84 @@ GCF_041200245.2: 2 viral/prophage regions, 1 plasmid-like region
 ```
 
 Interpretation: the Docker/GHCR geNomAD path is now validated for a small positive 2-genome biological run with mounted cached DB and memory-safe MMseqs splitting. The next scale step should be 5-10 genomes on a machine where a 1-2 hour optional-module validation is acceptable.
+
+## Follow-up 2-Genome Parallel geNomAD Check
+
+Date: 2026-05-13
+
+Purpose: test whether bounded per-genome geNomAD parallelism can reduce wall time without changing the PanR2 feature contract.
+
+Command pattern:
+
+```bash
+nextflow run main.nf \
+  --input /tmp/panresistome_genomad_positive/klebsiella_2.tsv \
+  --outdir validation_runs/genomad_parallel_klebsiella_2_ghcr \
+  -profile docker,large,genomad_host \
+  --container_image ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
+  --container_run_options '-v /tmp/panresistome_genomad_db:/tmp/panresistome_genomad_db' \
+  --analysis_profile comprehensive \
+  --qc_filter true \
+  --run_gtdbtk false \
+  --run_checkm2 false \
+  --run_quast false \
+  --run_ani false \
+  --run_mash false \
+  --run_amrfinderplus false \
+  --run_abricate false \
+  --panr2_native_feature_runners false \
+  --run_genomad true \
+  --genomad_use_host_env true \
+  --genomad_db /tmp/panresistome_genomad_db/genomad_db \
+  --genomad_splits 8 \
+  --genomad_sensitivity 3.0 \
+  --genomad_jobs 2 \
+  --genomad_threads_per_sample 1 \
+  --threads 2 \
+  --fetchm2_download_workers 1
+```
+
+Fresh parallel result:
+
+```text
+Nextflow processes succeeded: 11/11
+runtime: 14m45s
+CPU hours: 0.9
+GENOMAD_PROPHAGE runtime: 11.28m
+GENOMAD_PROPHAGE max RSS: 5.6 GB
+GENOMAD_PROPHAGE max vmem: 21.8 GB
+geNomAD samples input: 2
+geNomAD samples processed: 2
+geNomAD samples failed: 0
+geNomAD collected region rows: 6
+prophage.features.tsv rows: 6
+all_features.tsv rows: 292
+unmatched feature rows: 0
+invalid feature rows: 0
+duplicate feature rows: 0
+```
+
+Per-sample audit:
+
+```text
+GCF_041200225.2_ASM4120022v2_genomic: PASS, 677 seconds
+GCF_041200245.2_ASM4120024v2_genomic: PASS, 676 seconds
+```
+
+Resume behavior:
+
+```text
+--genomad_reuse_existing true
+genomad_sample_status.tsv records PASS_REUSED for existing non-empty per-sample summaries
+GENOMAD_PROPHAGE resume runtime: 0.10s
+```
+
+Interpretation: parallelism worked, but it is not free. Two concurrent one-thread geNomAD jobs reduced total wall time from 19m37s to 14m45s and reduced `GENOMAD_PROPHAGE` from 14.52m to 11.28m, while roughly doubling peak RSS from 2.8 GB to 5.6 GB and peak vmem from 11.4 GB to 21.8 GB. The practical recommendation is:
+
+```text
+16 GB desktop: --genomad_jobs 1 or 2, --genomad_threads_per_sample 1
+32 GB workstation: --genomad_jobs 2-4, --genomad_threads_per_sample 1
+HPC/container node: increase --genomad_jobs gradually after checking trace memory
+```
+
+PanResistome now writes `prophage/genomad_sample_status.tsv` so users can see which per-genome geNomAD jobs passed, failed, or were reused.
