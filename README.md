@@ -507,6 +507,8 @@ PanResistome/
 | `--genomad_db_dir` | path | `<outdir>/databases/genomad` | geNomad database download/cache directory when `--genomad_db` is not supplied |
 | `--genomad_auto_download_db` | bool | true | Run `genomad download-database` into `--genomad_db_dir` when `--run_genomad true` and no `--genomad_db` is supplied |
 | `--genomad_use_host_env` | bool | false | Use a prebuilt host/container `genomad` executable instead of creating the geNomad Conda env; also available as `-profile genomad_host` |
+| `--genomad_splits` | int | geNomad default | Split geNomad/MMseqs searches to reduce memory usage; try `--genomad_splits 8` or higher if MMseqs is killed |
+| `--genomad_sensitivity` | float | geNomad default | geNomad/MMseqs marker-search sensitivity; lower values can reduce memory/time at the cost of sensitivity |
 | `--container_image` | path/image | - | Experimental image used by `docker`, `apptainer`, or `singularity` profiles |
 | `--container_run_options` | str | - | Extra runtime options passed to Docker/Apptainer/Singularity profiles |
 | `--run_organism_specific_typing` | bool | false | Run available organism-specific typing helpers |

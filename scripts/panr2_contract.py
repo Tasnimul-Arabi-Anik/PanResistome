@@ -848,6 +848,7 @@ def optional_table_paths(sample_dir: Path) -> list[Path]:
     paths: list[Path] = []
     skip_suffixes = {
         "_collection_status.tsv",
+        "_database_setup_status.tsv",
         "_warning.txt",
         "module_status.tsv",
         "all_features.tsv",
@@ -863,7 +864,11 @@ def optional_table_paths(sample_dir: Path) -> list[Path]:
             for path in sorted(directory.rglob("*")):
                 if not path.is_file() or path.suffix.lower() not in {".tsv", ".tab", ".csv"}:
                     continue
+                if any(part in {"analysis", "figures", "merged_output", "panr2_inputs", "raw"} for part in path.parts):
+                    continue
                 if any(path.name.endswith(suffix) for suffix in skip_suffixes):
+                    continue
+                if path.name.endswith("_tidy.csv"):
                     continue
                 if path.name.endswith(".features.tsv"):
                     continue
@@ -879,7 +884,7 @@ def discover_feature_rows(sample_dir: Path) -> list[dict[str, str]]:
     for path in sorted(sample_dir.rglob("*_results.*")):
         if path.suffix.lower() not in {".tab", ".tsv", ".csv"}:
             continue
-        if "panr2_inputs" in path.parts and "features" in path.parts:
+        if any(part in {"analysis", "figures", "merged_output", "panr2_inputs"} for part in path.parts):
             continue
         resolved = path.resolve()
         if resolved in seen_paths:

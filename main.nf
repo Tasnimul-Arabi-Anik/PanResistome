@@ -127,6 +127,8 @@ params.genomad_db = null
 params.genomad_db_dir = null
 params.genomad_auto_download_db = true
 params.genomad_use_host_env = false
+params.genomad_splits = null
+params.genomad_sensitivity = null
 params.run_organism_specific_typing = false
 params.run_kleborate = false
 params.kleborate_dir = null
@@ -443,6 +445,8 @@ def helpMessage() {
       --genomad_db_dir         geNomad database download/cache directory when --genomad_db is not supplied [default: <outdir>/databases/genomad]
       --genomad_auto_download_db Download geNomad database into --genomad_db_dir when --run_genomad true and --genomad_db is not supplied [default: true]
       --genomad_use_host_env   Do not create the geNomad Conda env; use a prebuilt host/container geNomad executable [default: false]
+      --genomad_splits         Split geNomad/MMseqs searches to reduce memory usage; higher is slower but safer [default: geNomad default]
+      --genomad_sensitivity    geNomAD/MMseqs marker-search sensitivity; lower can reduce memory/time [default: geNomad default]
       --run_organism_specific_typing Run organism-specific typing helpers where applicable [default: false]
       --run_kleborate          Run Kleborate and pass outputs to PanR2 [default: false]
       --kleborate_dir          Existing Kleborate table directory to pass into PanR2
@@ -1917,6 +1921,14 @@ process GENOMAD_PROPHAGE {
     script:
     def genomadDbPath = effectiveGenomadDbPath()
     def genomadAutoDownload = params.genomad_db ? "false" : params.genomad_auto_download_db
+    def genomadExtraArgs = []
+    if (params.genomad_splits != null && params.genomad_splits.toString().trim()) {
+        genomadExtraArgs << "--splits ${params.genomad_splits}"
+    }
+    if (params.genomad_sensitivity != null && params.genomad_sensitivity.toString().trim()) {
+        genomadExtraArgs << "--sensitivity ${params.genomad_sensitivity}"
+    }
+    def genomadExtraArgString = genomadExtraArgs.join(' ')
     """
     sequence_dir="${sample_dir}/sequence"
     if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
@@ -1943,7 +1955,7 @@ process GENOMAD_PROPHAGE {
             samples_input=\$((samples_input + 1))
             prefix=\$(basename "\${fasta}" .fna)
             mkdir -p "${sample_dir}/prophage/raw/\${prefix}"
-            if genomad end-to-end "\${fasta}" "${sample_dir}/prophage/raw/\${prefix}" "\${genomad_db_path}" --threads ${params.threads}; then
+            if genomad end-to-end "\${fasta}" "${sample_dir}/prophage/raw/\${prefix}" "\${genomad_db_path}" --threads ${params.threads} ${genomadExtraArgString}; then
                 samples_processed=\$((samples_processed + 1))
             else
                 samples_failed=\$((samples_failed + 1))

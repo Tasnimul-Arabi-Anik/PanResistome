@@ -211,6 +211,22 @@ completed a two-genome geNomad-enabled biological run with clean PanR2
 feature-contract validation. For practical use, prefer Docker/Apptainer, a
 cached Conda environment, or an explicitly supplied `--genomad_db`.
 
+If `GENOMAD_PROPHAGE` reaches the geNomad command but per-sample logs show
+MMseqs `prefilter` killed by `SIGKILL`, reduce memory pressure before increasing
+sample count:
+
+```bash
+--run_genomad true \
+--threads 1 \
+--genomad_splits 8 \
+--genomad_sensitivity 3.0
+```
+
+`--genomad_splits` is the preferred first knob because geNomad documents it as a
+way to split MMseqs searches and lower memory use. Higher values are slower.
+Lower `--genomad_sensitivity` can reduce memory/time, but may reduce marker
+detection sensitivity.
+
 ## Report Has Too Many Features
 
 Use the large-dataset report safeguards first. Complete TSV outputs are still written, but report-facing matrices and co-occurrence summaries are capped:

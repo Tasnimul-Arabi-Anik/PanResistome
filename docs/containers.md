@@ -9,7 +9,8 @@ geNomad database download and runner execution work through Docker with a
 mounted database path, a 100-record Klebsiella large-mode Docker run completed
 with the local image and clean PanR2 feature-contract output, the public GHCR
 image has completed an unauthenticated Docker pull plus two-genome
-geNomad-enabled biological validation, and Singularity CE has completed GHCR
+geNomad-enabled biological validation and a one-genome geNomAD positive-call
+validation with low-memory `--genomad_splits`, and Singularity CE has completed GHCR
 pull/exec validation plus two-genome geNomad-enabled and 100-record large-mode
 biological validations. Apptainer validation remains pending, but the Apptainer
 profile now follows the same read-only database defaults as Singularity.
@@ -20,9 +21,9 @@ profile now follows the same read-only database defaults as Singularity.
 | --- | --- | --- | --- |
 | Conda/Mamba | Local environments | Validated | Default public route for non-container runs. |
 | Docker, local image | `panresistome:experimental` | Validated for two-genome and 100-record Klebsiella biological runs | Proves the image contents and Docker profile can run the biological workflow. |
-| Docker, GHCR image | `ghcr.io/tasnimul-arabi-anik/panresistome:experimental` | Validated for unauthenticated pull, two-genome geNomad-enabled biological run, and 100-record large-mode biological run | The 100-record run completed 12/12 processes in 21m35s with 11,488 standardized feature rows and zero unmatched, invalid, or duplicate feature rows. |
+| Docker, GHCR image | `ghcr.io/tasnimul-arabi-anik/panresistome:experimental` | Validated for unauthenticated pull, two-genome geNomad-enabled biological run, one-genome geNomAD positive-call run, and 100-record large-mode biological run | The 100-record run completed 12/12 processes in 21m35s with 11,488 standardized feature rows and zero unmatched, invalid, or duplicate feature rows. The focused geNomAD run produced 2 viral/prophage regions plus 1 plasmid-like region with zero unmatched, invalid, or duplicate feature rows. |
 | Singularity CE, GHCR image | `docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental` | Validated for pull/exec, two-genome geNomad-enabled run, and 100-record large-mode run | Recommended HPC-style route until Apptainer is validated. |
-| Apptainer, GHCR image | `docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental` | Pending | Profile exists, but local biological validation has not been recorded because Apptainer is not installed on the validation host. |
+| Apptainer, GHCR image | `docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental` | Pending | Profile exists, but local biological validation has not been recorded because Apptainer is not installed on the validation host. Ubuntu 24.04 packages on this host provide Singularity CE, not the Apptainer runtime. Installing Apptainer requires an explicit administrator decision to add an external package source or install from another trusted route. |
 | Non-sudo Docker | Local Docker daemon | Configured on validation host | User `anik` was added to the `docker` group on 2026-05-13 and the socket group was set to `docker`; a fresh login session is required before normal shells can run `docker ps` without `sudo`. |
 
 ## Design goal
@@ -100,7 +101,7 @@ already packaged in the image. Docker can refresh ABRicate databases in writable
 work directories, but Singularity/Apptainer users should treat the image
 databases as frozen unless a writable database strategy is explicitly mounted.
 
-The scaffold, Singularity fixture-smoke, Docker biological, geNomad Docker, and 100-record Docker validation status is documented in `validation/deployment/CONTAINER_PROFILE_SCAFFOLD_RESULTS.md`, `validation/deployment/DOCKER_REMOTE_USER_VALIDATION_RESULTS.md`, `validation/deployment/GHCR_DOCKER_100_VALIDATION_RESULTS.md`, and `validation/deployment/SINGULARITY_GHCR_VALIDATION_RESULTS.md`.
+The scaffold, Singularity fixture-smoke, Docker biological, geNomad Docker, and 100-record Docker validation status is documented in `validation/deployment/CONTAINER_PROFILE_SCAFFOLD_RESULTS.md`, `validation/deployment/DOCKER_REMOTE_USER_VALIDATION_RESULTS.md`, `validation/deployment/GHCR_DOCKER_100_VALIDATION_RESULTS.md`, `validation/deployment/SINGULARITY_GHCR_VALIDATION_RESULTS.md`, and `validation/optional_runner_biological/GENOMAD_POSITIVE_CALL_VALIDATION_RESULTS.md`.
 
 ## Practical first container targets
 

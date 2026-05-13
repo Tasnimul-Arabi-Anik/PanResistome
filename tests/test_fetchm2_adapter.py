@@ -283,6 +283,58 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertEqual(set(present["status"]), {"WARNING_EMPTY"})
             self.assertEqual(set(present["feature_table_found"]), {True})
 
+    def test_genomad_summary_collection_exports_clean_region_features(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_dir = Path(tmpdir) / "Klebsiella_pneumoniae"
+            metadata_dir = sample_dir / "metadata_output"
+            raw_dir = sample_dir / "prophage" / "raw" / "GCF_000000001.1_ASM1_genomic" / "sample_summary"
+            tables_dir = sample_dir / "prophage" / "tables"
+            metadata_dir.mkdir(parents=True)
+            raw_dir.mkdir(parents=True)
+            tables_dir.mkdir(parents=True)
+            pd.DataFrame(
+                [{"Assembly Accession": "GCF_000000001.1", "Organism Name": "Klebsiella pneumoniae"}]
+            ).to_csv(metadata_dir / "ncbi_clean.csv", index=False)
+            (raw_dir / "sample_virus_summary.tsv").write_text(
+                "seq_name\tlength\ttopology\tcoordinates\tn_genes\tgenetic_code\tvirus_score\tfdr\tn_hallmarks\tmarker_enrichment\ttaxonomy\n"
+                "contig1|provirus_10_100\t91\tProvirus\t10-100\t5\t11\t0.98\tNA\t2\t10\tViruses;Caudoviricetes\n",
+                encoding="utf-8",
+            )
+            (raw_dir / "sample_plasmid_summary.tsv").write_text(
+                "seq_name\tlength\ttopology\tn_genes\tgenetic_code\tplasmid_score\tfdr\tn_hallmarks\tmarker_enrichment\tconjugation_genes\tamr_genes\n"
+                "contig2\t5000\tNo terminal repeats\t10\t11\t0.91\tNA\t1\t3\tNA\tNA\n",
+                encoding="utf-8",
+            )
+            (raw_dir / "sample_genes.tsv").write_text(
+                "gene\tstart\tend\nignored_gene\t1\t9\n",
+                encoding="utf-8",
+            )
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "scripts" / "collect_optional_tool_tables.py"),
+                    "--raw-dir",
+                    str(sample_dir / "prophage" / "raw"),
+                    "--out",
+                    str(tables_dir / "prophage.tsv"),
+                    "--tool",
+                    "prophage",
+                ],
+                check=True,
+            )
+            collected = pd.read_csv(tables_dir / "prophage.tsv", sep="\t")
+            self.assertEqual(set(collected["feature_id"]), {"viral_region:contig1|provirus_10_100", "plasmid_region:contig2"})
+            self.assertEqual(set(collected["sample_id"]), {"GCF_000000001.1"})
+            self.assertEqual(set(collected["category"]), {"viral_region", "plasmid_region"})
+
+            outputs = export_contract(sample_dir, sample_dir / "panr2_inputs")
+            prophage = pd.read_csv(outputs["prophage"], sep="\t")
+            self.assertEqual(len(prophage), 2)
+            self.assertEqual(set(prophage["feature_category"]), {"viral_region", "plasmid_region"})
+            self.assertEqual(len(pd.read_csv(outputs["unmatched_features"])), 0)
+            self.assertEqual(len(pd.read_csv(outputs["invalid_feature_rows"])), 0)
+
     def test_kleborate_real_output_exports_biological_features(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             sample_dir = Path(tmpdir) / "Klebsiella_pneumoniae"

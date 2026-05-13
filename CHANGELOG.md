@@ -31,6 +31,8 @@
 - Singularity CE validation evidence showing the GHCR image can be pulled, converted to SIF, and used for the same two-genome geNomad-enabled biological workflow with clean PanR2 feature-contract output.
 - A 100-record Singularity/GHCR large-mode validation report under `validation/deployment/SINGULARITY_GHCR_VALIDATION_RESULTS.md`.
 - `--pull-test-timeout` for `scripts/check_container_readiness.py`, allowing long first-time Singularity/Apptainer image conversions to be validated instead of failing at the previous fixed 300 second limit.
+- Low-memory geNomAD runner controls through `--genomad_splits` and `--genomad_sensitivity`, exposing geNomAD/MMseqs tuning needed for memory-constrained complete-genome runs.
+- geNomAD positive-call biological validation evidence under `validation/optional_runner_biological/GENOMAD_POSITIVE_CALL_VALIDATION_RESULTS.md`.
 
 ### Changed
 - PanR2 handoff export now applies configured feature caps to presence/absence matrices and co-occurrence/proximity summaries, preserves complete proximity evidence as `feature_proximity_all.tsv`, and surfaces report-control settings in `panr2_inputs/report/report_controls.html`.
@@ -63,6 +65,8 @@
 - The experimental Dockerfile now creates tool environments in separate layers, making rebuilds less fragile when one optional environment changes.
 - The optional runtime/resource summary hook now prefers `python3` and falls back to `python`, avoiding host-side summary warnings on systems without a `python` executable.
 - README, container, HPC, troubleshooting, optional-module, and database automation docs now reflect the completed Docker biological, 100-record, geNomad database-download, and GHCR-image biological validations.
+- geNomAD optional-table collection now consumes geNomAD summary tables instead of low-level MMseqs/gene/intermediate tables, producing region-level `viral_region` and `plasmid_region` feature rows.
+- PanR2 feature export now ignores generated optional-module intermediates under `raw`, `merged_output`, `analysis`, `figures`, and nested `panr2_inputs` folders to avoid re-importing report artifacts as raw features.
 
 ### Tested
 - Synthetic PanR2 contract tests now cover optional table-input exports for MobileElementFinder, ISfinder, MOB-suite, prophage/geNomad, DefenseFinder, Kleborate, Kaptive, ECTyper, SerotypeFinder, and SCCmecFinder.
@@ -73,6 +77,7 @@
 - 100-genome real optional-runner validation completed for MOB-suite and Kleborate on `Klebsiella pneumoniae`, producing 17,490 standardized feature rows across 100 metadata-matched genomes with zero unmatched, invalid, or duplicate feature rows.
 - 100-genome parallel optional-runner revalidation completed for MOB-suite and Kleborate on `Klebsiella pneumoniae`, preserving the same 17,490 standardized feature rows and zero unmatched/invalid/duplicate rows while reducing total runtime from 1h44m49s to 1h00m13s.
 - Broad optional-module status for geNomad/prophage, DefenseFinder, and MobileElementFinder is documented under `validation/optional_runner_biological/BROAD_OPTIONAL_MODULES_STATUS.md`, confirming PanR2 table-analysis parity while keeping unvalidated external runners opt-in.
+- Focused Docker/GHCR geNomAD positive-call validation completed on one `Klebsiella pneumoniae` genome with `--genomad_splits 8 --genomad_sensitivity 3.0`, producing 2 viral/prophage regions plus 1 plasmid-like region and zero unmatched, invalid, or duplicate feature rows.
 - Singularity fixture smoke validation completed with `docker://python:3.11-slim`, proving that the `test,singularity` profile can run `SEQUENCE_QC`, `COMBINED_QC`, and `COLLECT_RESULTS` through a real container runtime.
 - Singularity pull/exec readiness validation passed with `docker://alpine:3.19` using the new `--pull-test` readiness mode.
 - Local Docker installation and `hello-world` runtime smoke passed on 2026-05-12.

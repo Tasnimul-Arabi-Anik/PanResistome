@@ -28,9 +28,9 @@ defense-finder: not found
 mefinder: not found
 ```
 
-However, cached Nextflow Conda environments were available from prior workflow runs. Those cached environments allowed a small real MobileElementFinder validation on 5 `Klebsiella pneumoniae` genomes. geNomad and DefenseFinder still did not pass real biological runner validation in this round.
+However, cached Nextflow Conda environments were available from prior workflow runs. Those cached environments allowed a small real MobileElementFinder validation on 5 `Klebsiella pneumoniae` genomes. A later Docker/GHCR run with a mounted cached geNomAD database and low-memory geNomAD settings also produced positive viral/prophage calls on a real `Klebsiella pneumoniae` genome. DefenseFinder still has not passed real biological runner validation in this environment.
 
-This means the current validation can honestly prove that standardized outputs from all three modules are analyzed correctly by PanR2, and can now additionally claim that MobileElementFinder biologically ran on a small real Klebsiella subset and fed PanR2 clean standardized outputs.
+This means the current validation can honestly prove that standardized outputs from all three modules are analyzed correctly by PanR2, and can now additionally claim that MobileElementFinder and geNomAD biologically ran on real Klebsiella inputs and fed PanR2 clean standardized outputs.
 
 ## PanR2 Analysis Validation
 
@@ -116,14 +116,14 @@ What is validated:
 geNomad-style table input -> prophage.features.tsv -> PanR2 analysis: PASS
 database setup helper unit test with fake genomad executable: PASS
 optional-runner smoke path with missing DB/tool produces auditable empty outputs: PASS
+Docker/GHCR geNomAD runner with mounted cached DB and positive calls: PASS
 ```
 
 What is not yet validated:
 
 ```text
-real geNomad biological run with a real geNomad database
 fresh remote-user database download time/disk behavior
-prophage feature quality on bacterial genomes
+larger 2-10 genome and 100-genome geNomAD scalability
 ```
 
 Additional local probe:
@@ -135,7 +135,7 @@ database status: FAIL, as expected without a DB
 status file: validation_runs/genomad_missing_db_probe/genomad_database_setup_status.tsv
 ```
 
-Interpretation: the geNomad setup helper records an auditable missing-DB state correctly. A true remote-user validation still requires a fresh Conda solve plus `--genomad_auto_download_db true`, or a supplied `--genomad_db`, and should be run first on 2-10 genomes because the geNomad database is large.
+Interpretation: the geNomad setup helper records an auditable missing-DB state correctly. A true auto-download validation still requires a fresh Conda solve plus `--genomad_auto_download_db true`, or a supplied Docker/container route with a writable mounted DB cache.
 
 Auto-download attempt:
 
@@ -163,7 +163,26 @@ biological geNomad outputs generated: no, expected for this negative smoke
 
 Detailed result: `validation/optional_runner_biological/GENOMAD_HOST_PROFILE_SMOKE_RESULTS.md`
 
-Interpretation: users with a prebuilt host/module/container `genomad` can now bypass only the geNomad Conda solve using `-profile genomad_host` or `--genomad_use_host_env true`. A positive biological validation still needs a working `genomad` executable and populated database.
+Interpretation: users with a prebuilt host/module/container `genomad` can now bypass only the geNomad Conda solve using `-profile genomad_host` or `--genomad_use_host_env true`.
+
+Positive biological validation:
+
+```text
+route: Docker/GHCR image with mounted cached geNomAD database
+input: 1 Klebsiella pneumoniae genome
+low-memory settings: --threads 1 --genomad_splits 8 --genomad_sensitivity 3.0
+Nextflow processes succeeded: 11/11
+GENOMAD_PROPHAGE: PASS
+geNomAD samples processed: 1/1
+geNomAD feature rows collected: 3
+prophage.features.tsv rows: 3
+positive calls: 2 viral/prophage regions, 1 plasmid-like region
+schema unmatched/invalid/duplicate rows: 0/0/0
+```
+
+Detailed result: `validation/optional_runner_biological/GENOMAD_POSITIVE_CALL_VALIDATION_RESULTS.md`
+
+Important lesson: default `genomad end-to-end` failed on this desktop because MMseqs `prefilter` was killed by `SIGKILL`, even at one thread. geNomAD's `--splits` option fixed this validation by reducing memory pressure. PanResistome now exposes `--genomad_splits` and `--genomad_sensitivity`.
 
 Recommended next command when a real geNomad DB is available:
 
@@ -186,11 +205,13 @@ nextflow run main.nf \
   --export_panr2_inputs true \
   --run_genomad true \
   --genomad_db /path/to/genomad_db \
-  --threads 8 \
+  --genomad_splits 8 \
+  --genomad_sensitivity 3.0 \
+  --threads 1 \
   --capture_versions false
 ```
 
-Recommended status: keep geNomad opt-in until one real small biological validation passes.
+Recommended status: geNomAD can be described as opt-in runner validated for a small positive Docker/GHCR biological run with a cached/mounted DB. Keep it opt-in until 2-10 genome and larger scalability validations pass.
 
 ### DefenseFinder
 

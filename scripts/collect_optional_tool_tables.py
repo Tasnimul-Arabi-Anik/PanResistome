@@ -38,6 +38,52 @@ def sample_from_path(path, raw_dir):
     return name
 
 
+def accession_from_sample(sample):
+    parts = str(sample or "").split("_")
+    if len(parts) >= 2 and parts[0] in {"GCF", "GCA"}:
+        return "_".join(parts[:2])
+    return sample
+
+
+def normalize_genomad_row(row, path, raw_dir):
+    name = path.name
+    if name.endswith("_virus_summary.tsv"):
+        category = "viral_region"
+    elif name.endswith("_plasmid_summary.tsv"):
+        category = "plasmid_region"
+    else:
+        return None
+
+    seq_name = row.get("seq_name", "").strip()
+    if not seq_name:
+        return None
+
+    start = ""
+    end = ""
+    coordinates = row.get("coordinates", "").strip()
+    if "-" in coordinates:
+        start, end = [part.strip() for part in coordinates.split("-", 1)]
+
+    score = row.get("virus_score", "").strip() if category == "viral_region" else row.get("plasmid_score", "").strip()
+    return {
+        "sample_id": accession_from_sample(sample_from_path(path, raw_dir)),
+        "tool": "genomad",
+        "feature_id": f"{category}:{seq_name}",
+        "category": category,
+        "RESISTANCE": category,
+        "product": row.get("taxonomy", "").strip() or category,
+        "contig": seq_name.split("|", 1)[0],
+        "start": start,
+        "end": end,
+        "identity": "100.0",
+        "coverage": "100.0",
+        "confidence": score,
+        "raw_feature_id": seq_name,
+        "raw_category": row.get("topology", "").strip() or category,
+        "source_table": str(path),
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description="Collect optional bioinformatics tool tables for PanR2.")
     parser.add_argument("--raw-dir", required=True)
@@ -59,13 +105,22 @@ def main():
     collected = []
     fieldnames = {"sample_id", "tool"}
     for path in sorted(table_paths):
+        if args.tool == "prophage" and not (
+            path.name.endswith("_virus_summary.tsv") or path.name.endswith("_plasmid_summary.tsv")
+        ):
+            continue
         for row in read_rows(path):
             if not any(str(value).strip() for value in row.values()):
                 continue
-            row = dict(row)
-            row.setdefault("sample_id", sample_from_path(path, raw_dir))
-            row.setdefault("tool", args.tool)
-            row["source_table"] = str(path)
+            if args.tool == "prophage":
+                row = normalize_genomad_row(row, path, raw_dir)
+                if row is None:
+                    continue
+            else:
+                row = dict(row)
+                row.setdefault("sample_id", sample_from_path(path, raw_dir))
+                row.setdefault("tool", args.tool)
+                row["source_table"] = str(path)
             fieldnames.update(row.keys())
             collected.append(row)
 
