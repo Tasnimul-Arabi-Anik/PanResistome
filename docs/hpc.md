@@ -49,8 +49,8 @@ deployment testing. A local Singularity fixture smoke test has passed with
 geNomad-enabled, and 100-record Klebsiella workflows using the built
 `panresistome:experimental` image. The public GHCR image has also been pulled
 successfully and used for two-genome geNomad-enabled biological validation
-through both Docker and Singularity CE, and Singularity CE has validated the
-GHCR image on a 100-record large-mode workflow. Apptainer biological validation
+through Docker and Singularity CE. Docker and Singularity CE have both validated
+the GHCR image on a 100-record large-mode workflow. Apptainer biological validation
 remains pending. On HPC, prefer Apptainer/Singularity with shared database
 mounts. Validate readiness before submitting a job:
 

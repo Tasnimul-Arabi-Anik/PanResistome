@@ -96,7 +96,8 @@ ANI, AMRFinderPlus, and GTDB-Tk. It still exercises FetchM2, sequence QC, Mash,
 ABRicate ncbi/vfdb/plasmidfinder, IntegronFinder, MLST, PanR2 comprehensive
 reporting, large-mode report caps, and PanR2 handoff export.
 
-The same pattern completed locally with the built image:
+The same pattern completed with both the local built image and the pulled GHCR
+image:
 
 ```text
 100 input records
@@ -106,6 +107,10 @@ The same pattern completed locally with the built image:
 12/12 Nextflow processes succeeded
 runtime: 22m16s
 ```
+
+The GHCR-image validation completed the same workflow in 21m35s with 12/12
+Nextflow processes succeeded, 11,488 standardized feature rows, and zero
+unmatched, invalid, or duplicate feature rows.
 
 ## geNomad With Docker
 
@@ -189,7 +194,7 @@ GTDB-Tk remains external/opt-in because its database is very large.
 ISfinder still requires a user-supplied authorized FASTA.
 CheckM2 and AMRFinderPlus work in the pipeline, but the 100-genome Docker scale validation intentionally disabled them for desktop safety.
 Normal Docker use requires Docker socket permission or sudo; Docker group changes require a new login session.
-GHCR Docker is validated for two-genome geNomad biological execution; the 100-record Docker scale validation used the local image, while Singularity validated the GHCR image at 100-record scale.
+GHCR Docker is validated for both two-genome geNomad biological execution and 100-record large-mode scale execution.
 ```
 
 More detail is available in:
@@ -197,5 +202,6 @@ More detail is available in:
 ```text
 docs/containers.md
 validation/deployment/DOCKER_REMOTE_USER_VALIDATION_RESULTS.md
+validation/deployment/GHCR_DOCKER_100_VALIDATION_RESULTS.md
 validation/deployment/CONTAINER_PROFILE_SCAFFOLD_RESULTS.md
 ```

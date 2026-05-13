@@ -27,6 +27,7 @@
 - A Docker quickstart at `docs/docker_quickstart.md`, covering GHCR image use, Docker permissions, large-image caveats, geNomad database mounts, and the validated 100-record Docker command.
 - A compact container validation-status table in `docs/containers.md`, separating local-image Docker, GHCR Docker, Singularity/GHCR, Apptainer, and non-sudo Docker readiness.
 - GHCR Docker remote-user validation evidence showing the public image can be pulled without GitHub login and can complete a two-genome geNomad-enabled biological workflow with clean PanR2 feature-contract output.
+- GHCR Docker 100-record large-mode validation evidence under `validation/deployment/GHCR_DOCKER_100_VALIDATION_RESULTS.md`, closing the previous large Docker/GHCR deployment gap.
 - Singularity CE validation evidence showing the GHCR image can be pulled, converted to SIF, and used for the same two-genome geNomad-enabled biological workflow with clean PanR2 feature-contract output.
 - A 100-record Singularity/GHCR large-mode validation report under `validation/deployment/SINGULARITY_GHCR_VALIDATION_RESULTS.md`.
 - `--pull-test-timeout` for `scripts/check_container_readiness.py`, allowing long first-time Singularity/Apptainer image conversions to be validated instead of failing at the previous fixed 300 second limit.
@@ -44,7 +45,7 @@
 - Optional runner CPU requests for MOB-suite, geNomad, and organism-specific typing now scale with `--threads`, with 1-CPU test-profile overrides for fast smoke validation.
 - `--run_abricate false` can now bypass the legacy ABRicate/PanR branch when PanR2 comprehensive mode is disabled, allowing optional-runner/table-input smoke validation to export PanR2 inputs directly.
 - PanR2 contract export now creates header-only feature tables with `WARNING_EMPTY` audit status for enabled optional modules that produced raw output but no biological feature rows.
-- Container/HPC documentation now distinguishes the validated two-genome GHCR Docker path from the still-pending 100-record GHCR Docker run, while recording that Singularity CE has validated the GHCR image at 100-record scale.
+- Container/HPC documentation now records that Docker and Singularity CE have both validated the GHCR image on the 100-record large-mode workflow.
 - Kleborate, Kaptive, and ECTyper placeholder outputs now use valid tab-separated headers.
 - Kleborate runner mode now uses the required `--preset kpsc` argument for Kleborate v3 and collects output tables from the Kleborate output directory.
 - PanR2 contract export now converts real Kleborate output into standardized features for ST, virulence/resistance scores, K/O loci, siderophore markers, wzi, and AMR markers.

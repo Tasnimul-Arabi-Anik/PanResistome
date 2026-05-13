@@ -20,7 +20,7 @@ profile now follows the same read-only database defaults as Singularity.
 | --- | --- | --- | --- |
 | Conda/Mamba | Local environments | Validated | Default public route for non-container runs. |
 | Docker, local image | `panresistome:experimental` | Validated for two-genome and 100-record Klebsiella biological runs | Proves the image contents and Docker profile can run the biological workflow. |
-| Docker, GHCR image | `ghcr.io/tasnimul-arabi-anik/panresistome:experimental` | Validated for unauthenticated pull and two-genome geNomad-enabled biological run | The 100-record GHCR Docker run is still pending; use the local-image 100-record and Singularity GHCR 100-record validations as scale evidence for now. |
+| Docker, GHCR image | `ghcr.io/tasnimul-arabi-anik/panresistome:experimental` | Validated for unauthenticated pull, two-genome geNomad-enabled biological run, and 100-record large-mode biological run | The 100-record run completed 12/12 processes in 21m35s with 11,488 standardized feature rows and zero unmatched, invalid, or duplicate feature rows. |
 | Singularity CE, GHCR image | `docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental` | Validated for pull/exec, two-genome geNomad-enabled run, and 100-record large-mode run | Recommended HPC-style route until Apptainer is validated. |
 | Apptainer, GHCR image | `docker://ghcr.io/tasnimul-arabi-anik/panresistome:experimental` | Pending | Profile exists, but local biological validation has not been recorded because Apptainer is not installed on the validation host. |
 | Non-sudo Docker | Local Docker daemon | Configured on validation host | User `anik` was added to the `docker` group on 2026-05-13 and the socket group was set to `docker`; a fresh login session is required before normal shells can run `docker ps` without `sudo`. |
@@ -100,14 +100,14 @@ already packaged in the image. Docker can refresh ABRicate databases in writable
 work directories, but Singularity/Apptainer users should treat the image
 databases as frozen unless a writable database strategy is explicitly mounted.
 
-The scaffold, Singularity fixture-smoke, Docker biological, geNomad Docker, and 100-record Docker validation status is documented in `validation/deployment/CONTAINER_PROFILE_SCAFFOLD_RESULTS.md` and `validation/deployment/DOCKER_REMOTE_USER_VALIDATION_RESULTS.md`.
+The scaffold, Singularity fixture-smoke, Docker biological, geNomad Docker, and 100-record Docker validation status is documented in `validation/deployment/CONTAINER_PROFILE_SCAFFOLD_RESULTS.md`, `validation/deployment/DOCKER_REMOTE_USER_VALIDATION_RESULTS.md`, `validation/deployment/GHCR_DOCKER_100_VALIDATION_RESULTS.md`, and `validation/deployment/SINGULARITY_GHCR_VALIDATION_RESULTS.md`.
 
 ## Practical first container targets
 
 1. Keep the existing `-profile test` workflow working without containers.
 2. Small Singularity fixture smoke test for local fixtures. Completed with `docker://python:3.11-slim`.
 3. Build or publish a PanResistome image with the real tool stack. Local Docker build/runtime sanity has passed, and the GHCR image can be pulled and executed.
-4. Validate the standard comprehensive command without GTDB-Tk through a normal user Docker/Apptainer profile. Two-genome and 100-record biological Docker runs with the local image have passed, a two-genome geNomad-enabled run has passed with the pulled GHCR image through Docker, and the same small biological path plus a 100-record large-mode path have passed through Singularity CE.
+4. Validate the standard comprehensive command without GTDB-Tk through a normal user Docker/Apptainer profile. Two-genome and 100-record biological Docker runs with the local image have passed, two-genome geNomad-enabled and 100-record large-mode runs have passed with the pulled GHCR image through Docker, and the same small biological path plus a 100-record large-mode path have passed through Singularity CE.
 5. Document database mounts for CheckM2 and optional heavy databases.
 6. Only then advertise Docker/Apptainer profiles as supported.
 
