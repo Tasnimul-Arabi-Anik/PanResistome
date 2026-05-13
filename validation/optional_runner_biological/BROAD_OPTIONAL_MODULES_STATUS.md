@@ -183,15 +183,14 @@ schema unmatched/invalid/duplicate rows: 0/0/0
 Follow-up scale check:
 
 ```text
-input: 2 Klebsiella pneumoniae genomes
-low-memory settings: --threads 1 --genomad_splits 8 --genomad_sensitivity 3.0
+input: 5 Klebsiella pneumoniae genomes
+low-memory settings: --genomad_jobs 2 --genomad_threads_per_sample 1 --genomad_splits 8 --genomad_sensitivity 3.0
 Nextflow processes succeeded: 11/11
-runtime: 19m37s
+runtime: 29m39s
 GENOMAD_PROPHAGE: PASS
-geNomAD samples processed: 2/2
-geNomAD feature rows collected: 6
-prophage.features.tsv rows: 6
-positive calls: 4 viral/prophage regions, 2 plasmid-like regions
+geNomAD samples processed: 5/5
+geNomAD feature rows collected: 23
+prophage.features.tsv rows: 23
 schema unmatched/invalid/duplicate rows: 0/0/0
 ```
 
@@ -222,11 +221,13 @@ nextflow run main.nf \
   --genomad_db /path/to/genomad_db \
   --genomad_splits 8 \
   --genomad_sensitivity 3.0 \
-  --threads 1 \
+  --genomad_jobs 2 \
+  --genomad_threads_per_sample 1 \
+  --threads 2 \
   --capture_versions false
 ```
 
-Recommended status: geNomAD can be described as opt-in runner validated for small positive Docker/GHCR biological runs with a cached/mounted DB. Keep it opt-in until 5-10 genome and larger scalability validations pass.
+Recommended status: geNomAD can be described as opt-in runner validated for small positive Docker/GHCR biological runs with a cached/mounted DB. Keep it opt-in until larger 10+ genome and broader multi-organism scalability validations pass.
 
 ### DefenseFinder
 

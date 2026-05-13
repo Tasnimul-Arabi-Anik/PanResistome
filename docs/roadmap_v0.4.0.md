@@ -22,11 +22,12 @@ Theme: large-dataset scalability and deployment groundwork.
 - A fast optional-runner smoke test passed with CheckM2, GTDB-Tk, QUAST, ANI, Mash, AMRFinderPlus, PanR2 comprehensive mode, and legacy ABRicate/PanR disabled; see `validation/optional_runner_smoke/OPTIONAL_RUNNER_SMOKE_RESULTS.md`.
 - `--run_abricate false` now allows optional-runner/table-input validation without launching the legacy ABRicate/PanR branch when PanR2 comprehensive mode is disabled.
 - A two-genome biological Klebsiella optional-runner validation passed for Kleborate, producing 25 standardized feature rows with clean schema validation; the same run showed the local cached MOB-suite environment is broken and now records that failure explicitly.
+- Docker/GHCR geNomAD validation now covers one-, two-, and five-genome positive-call runs with low-memory MMseqs splitting and bounded per-genome parallelism.
 
 ## Near-term targets
 
-1. Repair or recreate the MOB-suite environment, then rerun the two-genome Klebsiella optional-runner validation.
-2. Run targeted 2-10 genome smoke validations with real installed optional tools/databases before using them in large organism runs: MobileElementFinder, geNomad, Kaptive, and ECTyper.
+1. Run targeted 10+ genome geNomAD validation only after confirming the 5-genome memory/runtime profile is acceptable on the target machine.
+2. Run targeted 2-10 genome smoke validations with real installed optional tools/databases before using them in large organism runs: Kaptive, DefenseFinder, and ECTyper.
 3. Add a faster full ANI strategy for 300+ genomes: chunked FastANI, skani, Mash-prescreened pairs, or representative-only ANI.
 4. Treat AMRFinderPlus at 300+ genomes as a separate workstation/HPC benchmark unless nucleotide `tblastn` runtime is acceptable.
 5. Further split or chunk native feature runners if ABRicate/IntegronFinder wall time becomes limiting above 300 genomes.

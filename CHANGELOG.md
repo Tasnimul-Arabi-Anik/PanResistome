@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+No unreleased changes yet.
+
+## 0.4.0 - 2026-05-13
+
 ### Added
 - v0.4.0 large-dataset report safeguards through `--large_dataset`, `--report_mode`, feature/metadata report caps, top-feature-per-database summaries, and `panr2_inputs/manifest/report_controls.tsv`.
 - A `large` profile that enables compact report mode, report-facing feature caps, and large-dataset safeguards while preserving complete TSV exports.
@@ -79,6 +83,7 @@
 - 100-genome parallel optional-runner revalidation completed for MOB-suite and Kleborate on `Klebsiella pneumoniae`, preserving the same 17,490 standardized feature rows and zero unmatched/invalid/duplicate rows while reducing total runtime from 1h44m49s to 1h00m13s.
 - Broad optional-module status for geNomad/prophage, DefenseFinder, and MobileElementFinder is documented under `validation/optional_runner_biological/BROAD_OPTIONAL_MODULES_STATUS.md`, confirming PanR2 table-analysis parity while keeping unvalidated external runners opt-in.
 - Focused Docker/GHCR geNomAD positive-call validation completed on two `Klebsiella pneumoniae` genomes with `--genomad_splits 8 --genomad_sensitivity 3.0`, producing 4 viral/prophage regions plus 2 plasmid-like regions and zero unmatched, invalid, or duplicate feature rows.
+- Focused Docker/GHCR geNomAD scale validation completed on five `Klebsiella pneumoniae` genomes with `--genomad_jobs 2 --genomad_threads_per_sample 1 --genomad_splits 8 --genomad_sensitivity 3.0`, producing 23 prophage/geNomAD feature rows, 601 total standardized feature rows, and zero unmatched, invalid, or duplicate feature rows.
 - Singularity fixture smoke validation completed with `docker://python:3.11-slim`, proving that the `test,singularity` profile can run `SEQUENCE_QC`, `COMBINED_QC`, and `COLLECT_RESULTS` through a real container runtime.
 - Singularity pull/exec readiness validation passed with `docker://alpine:3.19` using the new `--pull-test` readiness mode.
 - Local Docker installation and `hello-world` runtime smoke passed on 2026-05-12.

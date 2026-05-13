@@ -5,7 +5,7 @@ nextflow.enable.dsl=2
 def pipelineStartMillis = System.currentTimeMillis()
 
 // Parameters
-params.pipeline_version = '0.3.1'
+params.pipeline_version = '0.4.0'
 params.checkm = null
 params.ani = 'all'
 params.sleep = 0.5
