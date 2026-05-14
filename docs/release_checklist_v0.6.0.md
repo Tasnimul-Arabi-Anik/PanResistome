@@ -16,7 +16,7 @@ Release theme: deployment and broader biological validation.
 - [x] Native IntegronFinder/MobileElementFinder handoff export regression test is present.
 - [x] `validation_runs/`, `work/`, downloaded FASTA files, downloaded
   databases, and container image artifacts are not tracked.
-- [ ] CI passes for the v0.6.0 release commit after push.
+- [x] CI passes for the v0.6.0 release commit after push.
 - [ ] Annotated `v0.6.0` tag is created only after release-commit CI passes.
 
 ## Validation Evidence
