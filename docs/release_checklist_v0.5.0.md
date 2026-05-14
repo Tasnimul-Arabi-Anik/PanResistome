@@ -20,7 +20,7 @@ genomics.
 - [x] Statistical summary outputs are generated and documented.
 - [x] `validation_runs/`, `work/`, downloaded FASTA files, downloaded
   databases, and container image artifacts are not tracked.
-- [ ] CI passes for the v0.5.0 release commit after push.
+- [x] CI passes for the v0.5.0 release commit after push.
 - [ ] Annotated `v0.5.0` tag is created only after release-commit CI passes.
 
 ## Validation Evidence
