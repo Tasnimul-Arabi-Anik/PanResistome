@@ -2,7 +2,15 @@
 
 ## Unreleased
 
-No unreleased changes yet.
+### Added
+- PanR2 handoff exports now write `panr2_inputs/manifest/reproducibility_manifest.json`, capturing pipeline version, git revision/tag when available, command/profile context, container image metadata, feature row counts, report controls, setup-status pointers, and runtime-summary paths.
+- PanR2 handoff exports now write `panr2_inputs/manifest/feature_contract.json`, a machine-readable feature-contract manifest with contract/schema version, required and optional columns, known databases, and recommended controlled values.
+- Formal feature-contract governance documentation at `docs/feature_contract_spec.md`.
+- Experimental `slurm` profile scaffolding with queue/account/cluster-option parameters for cluster dry runs.
+
+### Changed
+- v0.4.0 release checklist now records the completed release-commit CI and tag-triggered GHCR container smoke-test workflow.
+- Container and HPC documentation now describe digest-pinned container runs and the experimental SLURM profile status.
 
 ## 0.4.0 - 2026-05-13
 

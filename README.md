@@ -58,6 +58,14 @@ pipeline_runtime_summary.tsv
 pipeline_runtime_tasks.tsv
 ```
 
+PanR2 handoff exports also write machine-readable reproducibility and schema
+manifests under `panr2_inputs/manifest/`:
+
+```text
+reproducibility_manifest.json
+feature_contract.json
+```
+
 Sequence QC filtering is optional. By default, the pipeline reports QC metrics but keeps all assemblies for downstream analysis. Add `--qc_filter true` with one or more thresholds to exclude failed assemblies from ABRicate, PanR2, and later tools.
 
 CheckM2 is enabled by default. If `--checkm2_db` is not provided, PanResistome now attempts to download the CheckM2 database automatically under `<outdir>/databases/checkm2` unless `--checkm2_auto_download_db false` is set. This improves the one-command user path, but the database is large, so users on restricted networks can still pre-download it and pass `--checkm2_db /path/to/checkm2_database.dmnd`.
@@ -224,7 +232,7 @@ Fresh-clone validation of this command on 2026-05-08 completed all 19 Nextflow p
 
 For the fresh-user validation path, see [`docs/remote_user_validation.md`](docs/remote_user_validation.md). For the 20 release gates used to judge whether the public comprehensive workflow is reliable, see [`docs/release_reliability_checklist.md`](docs/release_reliability_checklist.md).
 
-For validation status, see [`docs/validation_matrix.md`](docs/validation_matrix.md), [`docs/release_checklist_v0.4.0.md`](docs/release_checklist_v0.4.0.md), [`docs/troubleshooting.md`](docs/troubleshooting.md), and [`docs/example_klebsiella_interpretation.md`](docs/example_klebsiella_interpretation.md). For v0.4.0 large-dataset and deployment evidence, see [`docs/roadmap_v0.4.0.md`](docs/roadmap_v0.4.0.md), [`validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md`](validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md), [`docs/hpc.md`](docs/hpc.md), [`docs/containers.md`](docs/containers.md), [`docs/docker_quickstart.md`](docs/docker_quickstart.md), [`validation/deployment/DOCKER_REMOTE_USER_VALIDATION_RESULTS.md`](validation/deployment/DOCKER_REMOTE_USER_VALIDATION_RESULTS.md), and [`validation/deployment/GHCR_DOCKER_100_VALIDATION_RESULTS.md`](validation/deployment/GHCR_DOCKER_100_VALIDATION_RESULTS.md). For optional module runner/table-input status, see [`docs/optional_module_validation_matrix.md`](docs/optional_module_validation_matrix.md), [`validation/optional_feature_analysis/VALIDATION_RESULTS.md`](validation/optional_feature_analysis/VALIDATION_RESULTS.md), [`validation/optional_runner_smoke/OPTIONAL_RUNNER_SMOKE_RESULTS.md`](validation/optional_runner_smoke/OPTIONAL_RUNNER_SMOKE_RESULTS.md), [`validation/optional_runner_biological/KLEBSIELLA_2_OPTIONAL_RUNNER_RESULTS.md`](validation/optional_runner_biological/KLEBSIELLA_2_OPTIONAL_RUNNER_RESULTS.md), [`validation/optional_runner_biological/KLEBSIELLA_100_MOBSUITE_KLEBORATE_RESULTS.md`](validation/optional_runner_biological/KLEBSIELLA_100_MOBSUITE_KLEBORATE_RESULTS.md), and [`validation/optional_runner_biological/GENOMAD_POSITIVE_CALL_VALIDATION_RESULTS.md`](validation/optional_runner_biological/GENOMAD_POSITIVE_CALL_VALIDATION_RESULTS.md).
+For validation status, see [`docs/validation_matrix.md`](docs/validation_matrix.md), [`docs/release_checklist_v0.4.0.md`](docs/release_checklist_v0.4.0.md), [`docs/troubleshooting.md`](docs/troubleshooting.md), and [`docs/example_klebsiella_interpretation.md`](docs/example_klebsiella_interpretation.md). For v0.4.0 large-dataset and deployment evidence, see [`docs/roadmap_v0.4.0.md`](docs/roadmap_v0.4.0.md), [`validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md`](validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md), [`docs/hpc.md`](docs/hpc.md), [`docs/containers.md`](docs/containers.md), [`docs/docker_quickstart.md`](docs/docker_quickstart.md), [`validation/deployment/DOCKER_REMOTE_USER_VALIDATION_RESULTS.md`](validation/deployment/DOCKER_REMOTE_USER_VALIDATION_RESULTS.md), and [`validation/deployment/GHCR_DOCKER_100_VALIDATION_RESULTS.md`](validation/deployment/GHCR_DOCKER_100_VALIDATION_RESULTS.md). For v0.5.0 planning around reproducibility, schema governance, and deployment hardening, see [`docs/roadmap_v0.5.0.md`](docs/roadmap_v0.5.0.md). For optional module runner/table-input status, see [`docs/optional_module_validation_matrix.md`](docs/optional_module_validation_matrix.md), [`validation/optional_feature_analysis/VALIDATION_RESULTS.md`](validation/optional_feature_analysis/VALIDATION_RESULTS.md), [`validation/optional_runner_smoke/OPTIONAL_RUNNER_SMOKE_RESULTS.md`](validation/optional_runner_smoke/OPTIONAL_RUNNER_SMOKE_RESULTS.md), [`validation/optional_runner_biological/KLEBSIELLA_2_OPTIONAL_RUNNER_RESULTS.md`](validation/optional_runner_biological/KLEBSIELLA_2_OPTIONAL_RUNNER_RESULTS.md), [`validation/optional_runner_biological/KLEBSIELLA_100_MOBSUITE_KLEBORATE_RESULTS.md`](validation/optional_runner_biological/KLEBSIELLA_100_MOBSUITE_KLEBORATE_RESULTS.md), and [`validation/optional_runner_biological/GENOMAD_POSITIVE_CALL_VALIDATION_RESULTS.md`](validation/optional_runner_biological/GENOMAD_POSITIVE_CALL_VALIDATION_RESULTS.md).
 
 ### Module Stability
 
@@ -514,6 +522,10 @@ PanResistome/
 | `--genomad_reuse_existing` | bool | true | Reuse non-empty per-sample geNomad summary outputs on resumed/interrupted runs |
 | `--container_image` | path/image | - | Experimental image used by `docker`, `apptainer`, or `singularity` profiles |
 | `--container_run_options` | str | - | Extra runtime options passed to Docker/Apptainer/Singularity profiles |
+| `--slurm_queue` | str | - | Optional queue/partition name for the experimental `slurm` profile |
+| `--slurm_account` | str | - | Optional account/project flag for the experimental `slurm` profile |
+| `--slurm_cluster_options` | str | - | Extra site-specific SLURM options for the experimental `slurm` profile |
+| `--slurm_queue_size` | int | 50 | Maximum queued tasks for the experimental `slurm` profile |
 | `--run_organism_specific_typing` | bool | false | Run available organism-specific typing helpers |
 | `--run_kleborate` | bool | false | Run Kleborate when available |
 | `--kleborate_dir` | path | - | Existing Kleborate table directory to pass into PanR2 |
@@ -670,6 +682,8 @@ results/
     │   ├── assembly_qc/
     │   ├── qc/
     │   └── manifest/
+    │       ├── feature_contract.json
+    │       ├── reproducibility_manifest.json
     │       ├── schema_validation_report.csv
     │       ├── schema_validation_summary.txt
     │       └── unmatched_features.csv
@@ -692,7 +706,7 @@ You can open `index.html` in a browser for easy navigation of visual outputs.
 
 PanResistome should run heavy tools, manage Conda environments/databases, capture versions, filter genomes, and export standardized tables. FetchM2 is the default metadata engine because it provides richer standardized host, source, environment, geography, year, disease, and metadata-audit fields than the legacy FetchM path. PanR2 should remain a lightweight comparative analysis and reporting tool that reads standardized outputs.
 
-Every new PanResistome module should export PanR2-compatible records when possible. The formal schema is documented in [`docs/panr2_input_contract.md`](docs/panr2_input_contract.md).
+Every new PanResistome module should export PanR2-compatible records when possible. The handoff structure is documented in [`docs/panr2_input_contract.md`](docs/panr2_input_contract.md), and the formal feature-table governance spec is documented in [`docs/feature_contract_spec.md`](docs/feature_contract_spec.md).
 
 ---
 

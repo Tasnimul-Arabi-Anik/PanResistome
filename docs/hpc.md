@@ -39,7 +39,40 @@ nextflow run main.nf \
 
 ## Scheduler profile status
 
-No stable SLURM profile is advertised yet. A future profile should define executor settings, queue/account placeholders, process labels, and database mount/cache guidance without changing the default local Conda/Mamba workflows.
+An experimental `slurm` profile is available for configuration validation and
+cluster-specific dry runs. It is not yet biologically validated on a SLURM
+cluster, so do not advertise it as a stable deployment route until a real
+cluster validation is recorded.
+
+The profile keeps default Conda/Mamba behavior unchanged and only switches the
+executor:
+
+```bash
+nextflow run main.nf \
+  --input validation/klebsiella_pneumoniae_100/ncbi_dataset.tsv \
+  --outdir validation_runs/klebsiella_slurm_dryrun \
+  -profile conda,mamba,slurm,large \
+  --analysis_profile comprehensive \
+  --run_gtdbtk false \
+  --threads 16 \
+  --checkm2_threads 4 \
+  --slurm_queue short \
+  --slurm_account MY_ACCOUNT
+```
+
+Optional scheduler parameters:
+
+```text
+--slurm_queue
+--slurm_account
+--slurm_cluster_options
+--slurm_queue_size
+```
+
+Use `--slurm_cluster_options` for site-specific flags such as QoS, partition
+constraints, or mail options. Keep large reference databases and container
+caches on shared storage; do not download CheckM2, GTDB-Tk, geNomAD, or
+Singularity/Apptainer images into per-task scratch directories.
 
 ## Container profile status
 

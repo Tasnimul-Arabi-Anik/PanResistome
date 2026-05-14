@@ -118,6 +118,23 @@ The current GHCR image name is:
 ghcr.io/tasnimul-arabi-anik/panresistome:experimental
 ```
 
+For exact reproducibility, prefer pinning an immutable digest after selecting a
+validated image:
+
+```bash
+docker image inspect ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
+  --format '{{index .RepoDigests 0}}'
+```
+
+Then run with the digest string, for example:
+
+```text
+--container_image ghcr.io/tasnimul-arabi-anik/panresistome@sha256:<digest>
+```
+
+The PanR2 handoff now records the selected image string and any embedded
+`sha256` digest in `panr2_inputs/manifest/reproducibility_manifest.json`.
+
 An unauthenticated `docker pull` completed successfully on 2026-05-13, which means a GitHub login was not required for the public experimental image on the validation host. If users see `DENIED`, the GHCR package visibility should be checked in GitHub package settings.
 
 Singularity CE 4.1.1 also pulled and executed the same GHCR image with:

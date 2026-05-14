@@ -4,7 +4,7 @@ Use this checklist before tagging v0.4.0. Do not move existing tags.
 
 ## Required Gates
 
-- [ ] CI passes for the release commit after push.
+- [x] CI passes for the release commit after push.
 - [x] `pytest -q` passes locally.
 - [x] `python -m py_compile scripts/*.py` passes.
 - [x] `bash -n scripts/bootstrap.sh` passes.
@@ -26,3 +26,5 @@ Use this checklist before tagging v0.4.0. Do not move existing tags.
 ## Release Decision
 
 Tag v0.4.0 only after the release commit is pushed and CI passes. If CI fails, fix only the failing release gate and retest before tagging.
+
+Final release status: `v0.4.0` was tagged at commit `20cbb68c0efa99a0f4fe07bf8367a998cc4ede21`. The release commit CI passed, and the tag-triggered container workflow completed the GHCR image build/push and published-image smoke test successfully: <https://github.com/Tasnimul-Arabi-Anik/PanResistome/actions/runs/25817372496>.

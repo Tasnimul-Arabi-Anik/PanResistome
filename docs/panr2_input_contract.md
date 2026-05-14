@@ -1,5 +1,10 @@
 # PanR2 Input Contract
 
+The formal feature-table governance document is
+[`docs/feature_contract_spec.md`](feature_contract_spec.md). The current
+machine-readable contract version is also written per run as
+`panr2_inputs/manifest/feature_contract.json`.
+
 PanResistome is the preferred execution layer for heavy genomics tools. PanR2 is the lightweight analysis and reporting layer. Every PanResistome tool module that produces feature-like annotations should export a PanR2-compatible table whenever possible.
 
 ## Feature Table Schema
@@ -140,6 +145,8 @@ panr2_inputs/
     ├── mobsuite_database_setup_status.tsv
     ├── genomad_database_setup_status.tsv
     ├── report_controls.tsv
+    ├── feature_contract.json
+    ├── reproducibility_manifest.json
     ├── panr2_feature_contract_columns.txt
     ├── panr2_feature_contract_all_columns.txt
     ├── schema_validation_report.csv
@@ -154,6 +161,13 @@ panr2_inputs/
 `panr2_inputs/features/*.features.tsv` is the strict contract layer. Raw tool folders are still copied for traceability, but downstream analysis should prefer the standardized feature tables when possible. `schema_validation_report.csv` checks required columns, and `unmatched_features.csv` lists feature rows whose assembly accession cannot be matched to metadata. `database_setup_status.tsv` records the required database/tool checks for the selected profile, including CheckM2, AMRFinderPlus, ABRicate `ncbi/vfdb/plasmidfinder`, optional ISfinder FASTA, GTDB-Tk, geNomad, Kaptive, MobileElementFinder, IntegronFinder, and MLST status where relevant. `abricate_database_setup_status.tsv`, `mobsuite_database_setup_status.tsv`, and `genomad_database_setup_status.tsv` record pre/post database setup state for modules with automated setup helpers.
 
 `manifest/report_controls.tsv` records report density settings such as `large_dataset`, `report_mode`, feature caps for handoff matrices/co-occurrence/proximity summaries, metadata row caps for HTML pages, and whether heavy interactive plots were skipped or deprioritized. Complete feature TSVs remain available even when large-dataset safeguards cap report-facing summaries.
+
+`manifest/feature_contract.json` records the formal PanR2 feature-contract
+version, required and optional columns, known database labels, and recommended
+controlled values. `manifest/reproducibility_manifest.json` records the run
+command, profile stack, pipeline version, git revision/tag when available,
+container image information when applicable, feature row counts, report-control
+settings, and pointers to runtime/resource summary tables.
 
 Cross-database outputs separate sample-level co-occurrence from stronger coordinate context. `feature_cooccurrence.tsv` is genome/sample-level only. `feature_proximity.tsv` is the report-facing proximity table and may be capped in large-dataset mode; `feature_proximity_all.tsv` preserves the complete proximity evidence. These files and the `amr_*_same_contig.tsv` files indicate when AMR features and plasmid/MGE/integron features share a contig and, when coordinates are available, whether they overlap or fall within 10 kb. These outputs still do not prove transfer, expression, phenotype, or plasmid localization.
 

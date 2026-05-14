@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 
 
@@ -48,3 +49,19 @@ def test_headerless_mlst_placeholders_write_empty_feature_table(tmp_path):
     header = contract.read_header(Path(written["mlst"]))
     assert "sample_id" in header
     assert "feature_id" in header
+
+
+def test_feature_contract_manifest_records_version_and_columns(tmp_path):
+    contract = load_contract_module()
+    out_dir = tmp_path / "panr2_inputs"
+
+    written = contract.write_feature_contract_manifest(out_dir)
+
+    path = Path(written["feature_contract_manifest"])
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["contract_version"] == "1.0"
+    assert payload["schema_version"] == "1.0"
+    assert payload["required_columns"] == contract.CONTRACT_COLUMNS
+    assert "feature_name" in payload["optional_columns"]
+    assert "amr" in payload["known_databases"]
+    assert payload["allowed_values"]["presence"] == ["0", "1"]

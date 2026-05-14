@@ -144,6 +144,10 @@ params.run_ectyper = false
 params.ectyper_dir = null
 params.serotypefinder_dir = null
 params.sccmecfinder_dir = null
+params.slurm_queue = null
+params.slurm_account = null
+params.slurm_cluster_options = ''
+params.slurm_queue_size = 50
 
 
 def paramList(value) {
@@ -2313,6 +2317,11 @@ process EXPORT_PANR2_INPUTS {
     def externalAmrfinderDir = params.amrfinderplus_dir ? launchPath(params.amrfinderplus_dir) : ""
     def largeDatasetFlag = truthyParam(params.large_dataset) ? "--large-dataset" : ""
     def skipHeavyPlotsFlag = effectiveSkipHeavyInteractivePlots() ? "--skip-heavy-interactive-plots" : ""
+    def profileStack = workflow.profile ? workflow.profile.toString() : ""
+    def commandLine = workflow.commandLine ? workflow.commandLine.toString() : "unknown"
+    def sessionId = workflow.sessionId ? workflow.sessionId.toString() : "unknown"
+    def runName = workflow.runName ? workflow.runName.toString() : "unknown"
+    def containerImage = params.container_image ? params.container_image.toString() : ""
     """
     if [ "${params.export_panr2_inputs}" = "true" ]; then
         if [ -n "${externalAmrfinderDir}" ] && [ -d "${externalAmrfinderDir}" ]; then
@@ -2327,6 +2336,15 @@ process EXPORT_PANR2_INPUTS {
             --max-features-network ${effectiveMaxFeaturesNetwork()} \\
             --max-metadata-columns ${effectiveMaxMetadataColumns()} \\
             --top-n-features-per-database ${effectiveTopNFeaturesPerDatabase()} \\
+            --pipeline-version ${shellQuote(params.pipeline_version)} \\
+            --repo-dir ${shellQuote(baseDir.toString())} \\
+            --run-command ${shellQuote(commandLine)} \\
+            --profile-stack ${shellQuote(profileStack)} \\
+            --launch-dir ${shellQuote(launchDir.toString())} \\
+            --pipeline-outdir ${shellQuote(params.outdir.toString())} \\
+            --container-image ${shellQuote(containerImage)} \\
+            --nextflow-session-id ${shellQuote(sessionId)} \\
+            --nextflow-run-name ${shellQuote(runName)} \\
             ${largeDatasetFlag} \\
             ${skipHeavyPlotsFlag}
     fi

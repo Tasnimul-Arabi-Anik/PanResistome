@@ -6,11 +6,15 @@ from __future__ import annotations
 import csv
 import html
 import itertools
+import json
 import math
 import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
+
+CONTRACT_VERSION = "1.0"
+SCHEMA_VERSION = "1.0"
 
 CONTRACT_COLUMNS = [
     "sample_id",
@@ -50,6 +54,55 @@ OPTIONAL_CONTRACT_COLUMNS = [
 ]
 
 FEATURE_COLUMNS = CONTRACT_COLUMNS + OPTIONAL_CONTRACT_COLUMNS
+
+FEATURE_CONTRACT_ALLOWED_VALUES = {
+    "presence": ["0", "1"],
+    "database": sorted([
+        "amr",
+        "amrfinderplus",
+        "vfdb",
+        "plasmidfinder",
+        "isfinder",
+        "mobileelementfinder",
+        "integronfinder",
+        "mlst",
+        "mobsuite",
+        "defensefinder",
+        "prophage",
+        "genomad",
+        "iceberg",
+        "kleborate",
+        "kaptive",
+        "ectyper",
+        "serotypefinder",
+        "sccmecfinder",
+        "ani",
+        "assembly_qc",
+        "quast",
+        "mash",
+        "custom",
+    ]),
+    "evidence_type": [
+        "sequence_match",
+        "tool_call",
+        "typing_call",
+        "assembly_metric",
+        "cooccurrence",
+        "proximity",
+        "unknown",
+    ],
+    "confidence": ["high", "medium", "low", "unknown"],
+    "evidence_level": ["same_genome", "same_contig", "within_10kb", "overlapping", "adjacent", "unknown"],
+    "module_status": [
+        "PASS",
+        "WARNING_EMPTY",
+        "SKIPPED_NOT_ENABLED",
+        "SKIPPED_INAPPLICABLE",
+        "FAIL",
+        "FAIL_MISSING_FEATURE_TABLE",
+        "ERROR",
+    ],
+}
 
 KNOWN_DATABASES = {
     "amr",
@@ -2635,6 +2688,30 @@ def write_report_controls(
     return {"report_controls": controls_path}
 
 
+def write_feature_contract_manifest(out_dir: Path) -> dict[str, str]:
+    manifest_dir = out_dir / "manifest"
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    contract = {
+        "contract_name": "PanR2 standardized feature table",
+        "contract_version": CONTRACT_VERSION,
+        "schema_version": SCHEMA_VERSION,
+        "required_columns": CONTRACT_COLUMNS,
+        "optional_columns": OPTIONAL_CONTRACT_COLUMNS,
+        "all_columns": FEATURE_COLUMNS,
+        "known_databases": sorted(KNOWN_DATABASES),
+        "allowed_values": FEATURE_CONTRACT_ALLOWED_VALUES,
+        "strict_downstream_layer": "panr2_inputs/features/*.features.tsv",
+        "complete_merged_table": "panr2_inputs/features/all_features.tsv",
+        "backward_compatibility": (
+            "v0.3.x and v0.4.0 feature tables remain valid when all required "
+            "columns are present; optional columns should be preserved when supplied."
+        ),
+    }
+    path = manifest_dir / "feature_contract.json"
+    path.write_text(json.dumps(contract, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return {"feature_contract_manifest": str(path)}
+
+
 def _relative_link(target: Path, base: Path) -> str:
     try:
         return target.relative_to(base).as_posix()
@@ -2940,6 +3017,7 @@ def export_contract(
         max_features=max_features_network,
     )
     audit_outputs = write_feature_completeness_audit(sample_dir, out_dir)
+    contract_outputs = write_feature_contract_manifest(out_dir)
     control_outputs = write_report_controls(
         out_dir,
         all_features,
@@ -2966,6 +3044,7 @@ def export_contract(
         **matrix_outputs,
         **cross_outputs,
         **audit_outputs,
+        **contract_outputs,
         **control_outputs,
         **report_outputs,
     }
