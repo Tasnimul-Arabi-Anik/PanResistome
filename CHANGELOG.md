@@ -19,6 +19,7 @@
 
 ### Tested
 - Synthetic PanR2 export tests now cover lineage warning flags, diversity summaries, statistical summaries, and the new lineage/diversity/statistical report pages.
+- A compact 10-record `Klebsiella pneumoniae` Docker/GHCR biological validation completed with Mash, AMRFinderPlus, native PanR2 feature runners, PanR2 comprehensive reporting, and PanR2 handoff export enabled. The run produced 1,348 standardized feature rows, zero unmatched/invalid/duplicate rows, reproducibility and feature-contract manifests, lineage summaries, diversity summaries, statistical summaries, and the new v0.5.0 HTML pages.
 
 ## 0.4.0 - 2026-05-13
 

@@ -10,6 +10,7 @@ This matrix summarizes the major validation evidence used for release hardening.
 | Klebsiella pneumoniae 100 parallel | `Klebsiella pneumoniae` | 100 | 99 | 99 | off | cached auto DB | on | on | on | on | yes | parallel | 16 | 2 | 12838 | 0 | 0 | 0 | yes | PASS | `validation/klebsiella_pneumoniae_100/VALIDATION_RESULTS.md` |
 | Klebsiella pneumoniae 300 large mode | `Klebsiella pneumoniae` | 300 | 299 | 299 | off | off | on | off | on | off | yes | parallel | 16 | not run | 36638 | 0 | 0 | 0 | yes | PASS | `validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md` |
 | Klebsiella pneumoniae 5 geNomAD Docker/GHCR | `Klebsiella pneumoniae` | 5 | 5 | 5 | off | off | off | off | off | off | no | geNomAD jobs=2 | 2 | not run | 601 | 0 | 0 | 0 | yes | PASS | `validation/optional_runner_biological/GENOMAD_POSITIVE_CALL_VALIDATION_RESULTS.md` |
+| Klebsiella pneumoniae 10 v0.5.0 Docker/GHCR | `Klebsiella pneumoniae` | 10 | 10 | 10 | off | off | off | off | on | on | yes | parallel | 8 | not run | 1348 | 0 | 0 | 0 | yes | PASS | `validation/klebsiella_pneumoniae_10/V0_5_0_DOCKER_VALIDATION_RESULTS.md` |
 
 ## Current Interpretation
 
@@ -18,4 +19,8 @@ This matrix summarizes the major validation evidence used for release hardening.
 - The Klebsiella run proves the parallel native-runner path handles a biologically richer 100-record input with clean PanR2 feature-contract validation.
 - The 300-record large-mode run proves report safeguards and native feature runners scale on a desktop-safe profile when heavyweight optional stages are intentionally disabled.
 - The 5-genome Docker/GHCR geNomAD run proves bounded optional geNomAD execution can produce positive biological prophage/plasmid-like region calls with clean PanR2 handoff output.
+- The 10-genome Docker/GHCR run proves the v0.5.0 reproducibility manifest,
+  feature-contract manifest, lineage-aware summaries, pan-feature diversity
+  summaries, statistical summary, and new HTML pages work on real
+  feature-rich Klebsiella data with clean PanR2 feature-contract validation.
 - GTDB-Tk remains intentionally excluded from these validations because its reference database is large and should remain opt-in.
