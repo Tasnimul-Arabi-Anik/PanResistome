@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+No unreleased changes yet.
+
+## 0.6.0 - 2026-05-14
+
 ### Added
 - v0.6.0 roadmap focused on deployment and broader biological validation without
   adding new default databases.
