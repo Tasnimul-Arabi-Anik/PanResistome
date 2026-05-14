@@ -78,6 +78,12 @@ invalid_feature_rows=0
 duplicate_feature_rows=0
 ```
 
+`samples_seen=20` and `metadata_accessions=10` is expected for this run. The
+schema validator counts observed sample/file identifiers as well as normalized
+assembly accessions, while metadata matching resolves against the 10 assembly
+accessions. The important contract check is that unmatched feature rows remain
+zero.
+
 Feature rows by table:
 
 | Feature table | Rows excluding header |
@@ -159,6 +165,11 @@ GCF_048279315.2     ST_14464               PRJNA1204189 available
 
 The compact subset had MLST lineage context but no ANI clusters because ANI was
 disabled by design.
+
+ANI-based lineage warning behavior was therefore not exercised in this compact
+validation. That remains a future validation target; this run validates
+MLST-based lineage context plus the new lineage/diversity/statistical report
+generation.
 
 ## Large-Mode Report Controls
 

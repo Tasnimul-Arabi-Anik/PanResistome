@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+No unreleased changes yet.
+
+## 0.5.0 - 2026-05-14
+
 ### Added
 - PanR2 handoff exports now write `panr2_inputs/manifest/reproducibility_manifest.json`, capturing pipeline version, git revision/tag when available, command/profile context, container image metadata, feature row counts, report controls, setup-status pointers, and runtime-summary paths.
 - PanR2 handoff exports now write `panr2_inputs/manifest/feature_contract.json`, a machine-readable feature-contract manifest with contract/schema version, required and optional columns, known databases, and recommended controlled values.
