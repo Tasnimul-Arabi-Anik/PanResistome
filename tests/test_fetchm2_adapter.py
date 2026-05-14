@@ -637,6 +637,87 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("possible_class_match", set(concordance["status"]))
             self.assertTrue(Path(outputs["amrfinder_abricate_concordance_html"]).exists())
 
+    def test_lineage_diversity_and_statistical_outputs(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_dir = Path(tmpdir) / "Klebsiella_pneumoniae"
+            metadata_dir = sample_dir / "metadata_output"
+            abricate_dir = sample_dir / "abricate"
+            mlst_dir = sample_dir / "tool_results" / "mlst" / "raw"
+            ani_dir = sample_dir / "ani" / "analysis"
+            metadata_dir.mkdir(parents=True)
+            abricate_dir.mkdir()
+            mlst_dir.mkdir(parents=True)
+            ani_dir.mkdir(parents=True)
+
+            metadata_rows = []
+            sample_map = ["sample_id,Assembly Accession\n"]
+            mlst_lines = []
+            ani_lines = ["ani_cluster,representative,genome,cluster_size,duplicate_threshold\n"]
+            abricate_lines = ["#FILE\tSEQUENCE\tSTART\tEND\tGENE\t%COVERAGE\t%IDENTITY\tDATABASE\tACCESSION\tPRODUCT\tRESISTANCE\n"]
+            for idx in range(1, 7):
+                accession = f"GCF_00000000{idx}.1"
+                country = "CountryA" if idx <= 3 else "CountryB"
+                st = "11" if idx <= 3 else f"{20 + idx}"
+                ani_cluster = "ANI_CLUSTER_0001" if idx <= 3 else f"ANI_CLUSTER_000{idx}"
+                metadata_rows.append(
+                    {
+                        "Assembly Accession": accession,
+                        "Organism Name": "Klebsiella pneumoniae",
+                        "Country": country,
+                        "Assembly BioProject Accession": f"PRJNA_{idx}",
+                    }
+                )
+                sample_map.append(f"sample{idx},{accession}\n")
+                mlst_lines.append(f"sample{idx}.fna\tklebsiella\t{st}\tgapA({idx})\n")
+                ani_lines.append(f"{ani_cluster}\t{accession}\t{accession}\t3\t99.9\n")
+                abricate_lines.append(
+                    f"sample{idx}.fna\tcontig{idx}\t1\t80\tcoreGene\t100\t99\tncbi\tCORE\tcore product\tcore\n"
+                )
+                if idx <= 3:
+                    abricate_lines.append(
+                        f"sample{idx}.fna\tcontig{idx}\t100\t180\tlineageGene\t100\t99\tncbi\tLIN\tlineage product\tlineage\n"
+                    )
+                if idx == 6:
+                    abricate_lines.append(
+                        "sample6.fna\tcontig6\t200\t260\trareGene\t100\t99\tncbi\tRARE\trare product\trare\n"
+                    )
+            pd.DataFrame(metadata_rows).to_csv(metadata_dir / "ncbi_clean.csv", index=False)
+            (metadata_dir / "sample_map.csv").write_text("".join(sample_map), encoding="utf-8")
+            (mlst_dir / "mlst.tsv").write_text("".join(mlst_lines), encoding="utf-8")
+            (ani_dir / "duplicate_clusters.csv").write_text("".join(ani_lines), encoding="utf-8")
+            (abricate_dir / "ncbi_results.tab").write_text("".join(abricate_lines), encoding="utf-8")
+
+            outputs = export_contract(
+                sample_dir,
+                sample_dir / "panr2_inputs",
+                rare_feature_threshold=0.2,
+            )
+
+            top_findings = pd.read_csv(outputs["top_findings"], sep="\t")
+            self.assertIn("dominant_ST", top_findings.columns)
+            self.assertIn("lineage_warning_flags", top_findings.columns)
+            self.assertIn("single_ST_dominance", ";".join(top_findings["lineage_warning_flags"].fillna("")))
+
+            lineage = pd.read_csv(outputs["lineage_summary"], sep="\t")
+            self.assertIn("ST_11", set(lineage["mlst_ST"]))
+            self.assertTrue(Path(outputs["lineage_context_html"]).exists())
+
+            core = pd.read_csv(outputs["core_accessory_rare_features"], sep="\t")
+            class_by_feature = dict(zip(core["feature_id"], core["feature_class"]))
+            self.assertEqual(class_by_feature["coreGene"], "core")
+            self.assertEqual(class_by_feature["lineageGene"], "accessory")
+            self.assertEqual(class_by_feature["rareGene"], "rare")
+
+            jaccard = pd.read_csv(outputs["jaccard_distance_matrix"], sep="\t")
+            pair_ab = jaccard[(jaccard["sample_a"] == "GCF_000000001.1") & (jaccard["sample_b"] == "GCF_000000006.1")]["jaccard_distance"].iloc[0]
+            pair_ba = jaccard[(jaccard["sample_a"] == "GCF_000000006.1") & (jaccard["sample_b"] == "GCF_000000001.1")]["jaccard_distance"].iloc[0]
+            self.assertEqual(pair_ab, pair_ba)
+            self.assertTrue(Path(outputs["diversity_summary_html"]).exists())
+
+            stats = pd.read_csv(outputs["statistical_summary"], sep="\t")
+            self.assertIn("lineage_warnings", set(stats["metric"]))
+            self.assertTrue(Path(outputs["statistical_summary_html"]).exists())
+
     def test_database_setup_status_passes_required_abricate_databases(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

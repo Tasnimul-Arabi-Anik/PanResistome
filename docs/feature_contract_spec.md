@@ -95,8 +95,9 @@ entry in `feature_completeness_audit.tsv`.
 Recommended values:
 
 ```text
-evidence_type: sequence_match, tool_call, typing_call, assembly_metric,
-               cooccurrence, proximity, unknown
+evidence_type: sequence_match, tool_call, typing_call, sequence_type_call,
+               allele_call, kleborate_call, kleborate_amr_marker,
+               assembly_metric, cooccurrence, proximity, unknown
 confidence:    high, medium, low, unknown
 ```
 

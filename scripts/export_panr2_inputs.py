@@ -202,6 +202,8 @@ def main():
     parser.add_argument("--max-metadata-columns", type=int, default=80)
     parser.add_argument("--top-n-features-per-database", type=int, default=25)
     parser.add_argument("--skip-heavy-interactive-plots", action="store_true")
+    parser.add_argument("--core-feature-threshold", type=float, default=0.95)
+    parser.add_argument("--rare-feature-threshold", type=float, default=0.05)
     parser.add_argument("--pipeline-version", default="")
     parser.add_argument("--repo-dir", default="")
     parser.add_argument("--run-command", default="")
@@ -336,6 +338,8 @@ def main():
         max_metadata_columns=args.max_metadata_columns,
         top_n_features_per_database=args.top_n_features_per_database,
         skip_heavy_interactive_plots=args.skip_heavy_interactive_plots,
+        core_feature_threshold=args.core_feature_threshold,
+        rare_feature_threshold=args.rare_feature_threshold,
     )
     write_reproducibility_manifest(sample_dir, out, args)
 

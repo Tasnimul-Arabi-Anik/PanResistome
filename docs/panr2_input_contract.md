@@ -98,9 +98,20 @@ panr2_inputs/
 │   ├── database_burden_metadata_associations.tsv
 │   ├── category_burden_by_sample.tsv
 │   ├── category_metadata_associations.tsv
+│   ├── lineage_summary.tsv
+│   ├── lineage_feature_burden.tsv
+│   ├── lineage_metadata_confounding.tsv
+│   ├── lineage_adjusted_warnings.tsv
+│   ├── statistical_summary.tsv
 │   ├── top_findings.tsv
 │   ├── top_findings.md
 │   └── prevalence_tables/
+├── diversity/
+│   ├── feature_richness_by_sample.tsv
+│   ├── database_diversity_by_sample.tsv
+│   ├── jaccard_distance_matrix.tsv
+│   ├── core_accessory_rare_features.tsv
+│   └── pan_feature_accumulation.tsv
 ├── cross_database/
 │   ├── feature_cooccurrence.tsv
 │   ├── database_cooccurrence_summary.tsv
@@ -133,6 +144,9 @@ panr2_inputs/
 │   ├── top_findings.html
 │   ├── metadata_quality_and_bias.html
 │   ├── database_burden_by_metadata.html
+│   ├── lineage_context.html
+│   ├── diversity_summary.html
+│   ├── statistical_summary.html
 │   ├── cross_database_interpretation.html
 │   ├── database_setup_and_contract.html
 │   └── report_controls.html
@@ -168,6 +182,23 @@ controlled values. `manifest/reproducibility_manifest.json` records the run
 command, profile stack, pipeline version, git revision/tag when available,
 container image information when applicable, feature row counts, report-control
 settings, and pointers to runtime/resource summary tables.
+
+`metadata_feature_analysis/lineage_*.tsv` adds lineage-aware interpretation on
+top of metadata-feature associations. It uses MLST sequence types, ANI clusters
+when available, and BioProject metadata to flag findings that may be dominated
+by one ST, one ANI cluster, or one study. These warnings do not remove findings;
+they make exploratory associations safer to interpret.
+
+`diversity/*.tsv` summarizes pan-feature richness and diversity without adding
+new external databases. It reports per-sample feature richness, per-database
+Shannon/Simpson diversity, Jaccard feature distances, core/accessory/rare
+classification, and pan-feature accumulation. Core and rare thresholds are
+controlled by `--core_feature_threshold` and `--rare_feature_threshold`.
+
+`metadata_feature_analysis/statistical_summary.tsv` is a compact audit of the
+association layer: numbers of features, metadata columns, generated findings,
+multiple-testing hits when q-values exist, and warning counts for small groups,
+BioProject dominance, and lineage dominance.
 
 Cross-database outputs separate sample-level co-occurrence from stronger coordinate context. `feature_cooccurrence.tsv` is genome/sample-level only. `feature_proximity.tsv` is the report-facing proximity table and may be capped in large-dataset mode; `feature_proximity_all.tsv` preserves the complete proximity evidence. These files and the `amr_*_same_contig.tsv` files indicate when AMR features and plasmid/MGE/integron features share a contig and, when coordinates are available, whether they overlap or fall within 10 kb. These outputs still do not prove transfer, expression, phenotype, or plasmid localization.
 

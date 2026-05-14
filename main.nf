@@ -144,6 +144,8 @@ params.run_ectyper = false
 params.ectyper_dir = null
 params.serotypefinder_dir = null
 params.sccmecfinder_dir = null
+params.core_feature_threshold = 0.95
+params.rare_feature_threshold = 0.05
 params.slurm_queue = null
 params.slurm_account = null
 params.slurm_cluster_options = ''
@@ -2336,6 +2338,8 @@ process EXPORT_PANR2_INPUTS {
             --max-features-network ${effectiveMaxFeaturesNetwork()} \\
             --max-metadata-columns ${effectiveMaxMetadataColumns()} \\
             --top-n-features-per-database ${effectiveTopNFeaturesPerDatabase()} \\
+            --core-feature-threshold ${params.core_feature_threshold} \\
+            --rare-feature-threshold ${params.rare_feature_threshold} \\
             --pipeline-version ${shellQuote(params.pipeline_version)} \\
             --repo-dir ${shellQuote(baseDir.toString())} \\
             --run-command ${shellQuote(commandLine)} \\

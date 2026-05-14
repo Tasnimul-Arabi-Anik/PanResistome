@@ -500,6 +500,8 @@ PanResistome/
 | `--max_metadata_columns` | int | 80 | Maximum metadata audit rows shown in handoff HTML pages; defaults to 20 in large-dataset mode |
 | `--top_n_features_per_database` | int | 25 | Number of top prevalent features per database summarized for report navigation; defaults to 50 in large-dataset mode |
 | `--skip_heavy_interactive_plots` | bool | false | Mark heavy interactive plots as skipped/deprioritized in report controls; enabled automatically by large-dataset mode |
+| `--core_feature_threshold` | float | 0.95 | Prevalence threshold used to classify core features in PanR2 diversity summaries |
+| `--rare_feature_threshold` | float | 0.05 | Prevalence threshold used to classify rare features in PanR2 diversity summaries |
 | `--run_mobsuite` | bool | false | Run MOB-suite and pass plasmid reconstruction/typing tables into PanR2 |
 | `--mobsuite_dir` | path | - | Existing MOB-suite table directory to pass into PanR2 |
 | `--mobsuite_db` | path | - | Existing MOB-suite database directory passed to `mob_recon --database_directory`; for offline/restricted runs it should include core MOB-suite files plus `taxa.sqlite` |
@@ -666,12 +668,24 @@ results/
     │   │   ├── feature_metadata_associations.tsv
     │   │   ├── database_burden_metadata_associations.tsv
     │   │   ├── category_metadata_associations.tsv
+    │   │   ├── lineage_summary.tsv
+    │   │   ├── lineage_adjusted_warnings.tsv
+    │   │   ├── statistical_summary.tsv
     │   │   └── top_findings.tsv
+    │   ├── diversity/
+    │   │   ├── feature_richness_by_sample.tsv
+    │   │   ├── database_diversity_by_sample.tsv
+    │   │   ├── jaccard_distance_matrix.tsv
+    │   │   ├── core_accessory_rare_features.tsv
+    │   │   └── pan_feature_accumulation.tsv
     │   ├── report/
     │   │   ├── panr2_handoff_index.html
     │   │   ├── top_findings.html
     │   │   ├── metadata_quality_and_bias.html
     │   │   ├── database_burden_by_metadata.html
+    │   │   ├── lineage_context.html
+    │   │   ├── diversity_summary.html
+    │   │   ├── statistical_summary.html
     │   │   ├── cross_database_interpretation.html
     │   │   └── database_setup_and_contract.html
     │   ├── metadata_analysis/

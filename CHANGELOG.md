@@ -6,11 +6,19 @@
 - PanR2 handoff exports now write `panr2_inputs/manifest/reproducibility_manifest.json`, capturing pipeline version, git revision/tag when available, command/profile context, container image metadata, feature row counts, report controls, setup-status pointers, and runtime-summary paths.
 - PanR2 handoff exports now write `panr2_inputs/manifest/feature_contract.json`, a machine-readable feature-contract manifest with contract/schema version, required and optional columns, known databases, and recommended controlled values.
 - Formal feature-contract governance documentation at `docs/feature_contract_spec.md`.
+- Lineage-aware PanR2 interpretation outputs under `metadata_feature_analysis/lineage_*.tsv` and `report/lineage_context.html`, flagging top findings that may be dominated by one MLST ST, ANI cluster, or BioProject.
+- Pan-feature diversity outputs under `panr2_inputs/diversity/`, including feature richness, database diversity, Jaccard distance, core/accessory/rare classification, and pan-feature accumulation.
+- `metadata_feature_analysis/statistical_summary.tsv` and `report/statistical_summary.html`, summarizing association-test volume, q-value hits when available, and small-group, BioProject, and lineage warning counts.
 - Experimental `slurm` profile scaffolding with queue/account/cluster-option parameters for cluster dry runs.
 
 ### Changed
 - v0.4.0 release checklist now records the completed release-commit CI and tag-triggered GHCR container smoke-test workflow.
 - Container and HPC documentation now describe digest-pinned container runs and the experimental SLURM profile status.
+- `top_findings.tsv` now includes lineage context columns: dominant ST, dominant ANI cluster, their support fractions, and lineage warning flags.
+- `--core_feature_threshold` and `--rare_feature_threshold` expose the prevalence cutoffs used for core/accessory/rare feature classification.
+
+### Tested
+- Synthetic PanR2 export tests now cover lineage warning flags, diversity summaries, statistical summaries, and the new lineage/diversity/statistical report pages.
 
 ## 0.4.0 - 2026-05-13
 

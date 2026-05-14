@@ -86,6 +86,10 @@ FEATURE_CONTRACT_ALLOWED_VALUES = {
         "sequence_match",
         "tool_call",
         "typing_call",
+        "sequence_type_call",
+        "allele_call",
+        "kleborate_call",
+        "kleborate_amr_marker",
         "assembly_metric",
         "cooccurrence",
         "proximity",
@@ -1317,6 +1321,68 @@ def _top_project_summary(samples: set[str], project_by_sample: dict[str, str]) -
     }
 
 
+def _dominance_summary(samples: set[str], values_by_sample: dict[str, str]) -> dict[str, str]:
+    values = [values_by_sample.get(sample, "") for sample in samples if values_by_sample.get(sample, "")]
+    counts = Counter(values)
+    top_value, top_count = counts.most_common(1)[0] if counts else ("", 0)
+    fraction = top_count / len(values) if values else None
+    return {
+        "samples_evaluated": str(len(values)),
+        "unique_values": str(len(counts)),
+        "dominant_value": top_value,
+        "dominant_count": str(top_count),
+        "dominant_fraction": _format_fraction(fraction),
+    }
+
+
+def _dominance_warning(summary: dict[str, str], flag: str, min_samples: int = 3, threshold: float = 0.8) -> str:
+    samples = int(summary.get("samples_evaluated", "0") or 0)
+    fraction = _float_or_none(summary.get("dominant_fraction", ""))
+    if samples >= min_samples and fraction is not None and fraction >= threshold:
+        return flag
+    return ""
+
+
+def _st_by_sample(rows: list[dict[str, str]]) -> dict[str, str]:
+    st = {}
+    for row in rows:
+        if row.get("database") != "mlst" or row.get("presence", "1") != "1":
+            continue
+        feature_id = row.get("feature_id", "")
+        category = row.get("feature_category", "")
+        sample = row.get("assembly_accession", "") or row.get("sample_id", "")
+        if sample and (category == "sequence_type" or feature_id.startswith("ST_")) and feature_id.startswith("ST_"):
+            st.setdefault(sample, feature_id)
+    return st
+
+
+def _ani_cluster_by_sample(out_dir: Path) -> dict[str, str]:
+    cluster_by_sample = {}
+    for path in [
+        out_dir / "ani" / "analysis" / "duplicate_clusters.csv",
+        out_dir / "ani" / "duplicate_clusters.csv",
+        out_dir.parent / "ani" / "analysis" / "duplicate_clusters.csv",
+        out_dir.parent / "ani" / "duplicate_clusters.csv",
+    ]:
+        for row in read_table(path):
+            raw_sample = first_value(row, ["genome", "assembly_accession", "sample_id"], "")
+            cluster = first_value(row, ["ani_cluster", "cluster", "feature_id"], "")
+            if not raw_sample or not cluster:
+                continue
+            sample = extract_accession(raw_sample) or clean_sample_id(raw_sample)
+            cluster_by_sample[sample] = cluster
+    return cluster_by_sample
+
+
+def _metadata_group_by_sample(metadata_rows: list[dict[str, str]], column: str) -> dict[str, str]:
+    normalized = normalize_metadata_rows(metadata_rows)
+    return {
+        row["assembly_accession"]: row.get(column, "")
+        for row in normalized
+        if row.get("assembly_accession") and row.get(column)
+    }
+
+
 def write_metadata_analysis(sample_dir: Path, out_dir: Path) -> dict[str, str]:
     metadata_rows = load_metadata_rows(sample_dir)
     analysis_dir = out_dir / "metadata_feature_analysis"
@@ -1486,11 +1552,17 @@ def _annotate_top_findings(
     normalized_metadata_rows: list[dict[str, str]],
     presence: dict[tuple[str, str], set[str]],
     project_by_sample: dict[str, str],
+    st_by_sample: dict[str, str] | None = None,
+    ani_cluster_by_sample: dict[str, str] | None = None,
 ) -> list[dict[str, str]]:
+    st_by_sample = st_by_sample or {}
+    ani_cluster_by_sample = ani_cluster_by_sample or {}
     annotated = []
     for finding in top_findings:
         support_samples = _supporting_samples_for_finding(finding, normalized_metadata_rows, presence)
         project_summary = _top_project_summary(support_samples, project_by_sample)
+        st_summary = _dominance_summary(support_samples, st_by_sample)
+        ani_summary = _dominance_summary(support_samples, ani_cluster_by_sample)
         flags = []
         if finding.get("warning"):
             flags.extend(flag.strip() for flag in finding["warning"].split(";") if flag.strip())
@@ -1500,12 +1572,29 @@ def _annotate_top_findings(
             flags.append("low_sample_warning")
         if project_summary["warning"]:
             flags.append(project_summary["warning"])
+        st_warning = _dominance_warning(st_summary, "single_ST_dominance")
+        ani_warning = _dominance_warning(ani_summary, "single_ani_cluster_dominance")
+        if st_warning:
+            flags.append(st_warning)
+        if ani_warning:
+            flags.append(ani_warning)
+        lineage_flags = [flag for flag in [st_warning, ani_warning] if flag]
+        if not st_by_sample and not ani_cluster_by_sample:
+            lineage_flags.append("insufficient_lineage_data")
+        elif st_by_sample and len({value for value in st_by_sample.values() if value}) <= 1 and len(st_by_sample) >= 3:
+            lineage_flags.append("low_lineage_diversity")
+        flags.extend(lineage_flags)
         warning_flags = _flag_string(flags)
         out = dict(finding)
         out.update({
             "supporting_samples": str(len(support_samples)),
             "largest_bioproject": project_summary["largest_bioproject"],
             "largest_bioproject_fraction": project_summary["largest_bioproject_fraction"],
+            "dominant_ST": st_summary["dominant_value"],
+            "dominant_ST_fraction": st_summary["dominant_fraction"],
+            "dominant_ani_cluster": ani_summary["dominant_value"],
+            "dominant_ani_cluster_fraction": ani_summary["dominant_fraction"],
+            "lineage_warning_flags": _flag_string(lineage_flags),
             "warning_flags": warning_flags,
             "interpretation_label": _interpretation_label(finding.get("effect_size", ""), finding.get("q_value", ""), warning_flags),
         })
@@ -1582,6 +1671,131 @@ def write_bioproject_bias_report(
     )
 
 
+def write_lineage_analysis(
+    rows: list[dict[str, str]],
+    metadata_rows: list[dict[str, str]],
+    top_findings: list[dict[str, str]],
+    out_dir: Path,
+) -> dict[str, str]:
+    analysis_dir = out_dir / "metadata_feature_analysis"
+    analysis_dir.mkdir(parents=True, exist_ok=True)
+    samples = sorted({metadata_accession(row) for row in metadata_rows if metadata_accession(row)} | {row.get("assembly_accession", "") for row in rows if row.get("assembly_accession", "")})
+    st_by_sample = _st_by_sample(rows)
+    ani_by_sample = _ani_cluster_by_sample(out_dir)
+    project_by_sample = _bioproject_by_sample(metadata_rows)
+    presence = feature_presence(rows)
+    normalized = normalize_metadata_rows(metadata_rows)
+
+    lineage_rows = []
+    for sample in samples:
+        lineage_rows.append({
+            "assembly_accession": sample,
+            "mlst_ST": st_by_sample.get(sample, ""),
+            "ani_cluster": ani_by_sample.get(sample, ""),
+            "bioproject": project_by_sample.get(sample, ""),
+            "lineage_data_status": "available" if st_by_sample.get(sample) or ani_by_sample.get(sample) else "missing",
+        })
+    lineage_summary_path = write_rows(
+        analysis_dir / "lineage_summary.tsv",
+        lineage_rows,
+        ["assembly_accession", "mlst_ST", "ani_cluster", "bioproject", "lineage_data_status"],
+    )
+
+    burden_rows = []
+    for lineage_type, lineage_map in [("mlst_ST", st_by_sample), ("ani_cluster", ani_by_sample)]:
+        grouped: dict[str, set[str]] = defaultdict(set)
+        for sample, value in lineage_map.items():
+            if value:
+                grouped[value].add(sample)
+        for lineage_value, members in sorted(grouped.items()):
+            for (database, feature_id), present_samples in sorted(presence.items()):
+                present = len(present_samples & members)
+                if present == 0:
+                    continue
+                burden_rows.append({
+                    "lineage_type": lineage_type,
+                    "lineage_value": lineage_value,
+                    "database": database,
+                    "feature_id": feature_id,
+                    "lineage_sample_count": str(len(members)),
+                    "present_count": str(present),
+                    "prevalence": f"{present / len(members):.4f}" if members else "0.0000",
+                })
+    lineage_burden_path = write_rows(
+        analysis_dir / "lineage_feature_burden.tsv",
+        burden_rows,
+        ["lineage_type", "lineage_value", "database", "feature_id", "lineage_sample_count", "present_count", "prevalence"],
+    )
+
+    confounding_rows = []
+    for metadata_column in ["country", "host", "sample_type", "isolation_source", "environment_medium", "collection_year", "bioproject"]:
+        metadata_map = _metadata_group_by_sample(metadata_rows, metadata_column)
+        for lineage_type, lineage_map in [("mlst_ST", st_by_sample), ("ani_cluster", ani_by_sample)]:
+            grouped: dict[str, set[str]] = defaultdict(set)
+            for sample, lineage_value in lineage_map.items():
+                if lineage_value and metadata_map.get(sample):
+                    grouped[lineage_value].add(sample)
+            for lineage_value, members in sorted(grouped.items()):
+                summary = _dominance_summary(members, metadata_map)
+                warning = _dominance_warning(summary, "metadata_lineage_confounding")
+                confounding_rows.append({
+                    "metadata_column": metadata_column,
+                    "lineage_type": lineage_type,
+                    "lineage_value": lineage_value,
+                    "samples_evaluated": summary["samples_evaluated"],
+                    "dominant_metadata_value": summary["dominant_value"],
+                    "dominant_metadata_fraction": summary["dominant_fraction"],
+                    "status": "WARNING_CONFOUNDED" if warning else "PASS",
+                    "warning": warning,
+                })
+    lineage_confounding_path = write_rows(
+        analysis_dir / "lineage_metadata_confounding.tsv",
+        confounding_rows,
+        ["metadata_column", "lineage_type", "lineage_value", "samples_evaluated", "dominant_metadata_value", "dominant_metadata_fraction", "status", "warning"],
+    )
+
+    warning_rows = []
+    for finding in top_findings:
+        warning_rows.append({
+            "finding_type": finding.get("finding_type", ""),
+            "database": finding.get("database", ""),
+            "feature_id": finding.get("feature_id", ""),
+            "metadata_column": finding.get("metadata_column", ""),
+            "metadata_value": finding.get("metadata_value", ""),
+            "supporting_samples": finding.get("supporting_samples", ""),
+            "dominant_ST": finding.get("dominant_ST", ""),
+            "dominant_ST_fraction": finding.get("dominant_ST_fraction", ""),
+            "dominant_ani_cluster": finding.get("dominant_ani_cluster", ""),
+            "dominant_ani_cluster_fraction": finding.get("dominant_ani_cluster_fraction", ""),
+            "lineage_warning_flags": finding.get("lineage_warning_flags", ""),
+            "interpretation": "lineage_context_required" if finding.get("lineage_warning_flags") else "no_lineage_warning",
+        })
+    lineage_warnings_path = write_rows(
+        analysis_dir / "lineage_adjusted_warnings.tsv",
+        warning_rows,
+        [
+            "finding_type",
+            "database",
+            "feature_id",
+            "metadata_column",
+            "metadata_value",
+            "supporting_samples",
+            "dominant_ST",
+            "dominant_ST_fraction",
+            "dominant_ani_cluster",
+            "dominant_ani_cluster_fraction",
+            "lineage_warning_flags",
+            "interpretation",
+        ],
+    )
+    return {
+        "lineage_summary": lineage_summary_path,
+        "lineage_feature_burden": lineage_burden_path,
+        "lineage_metadata_confounding": lineage_confounding_path,
+        "lineage_adjusted_warnings": lineage_warnings_path,
+    }
+
+
 def write_feature_matrices(rows: list[dict[str, str]], metadata_rows: list[dict[str, str]], out_dir: Path, max_features: int = 300) -> dict[str, str]:
     matrix_dir = out_dir / "feature_matrices"
     matrix_dir.mkdir(parents=True, exist_ok=True)
@@ -1606,6 +1820,197 @@ def write_feature_matrices(rows: list[dict[str, str]], metadata_rows: list[dict[
     for database, features in sorted(by_database.items()):
         outputs[f"{database}_matrix"] = write_matrix(matrix_dir / f"{database}_presence_absence.tsv", features)
     return outputs
+
+
+def _feature_sets_by_sample(rows: list[dict[str, str]]) -> dict[str, set[tuple[str, str]]]:
+    sample_features: dict[str, set[tuple[str, str]]] = defaultdict(set)
+    for row in rows:
+        if row.get("presence", "1") != "1":
+            continue
+        sample = row.get("assembly_accession", "") or row.get("sample_id", "")
+        database = row.get("database", "")
+        feature_id = row.get("feature_id", "")
+        if sample and database and feature_id:
+            sample_features[sample].add((database, feature_id))
+    return sample_features
+
+
+def _shannon(values: list[int]) -> float:
+    total = sum(values)
+    if total == 0:
+        return 0.0
+    score = 0.0
+    for value in values:
+        if value <= 0:
+            continue
+        p = value / total
+        score -= p * math.log(p)
+    return score
+
+
+def _simpson(values: list[int]) -> float:
+    total = sum(values)
+    if total == 0:
+        return 0.0
+    return 1.0 - sum((value / total) ** 2 for value in values if value > 0)
+
+
+def write_diversity_analysis(
+    rows: list[dict[str, str]],
+    metadata_rows: list[dict[str, str]],
+    out_dir: Path,
+    core_feature_threshold: float = 0.95,
+    rare_feature_threshold: float = 0.05,
+) -> dict[str, str]:
+    diversity_dir = out_dir / "diversity"
+    diversity_dir.mkdir(parents=True, exist_ok=True)
+    samples = sorted({metadata_accession(row) for row in metadata_rows if metadata_accession(row)} | {row.get("assembly_accession", "") for row in rows if row.get("assembly_accession", "")})
+    sample_features = _feature_sets_by_sample(rows)
+    databases = sorted({row.get("database", "") for row in rows if row.get("database")})
+    normalized = {row["assembly_accession"]: row for row in normalize_metadata_rows(metadata_rows) if row.get("assembly_accession")}
+
+    richness_rows = []
+    for sample in samples:
+        features = sample_features.get(sample, set())
+        counts = Counter(database for database, _feature in features)
+        out = {
+            "assembly_accession": sample,
+            "total_feature_richness": str(len(features)),
+            "database_count": str(len(counts)),
+            "shannon_database_diversity": f"{_shannon(list(counts.values())):.6f}",
+            "simpson_database_diversity": f"{_simpson(list(counts.values())):.6f}",
+        }
+        for metadata_column in METADATA_ALIASES:
+            out[metadata_column] = normalized.get(sample, {}).get(metadata_column, "")
+        richness_rows.append(out)
+    richness_path = write_rows(
+        diversity_dir / "feature_richness_by_sample.tsv",
+        richness_rows,
+        ["assembly_accession", "total_feature_richness", "database_count", "shannon_database_diversity", "simpson_database_diversity", *METADATA_ALIASES.keys()],
+    )
+
+    database_rows = []
+    for sample in samples:
+        features = sample_features.get(sample, set())
+        for database in databases:
+            count = len({feature for feature_db, feature in features if feature_db == database})
+            database_rows.append({"assembly_accession": sample, "database": database, "feature_richness": str(count)})
+    database_diversity_path = write_rows(
+        diversity_dir / "database_diversity_by_sample.tsv",
+        database_rows,
+        ["assembly_accession", "database", "feature_richness"],
+    )
+
+    all_features = sorted({feature for features in sample_features.values() for feature in features})
+    sample_count = len(samples)
+    class_rows = []
+    for database, feature_id in all_features:
+        present = sum(1 for sample in samples if (database, feature_id) in sample_features.get(sample, set()))
+        prevalence = present / sample_count if sample_count else 0.0
+        if prevalence >= core_feature_threshold:
+            feature_class = "core"
+        elif prevalence < rare_feature_threshold:
+            feature_class = "rare"
+        else:
+            feature_class = "accessory"
+        class_rows.append({
+            "database": database,
+            "feature_id": feature_id,
+            "present_count": str(present),
+            "sample_count": str(sample_count),
+            "prevalence": f"{prevalence:.6f}",
+            "feature_class": feature_class,
+            "core_threshold": f"{core_feature_threshold:.4f}",
+            "rare_threshold": f"{rare_feature_threshold:.4f}",
+        })
+    core_accessory_path = write_rows(
+        diversity_dir / "core_accessory_rare_features.tsv",
+        class_rows,
+        ["database", "feature_id", "present_count", "sample_count", "prevalence", "feature_class", "core_threshold", "rare_threshold"],
+    )
+
+    jaccard_rows = []
+    for sample_a in samples:
+        features_a = sample_features.get(sample_a, set())
+        for sample_b in samples:
+            features_b = sample_features.get(sample_b, set())
+            union = features_a | features_b
+            intersection = features_a & features_b
+            jaccard = len(intersection) / len(union) if union else 1.0
+            jaccard_rows.append({
+                "sample_a": sample_a,
+                "sample_b": sample_b,
+                "shared_features": str(len(intersection)),
+                "union_features": str(len(union)),
+                "jaccard_similarity": f"{jaccard:.6f}",
+                "jaccard_distance": f"{1 - jaccard:.6f}",
+            })
+    jaccard_path = write_rows(
+        diversity_dir / "jaccard_distance_matrix.tsv",
+        jaccard_rows,
+        ["sample_a", "sample_b", "shared_features", "union_features", "jaccard_similarity", "jaccard_distance"],
+    )
+
+    accumulation_rows = []
+    seen: set[tuple[str, str]] = set()
+    for index, sample in enumerate(samples, start=1):
+        seen.update(sample_features.get(sample, set()))
+        accumulation_rows.append({
+            "sample_order": str(index),
+            "assembly_accession": sample,
+            "cumulative_unique_features": str(len(seen)),
+            "new_features_added": str(len(seen) - int(accumulation_rows[-1]["cumulative_unique_features"]) if accumulation_rows else len(seen)),
+        })
+    accumulation_path = write_rows(
+        diversity_dir / "pan_feature_accumulation.tsv",
+        accumulation_rows,
+        ["sample_order", "assembly_accession", "cumulative_unique_features", "new_features_added"],
+    )
+    return {
+        "feature_richness_by_sample": richness_path,
+        "database_diversity_by_sample": database_diversity_path,
+        "jaccard_distance_matrix": jaccard_path,
+        "core_accessory_rare_features": core_accessory_path,
+        "pan_feature_accumulation": accumulation_path,
+    }
+
+
+def write_statistical_summary(out_dir: Path) -> dict[str, str]:
+    analysis_dir = out_dir / "metadata_feature_analysis"
+    analysis_dir.mkdir(parents=True, exist_ok=True)
+    feature_associations = read_table(analysis_dir / "feature_metadata_associations.tsv")
+    burden_associations = read_table(analysis_dir / "database_burden_metadata_associations.tsv")
+    category_associations = read_table(analysis_dir / "category_metadata_associations.tsv")
+    top_findings = read_table(analysis_dir / "top_findings.tsv")
+    metadata_columns = {
+        row.get("metadata_column", "")
+        for table in [feature_associations, burden_associations, category_associations, top_findings]
+        for row in table
+        if row.get("metadata_column")
+    }
+    warning_text = ";".join(
+        ";".join([row.get("warning", ""), row.get("warning_flags", ""), row.get("lineage_warning_flags", "")])
+        for table in [feature_associations, burden_associations, category_associations, top_findings]
+        for row in table
+    )
+    q_values = [
+        _float_or_none(row.get("q_value", ""))
+        for row in feature_associations + top_findings
+        if _float_or_none(row.get("q_value", "")) is not None
+    ]
+    rows = [
+        {"metric": "features_tested", "value": str(len({(row.get("database", ""), row.get("feature_id", "")) for row in feature_associations if row.get("feature_id")})), "message": "Unique database-feature pairs in metadata-feature screening."},
+        {"metric": "metadata_columns_tested", "value": str(len(metadata_columns)), "message": "Metadata columns represented in association summaries."},
+        {"metric": "tests_performed", "value": str(len(feature_associations) + len(burden_associations) + len(category_associations)), "message": "Screening tests/summaries written across feature, burden, and category association tables."},
+        {"metric": "top_findings_generated", "value": str(len(top_findings)), "message": "Top exploratory findings emitted for report navigation."},
+        {"metric": "q_le_0_05_findings", "value": str(sum(1 for value in q_values if value is not None and value <= 0.05)), "message": "Findings with q<=0.05 when q-values are available."},
+        {"metric": "small_group_warnings", "value": str(warning_text.count("small_group") + warning_text.count("low_sample_warning")), "message": "Small-group or low-sample warning flags."},
+        {"metric": "bioproject_warnings", "value": str(warning_text.count("single_bioproject_dominance") + warning_text.count("bioproject_bias_warning")), "message": "BioProject/study-dominance warning flags."},
+        {"metric": "lineage_warnings", "value": str(warning_text.count("single_ST_dominance") + warning_text.count("single_ani_cluster_dominance") + warning_text.count("metadata_lineage_confounding")), "message": "Lineage/ST/ANI warning flags."},
+        {"metric": "insufficient_lineage_warnings", "value": str(warning_text.count("insufficient_lineage_data")), "message": "Findings or summaries where lineage context was unavailable."},
+    ]
+    path = write_rows(analysis_dir / "statistical_summary.tsv", rows, ["metric", "value", "message"])
+    return {"statistical_summary": path}
 
 
 def write_feature_eligibility_and_prevalence(
@@ -1964,7 +2369,16 @@ def write_feature_eligibility_and_prevalence(
                     "message": f"{row['database']} feature {row['feature_id']} was common in {row['metadata_column']}={row['metadata_value']} (prevalence {row['prevalence']}).",
                 })
     top_findings = sorted(top_findings, key=lambda row: float(row["effect_size"]), reverse=True)[:50]
-    top_findings = _annotate_top_findings(top_findings, normalized, presence, _bioproject_by_sample(metadata_rows))
+    st_by_sample = _st_by_sample(rows)
+    ani_cluster_by_sample = _ani_cluster_by_sample(out_dir)
+    top_findings = _annotate_top_findings(
+        top_findings,
+        normalized,
+        presence,
+        _bioproject_by_sample(metadata_rows),
+        st_by_sample=st_by_sample,
+        ani_cluster_by_sample=ani_cluster_by_sample,
+    )
     top_findings_path = write_rows(
         analysis_dir / "top_findings.tsv",
         top_findings,
@@ -1980,6 +2394,11 @@ def write_feature_eligibility_and_prevalence(
             "supporting_samples",
             "largest_bioproject",
             "largest_bioproject_fraction",
+            "dominant_ST",
+            "dominant_ST_fraction",
+            "dominant_ani_cluster",
+            "dominant_ani_cluster_fraction",
+            "lineage_warning_flags",
             "warning_flags",
             "interpretation_label",
             "message",
@@ -1993,6 +2412,8 @@ def write_feature_eligibility_and_prevalence(
             warning_note = f" [{row['interpretation_label']}]" if row.get("interpretation_label") else ""
             handle.write(f"- {row['message']}{warning_note}\n")
     bioproject_bias_path = write_bioproject_bias_report(rows, metadata_rows, top_findings, out_dir)
+    lineage_outputs = write_lineage_analysis(rows, metadata_rows, top_findings, out_dir)
+    statistical_outputs = write_statistical_summary(out_dir)
 
     return {
         "feature_eligibility": feature_eligibility_path,
@@ -2005,6 +2426,8 @@ def write_feature_eligibility_and_prevalence(
         "top_findings": top_findings_path,
         "top_findings_md": str(top_findings_md),
         "bioproject_bias_report": bioproject_bias_path,
+        **lineage_outputs,
+        **statistical_outputs,
         **prevalence_outputs,
     }
 
@@ -2743,6 +3166,7 @@ def write_interpretation_reports(
     report_dir.mkdir(parents=True, exist_ok=True)
     analysis_dir = out_dir / "metadata_feature_analysis"
     cross_dir = out_dir / "cross_database"
+    diversity_dir = out_dir / "diversity"
     manifest_dir = out_dir / "manifest"
     row_limit = 40 if report_mode == "compact" else (200 if report_mode == "exploratory" else 80)
     metadata_row_limit = max_metadata_columns if report_mode == "compact" else max(max_metadata_columns, row_limit)
@@ -2784,6 +3208,11 @@ th { background: #f0f4f8; }
             "effect_size",
             "supporting_samples",
             "largest_bioproject_fraction",
+            "dominant_ST",
+            "dominant_ST_fraction",
+            "dominant_ani_cluster",
+            "dominant_ani_cluster_fraction",
+            "lineage_warning_flags",
             "warning_flags",
             "interpretation_label",
             "message",
@@ -2855,6 +3284,51 @@ th { background: #f0f4f8; }
         max_rows=row_limit,
     )
     burden_path.write_text(page("Database Burden By Metadata", burden_body), encoding="utf-8")
+
+    lineage_path = report_dir / "lineage_context.html"
+    lineage_rows = read_table(analysis_dir / "lineage_summary.tsv")
+    lineage_burden_rows = read_table(analysis_dir / "lineage_feature_burden.tsv")
+    lineage_confounding_rows = read_table(analysis_dir / "lineage_metadata_confounding.tsv")
+    lineage_warning_rows = read_table(analysis_dir / "lineage_adjusted_warnings.tsv")
+    lineage_body = """
+<div class="warning">Lineage context helps identify when metadata-feature associations may reflect ST, ANI cluster, BioProject, or sampling structure rather than independent biology.</div>
+<p>These warnings do not invalidate findings; they mark results that need lineage-aware interpretation or independent validation.</p>
+"""
+    lineage_body += "<h2>Sample Lineage Summary</h2>"
+    lineage_body += _html_table(lineage_rows, ["assembly_accession", "mlst_ST", "ani_cluster", "bioproject", "lineage_data_status"], max_rows=row_limit)
+    lineage_body += "<h2>Lineage Feature Burden</h2>"
+    lineage_body += _html_table(lineage_burden_rows, ["lineage_type", "lineage_value", "database", "feature_id", "lineage_sample_count", "present_count", "prevalence"], max_rows=row_limit)
+    lineage_body += "<h2>Metadata-Lineage Confounding</h2>"
+    lineage_body += _html_table(lineage_confounding_rows, ["metadata_column", "lineage_type", "lineage_value", "samples_evaluated", "dominant_metadata_value", "dominant_metadata_fraction", "status", "warning"], max_rows=row_limit)
+    lineage_body += "<h2>Top-Finding Lineage Warnings</h2>"
+    lineage_body += _html_table(lineage_warning_rows, ["finding_type", "database", "feature_id", "metadata_column", "metadata_value", "dominant_ST", "dominant_ST_fraction", "dominant_ani_cluster", "dominant_ani_cluster_fraction", "lineage_warning_flags", "interpretation"], max_rows=row_limit)
+    lineage_path.write_text(page("Lineage Context", lineage_body), encoding="utf-8")
+
+    diversity_path = report_dir / "diversity_summary.html"
+    richness_rows = read_table(diversity_dir / "feature_richness_by_sample.tsv")
+    database_diversity_rows = read_table(diversity_dir / "database_diversity_by_sample.tsv")
+    core_rows = read_table(diversity_dir / "core_accessory_rare_features.tsv")
+    accumulation_rows = read_table(diversity_dir / "pan_feature_accumulation.tsv")
+    diversity_body = """
+<p>Diversity summaries are computed from standardized feature tables. They support broad comparison of feature burden, database richness, core/accessory/rare features, and sample-level Jaccard distances.</p>
+"""
+    diversity_body += "<h2>Feature Richness By Sample</h2>"
+    diversity_body += _html_table(richness_rows, ["assembly_accession", "total_feature_richness", "database_count", "shannon_database_diversity", "simpson_database_diversity", "country", "host", "isolation_source"], max_rows=row_limit)
+    diversity_body += "<h2>Database Richness By Sample</h2>"
+    diversity_body += _html_table(database_diversity_rows, ["assembly_accession", "database", "feature_richness"], max_rows=row_limit)
+    diversity_body += "<h2>Core / Accessory / Rare Features</h2>"
+    diversity_body += _html_table(core_rows, ["database", "feature_id", "present_count", "sample_count", "prevalence", "feature_class"], max_rows=row_limit)
+    diversity_body += "<h2>Pan-Feature Accumulation</h2>"
+    diversity_body += _html_table(accumulation_rows, ["sample_order", "assembly_accession", "cumulative_unique_features", "new_features_added"], max_rows=row_limit)
+    diversity_path.write_text(page("Feature Diversity Summary", diversity_body), encoding="utf-8")
+
+    statistical_path = report_dir / "statistical_summary.html"
+    statistical_rows = read_table(analysis_dir / "statistical_summary.tsv")
+    statistical_body = """
+<div class="warning">Statistical summaries are exploratory screening summaries. Use warning flags and validation datasets before drawing biological conclusions.</div>
+"""
+    statistical_body += _html_table(statistical_rows, ["metric", "value", "message"], max_rows=80)
+    statistical_path.write_text(page("Statistical Summary", statistical_body), encoding="utf-8")
 
     cross_path = report_dir / "cross_database_interpretation.html"
     proximity_rows = read_table(cross_dir / "feature_proximity.tsv")
@@ -2960,6 +3434,9 @@ th { background: #f0f4f8; }
         ("Metadata quality and bias", metadata_path),
         ("BioProject bias", bioproject_path),
         ("Database burden by metadata", burden_path),
+        ("Lineage context", lineage_path),
+        ("Feature diversity summary", diversity_path),
+        ("Statistical summary", statistical_path),
         ("Cross-database interpretation", cross_path),
         ("AMRFinderPlus vs ABRicate concordance", concordance_path),
         ("Database setup and feature contract", setup_path),
@@ -2975,6 +3452,9 @@ th { background: #f0f4f8; }
         "metadata_quality_html": str(metadata_path),
         "bioproject_bias_html": str(bioproject_path),
         "database_burden_html": str(burden_path),
+        "lineage_context_html": str(lineage_path),
+        "diversity_summary_html": str(diversity_path),
+        "statistical_summary_html": str(statistical_path),
         "cross_database_interpretation_html": str(cross_path),
         "amrfinder_abricate_concordance_html": str(concordance_path),
         "database_setup_contract_html": str(setup_path),
@@ -2992,6 +3472,8 @@ def export_contract(
     max_metadata_columns: int = 80,
     top_n_features_per_database: int = 25,
     skip_heavy_interactive_plots: bool = False,
+    core_feature_threshold: float = 0.95,
+    rare_feature_threshold: float = 0.05,
 ) -> dict[str, str]:
     written = write_feature_tables(sample_dir, out_dir)
     validation = validate_feature_tables(sample_dir, out_dir)
@@ -3009,6 +3491,13 @@ def export_contract(
         metadata_rows,
         out_dir,
         max_features=max_features_heatmap,
+    )
+    diversity_outputs = write_diversity_analysis(
+        all_features,
+        metadata_rows,
+        out_dir,
+        core_feature_threshold=core_feature_threshold,
+        rare_feature_threshold=rare_feature_threshold,
     )
     cross_outputs = write_cross_database_outputs(
         all_features,
@@ -3042,6 +3531,7 @@ def export_contract(
         **metadata_outputs,
         **feature_outputs,
         **matrix_outputs,
+        **diversity_outputs,
         **cross_outputs,
         **audit_outputs,
         **contract_outputs,
