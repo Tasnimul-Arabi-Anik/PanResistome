@@ -2,7 +2,26 @@
 
 ## Unreleased
 
-No unreleased changes yet.
+### Added
+- v0.6.0 roadmap focused on deployment and broader biological validation without
+  adding new default databases.
+- ANI-enabled 10-record `Klebsiella pneumoniae` Singularity/GHCR validation
+  evidence documenting skani all-vs-all ANI, ANI cluster lineage context,
+  1,248 standardized feature rows, 44 IntegronFinder rows, and zero
+  unmatched/invalid/duplicate feature rows.
+- IntegronFinder-positive validation subset under
+  `validation/integronfinder_positive/`, selected from real biological positive
+  calls in the 100-record Klebsiella GHCR/Docker validation.
+- IntegronFinder-positive validation evidence documenting 418 standardized
+  IntegronFinder feature rows, 99/99 native raw tables, zero sample failures,
+  and zero unmatched/invalid/duplicate PanR2 feature-contract rows in the source
+  100-record GHCR/Docker run.
+
+### Fixed
+- PanR2 feature-contract export now parses native IntegronFinder and
+  MobileElementFinder handoff result tables under
+  `tool_results/*/panr2_inputs/` instead of treating those positive native-runner
+  rows as raw output while exporting header-only feature tables.
 
 ## 0.5.0 - 2026-05-14
 

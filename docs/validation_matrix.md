@@ -11,6 +11,8 @@ This matrix summarizes the major validation evidence used for release hardening.
 | Klebsiella pneumoniae 300 large mode | `Klebsiella pneumoniae` | 300 | 299 | 299 | off | off | on | off | on | off | yes | parallel | 16 | not run | 36638 | 0 | 0 | 0 | yes | PASS | `validation/klebsiella_pneumoniae_300/LARGE_MODE_CHECKM2_OFF_VALIDATION_RESULTS.md` |
 | Klebsiella pneumoniae 5 geNomAD Docker/GHCR | `Klebsiella pneumoniae` | 5 | 5 | 5 | off | off | off | off | off | off | no | geNomAD jobs=2 | 2 | not run | 601 | 0 | 0 | 0 | yes | PASS | `validation/optional_runner_biological/GENOMAD_POSITIVE_CALL_VALIDATION_RESULTS.md` |
 | Klebsiella pneumoniae 10 v0.5.0 Docker/GHCR | `Klebsiella pneumoniae` | 10 | 10 | 10 | off | off | off | off | on | on | yes | parallel | 8 | not run | 1348 | 0 | 0 | 0 | yes | PASS | `validation/klebsiella_pneumoniae_10/V0_5_0_DOCKER_VALIDATION_RESULTS.md` |
+| Klebsiella pneumoniae IntegronFinder-positive GHCR evidence | `Klebsiella pneumoniae` | 100 | 99 | 99 | off | off | off | off | on | off | yes | parallel | 8 | not run | 11488 | 0 | 0 | 0 | yes | PASS | `validation/integronfinder_positive/VALIDATION_RESULTS.md` |
+| Klebsiella pneumoniae 10 ANI-lineage Singularity/GHCR | `Klebsiella pneumoniae` | 10 | 10 | 10 | off | off | off | on | on | off | yes | parallel | 8 | not run | 1248 | 0 | 0 | 0 | yes | PASS | `validation/klebsiella_pneumoniae_10/ANI_LINEAGE_SINGULARITY_VALIDATION_RESULTS.md` |
 
 ## Current Interpretation
 
@@ -23,4 +25,12 @@ This matrix summarizes the major validation evidence used for release hardening.
   feature-contract manifest, lineage-aware summaries, pan-feature diversity
   summaries, statistical summary, and new HTML pages work on real
   feature-rich Klebsiella data with clean PanR2 feature-contract validation.
+- The IntegronFinder-positive evidence confirms that PanResistome-native
+  IntegronFinder can produce real biological feature rows at scale, merge 99/99
+  raw tables, and pass PanR2 feature-contract validation with zero unmatched,
+  invalid, or duplicate rows.
+- The 10-genome ANI-lineage Singularity/GHCR run proves the public image can
+  exercise skani all-vs-all ANI, populate ANI-cluster lineage context, preserve
+  positive native IntegronFinder handoff rows in strict PanR2 features, and pass
+  feature-contract validation after the v0.6.0 native-handoff export fix.
 - GTDB-Tk remains intentionally excluded from these validations because its reference database is large and should remain opt-in.

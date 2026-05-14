@@ -944,6 +944,20 @@ def discover_feature_rows(sample_dir: Path) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     seen_paths: set[Path] = set()
 
+    native_handoff_dirs = [
+        sample_dir / "tool_results" / "integronfinder" / "panr2_inputs",
+        sample_dir / "tool_results" / "mobileelementfinder" / "panr2_inputs",
+    ]
+    for handoff_dir in native_handoff_dirs:
+        for path in sorted(handoff_dir.glob("*_results.*")):
+            if path.suffix.lower() not in {".tab", ".tsv", ".csv"}:
+                continue
+            resolved = path.resolve()
+            if resolved in seen_paths:
+                continue
+            seen_paths.add(resolved)
+            rows.extend(parse_abricate_results(path, sample_dir, sample_map))
+
     for path in sorted(sample_dir.rglob("*_results.*")):
         if path.suffix.lower() not in {".tab", ".tsv", ".csv"}:
             continue

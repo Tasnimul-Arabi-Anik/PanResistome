@@ -153,6 +153,15 @@ conversion is not repeated in each work directory.
 export NXF_SINGULARITY_CACHEDIR=/shared/cache/panresistome/singularity
 ```
 
+On slow networks, Nextflow's default Singularity pull timeout can expire during
+the first GHCR-to-SIF conversion. Use a small extra config file when needed:
+
+```nextflow
+singularity.pullTimeout = '2h'
+```
+
+Then include it with `nextflow -c /path/to/singularity_long_pull.config run ...`.
+
 Normal non-sudo Docker depends on local socket permissions. On Linux, that often
 means adding the user to the `docker` group and then opening a new login
 session. Docker group membership grants broad Docker/root-equivalent access, so
