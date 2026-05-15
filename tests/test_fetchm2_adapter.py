@@ -1149,6 +1149,66 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertEqual(row["status"], "WARNING")
             self.assertIn("taxa.sqlite", row["message"])
 
+    def test_database_setup_status_does_not_strict_fail_experimental_optional_tools(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            sample_dir = root / "Acinetobacter_pittii"
+            (sample_dir / "metadata_output").mkdir(parents=True)
+            (sample_dir / "sequence").mkdir()
+            (sample_dir / "mobsuite" / "tables").mkdir(parents=True)
+            (sample_dir / "mobsuite" / "mobsuite_database_setup_status.tsv").write_text(
+                "database_dir\tauto_init_requested\tauto_init_taxa_requested\tmob_init_status\ttaxa_init_status\tcore_status\ttaxa_status\tstatus\tmessage\n"
+                f"{root / 'mobsuite_db'}\ttrue\ttrue\tFAIL\tSKIPPED\tFAIL\tWARNING_TAXA_MISSING\tFAIL\tcore database files missing\n",
+                encoding="utf-8",
+            )
+            (sample_dir / "metadata_output" / "ncbi_clean.csv").write_text(
+                "Assembly Accession,Organism Name\nGCF_000000001.1,Acinetobacter pittii\n",
+                encoding="utf-8",
+            )
+            (sample_dir / "sequence" / "GCF_000000001.1_genomic.fna").write_text(
+                ">contig1\nATGC\n",
+                encoding="utf-8",
+            )
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            (fake_bin / "panr").write_text("#!/bin/sh\nprintf 'panr 0.1.3\\n'\n", encoding="utf-8")
+            for executable in fake_bin.iterdir():
+                executable.chmod(0o755)
+            out = root / "database_setup_status.tsv"
+            env = os.environ.copy()
+            env["PATH"] = f"{fake_bin}:{env.get('PATH', '')}"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "scripts" / "database_setup_status.py"),
+                    "--sample-dir",
+                    str(sample_dir),
+                    "--out",
+                    str(out),
+                    "--run-panr2-comprehensive",
+                    "true",
+                    "--run-defensefinder",
+                    "true",
+                    "--run-mobsuite",
+                    "true",
+                    "--mobsuite-db",
+                    str(root / "mobsuite_db"),
+                    "--strict",
+                ],
+                check=True,
+                env=env,
+            )
+
+            status = pd.read_csv(out, sep="\t")
+            defensefinder = status.loc[status["database_or_tool"] == "defensefinder"].iloc[0]
+            mobsuite_setup = status.loc[status["database_or_tool"] == "mobsuite_database_setup"].iloc[0]
+            mobsuite_db = status.loc[status["database_or_tool"] == "mobsuite_database"].iloc[0]
+            self.assertEqual(defensefinder["status"], "WARNING_MISSING")
+            self.assertEqual(str(defensefinder["required_for_profile"]).lower(), "false")
+            self.assertEqual(mobsuite_setup["status"], "WARNING_FAILED")
+            self.assertEqual(mobsuite_db["status"], "WARNING_FAILED")
+
     def test_validation_summary_script_reports_manifest_metrics(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

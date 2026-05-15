@@ -398,15 +398,20 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
     ]:
         version = command_version(command, ["--version"])
         if enabled:
+            required = module not in {"defensefinder"}
+            available = bool(version or shutil.which(command))
+            status = "PASS" if available else ("FAIL" if required else "WARNING_MISSING")
             rows.append(
                 row(
                     module,
+                    required,
                     True,
-                    True,
-                    "PASS" if version or shutil.which(command) else "FAIL",
+                    status,
                     "conda_environment",
                     version or (shutil.which(command) or ""),
-                    f"{command} is available." if version or shutil.which(command) else f"{command} was requested but not found.",
+                    f"{command} is available."
+                    if available
+                    else f"{command} was requested but not found; continuing because this runner is experimental/optional.",
                 )
             )
         else:
@@ -453,11 +458,16 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
         mobsuite_setup = read_first_record(sample_dir / "mobsuite" / "mobsuite_database_setup_status.tsv")
         if mobsuite_setup:
             setup_status = mobsuite_setup.get("status", "")
-            setup_status_normalized = "PASS" if setup_status in {"PASS", "WARNING_TAXA_MISSING"} else "FAIL"
+            if setup_status == "PASS":
+                setup_status_normalized = "PASS"
+            elif setup_status == "WARNING_TAXA_MISSING":
+                setup_status_normalized = "WARNING"
+            else:
+                setup_status_normalized = "WARNING_FAILED"
             rows.append(
                 row(
                     "mobsuite_database_setup",
-                    True,
+                    False,
                     True,
                     setup_status_normalized,
                     "mob_init_cache" if args.mobsuite_auto_init_db else "provided_or_cached_database",
@@ -466,10 +476,12 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
                 )
             )
         mobsuite_status, mobsuite_message = mobsuite_database_status(mobsuite_db_path)
+        if mobsuite_status == "FAIL":
+            mobsuite_status = "WARNING_FAILED"
         rows.append(
             row(
                 "mobsuite_database",
-                True,
+                False,
                 True,
                 mobsuite_status,
                 "auto_init_or_provided_database" if args.mobsuite_auto_init_db else "provided_or_cached_database",
@@ -504,15 +516,18 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
         if not enabled:
             rows.append(row(module, False, False, "SKIPPED", "not_requested", "", f"{module} was disabled."))
             continue
+        required = module not in {"mobsuite"}
+        found = bool(str(required_path) and required_path.exists())
+        status = "PASS" if found else ("FAIL" if required else "WARNING_MISSING")
         rows.append(
             row(
                 module,
+                required,
                 True,
-                True,
-                "PASS" if str(required_path) and required_path.exists() else "FAIL",
+                status,
                 "external_db_or_module_output",
-                str(required_path) if str(required_path) and required_path.exists() else "",
-                f"{module} requirement found." if str(required_path) and required_path.exists() else message,
+                str(required_path) if found else "",
+                f"{module} requirement found." if found else message,
             )
         )
 

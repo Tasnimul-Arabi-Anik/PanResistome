@@ -164,6 +164,24 @@ If a shared or preinitialized database is available, prefer:
 
 For offline runs, the database should include the core MOB-suite files and `taxa.sqlite`.
 
+MOB-suite remains an opt-in runner. If its cache is incomplete or `mob_init` cannot
+finish on a remote machine, PanResistome records the issue as a warning in
+`panr2_inputs/manifest/database_setup_status.tsv` and continues with the rest of
+the comprehensive workflow. For the cleanest first pass, rerun with
+`--run_mobsuite false`, then validate MOB-suite separately with a known-good
+`--mobsuite_db`.
+
+## DefenseFinder Not Found
+
+DefenseFinder is table-input/experimental in PanResistome. If
+`--panr2_run_defensefinder true` is used but `defense-finder` is not available in
+the environment or container, the preflight records `WARNING_MISSING` in
+`database_setup_status.tsv` and continues. Disable it for broad remote runs:
+
+```bash
+--panr2_run_defensefinder false
+```
+
 ## geNomad Database Download Fails
 
 When `--run_genomad true` is enabled and no `--genomad_db` is supplied, PanResistome downloads/caches the geNomad database under:

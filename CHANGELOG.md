@@ -11,6 +11,13 @@
   `--organism_max_records`, `--organism_candidate_records`,
   `--organism_diverse_bioproject`, and `--organism_prefer_refseq`.
 
+### Fixed
+- Database/tool preflight now treats experimental optional runners such as
+  DefenseFinder and incomplete MOB-suite cache setup as auditable warnings
+  instead of strict blockers, so remote comprehensive runs can continue with
+  validated core feature analyses while preserving the failure details in
+  `database_setup_status.tsv`.
+
 ## 0.6.0 - 2026-05-14
 
 ### Added
