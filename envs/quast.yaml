@@ -1,8 +1,9 @@
 name: quast_env
 channels:
-  - bioconda
   - conda-forge
+  - bioconda
   - defaults
 dependencies:
-  - quast
-  - python=3.12
+  - python=3.10
+  - quast=5.3.0
+  - simplejson
