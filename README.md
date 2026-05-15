@@ -337,8 +337,31 @@ docs/example_outputs/delftia_summary/README.md
 The full run directory can be large, so the preferred GitHub pattern is to keep the reproducible input and command in git, then publish a trimmed `report/` or GitHub Pages snapshot after manual validation rather than committing genomes, raw databases, and all intermediate outputs.
 
 ## Input
-Download ncbi_dataset.tsv of your target organism(s) from the [NCBI genome database](https://www.ncbi.nlm.nih.gov/datasets/genome/).
--**ncbi_dataset.tsv**
+Provide either an Assembly TSV with `--input` or let PanResistome generate one
+from an NCBI taxon query with `--taxon`.
+
+```bash
+nextflow run main.nf \
+  --taxon "Acinetobacter pittii" \
+  --organism_max_records 100 \
+  --organism_candidate_records 500 \
+  --organism_diverse_bioproject true \
+  --outdir validation_runs/acinetobacter_pittii \
+  -profile conda,mamba,desktop_parallel \
+  --analysis_profile comprehensive \
+  --run_gtdbtk false
+```
+
+When `--taxon` is used, PanResistome writes the generated input bundle to
+`<outdir>/input_generation/` and then passes `ncbi_dataset.tsv` into FetchM2.
+This is equivalent to running `scripts/generate_ncbi_assembly_input.py` first,
+but removes that manual step for remote users.
+
+`--organism` remains accepted as a backward-compatible alias for `--taxon`.
+
+You can still download or prepare `ncbi_dataset.tsv` yourself from the
+[NCBI genome database](https://www.ncbi.nlm.nih.gov/datasets/genome/) and pass
+it with `--input`.
 
 ## 🧪 Running the Pipeline
 
@@ -393,7 +416,9 @@ PanResistome/
 
 | Argument   | Description                              |
 | ---------- | ---------------------------------------- |
-| `--input`  | Input TSV file listing genome accessions |
+| `--input`  | Input TSV file listing genome accessions. Not required when `--taxon` or `--organism` is supplied. |
+| `--taxon` | NCBI Assembly taxon query used to generate the FetchM2 input TSV internally. |
+| `--organism` | Backward-compatible alias for `--taxon`. |
 | `--outdir` | Output directory for results             |
 
 ### ⚙️ Optional Arguments for FetchM2
@@ -412,6 +437,10 @@ PanResistome/
 | `--fetchm2_download_workers` | int | 1 | Sequence-download workers; increase cautiously for larger runs |
 | `--fetchm2_max_genomes` | int | - | Maximum genomes selected for sequence download after metadata filtering |
 | `--fetchm2_keep_assembly_duplicates` | bool | false | Keep paired GCA/GCF assembly rows in `fetchm2_clean.csv`; by default FetchM2 keeps one representative row per Assembly Name |
+| `--organism_max_records` | int | 0 | Maximum NCBI Assembly records written when `--taxon`/`--organism` is used; `0` writes all records returned by the query |
+| `--organism_candidate_records` | int | 0 | Candidate Assembly records fetched before BioProject-diverse selection; use a larger value such as `500` when selecting 100 genomes |
+| `--organism_diverse_bioproject` | bool | true | Round-robin select records across BioProjects when `--organism_max_records` is set |
+| `--organism_prefer_refseq` | bool | true | Keep RefSeq/GCF accessions sorted first during generated input selection |
 | `--host`    | str\[] | -       | Host species (e.g., "Homo sapiens", "Bos taurus")     |
 | `--year`    | str\[] | -       | Filter by year or range (e.g., "2015" or "2015-2023") |
 | `--country` | str\[] | -       | Filter by country (e.g., "Bangladesh", "USA")         |

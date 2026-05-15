@@ -32,6 +32,13 @@ params.environment_medium = []
 params.year_from = null
 params.year_to = null
 
+params.taxon = null
+params.organism = null
+params.organism_max_records = 0
+params.organism_candidate_records = 0
+params.organism_diverse_bioproject = true
+params.organism_prefer_refseq = true
+
 params.input = "test.tsv"
 params.outdir = "results"
 params.threads = 8
@@ -164,6 +171,15 @@ def paramList(value) {
 
 def shellQuote(value) {
     return "'" + value.toString().replace("'", "'\"'\"'") + "'"
+}
+
+def effectiveTaxonQuery() {
+    return params.taxon ?: params.organism
+}
+
+def hasTaxonQuery() {
+    def query = effectiveTaxonQuery()
+    return query != null && query.toString().trim()
 }
 
 def launchPath(value) {
@@ -329,9 +345,12 @@ def helpMessage() {
 
     ▶️ Usage:
       nextflow run main.nf --input <input.tsv> --outdir <output_dir> [options]
+      nextflow run main.nf --taxon "Acinetobacter pittii" --outdir <output_dir> [options]
 
     ✅ Required arguments:
       --input            Input TSV file listing genome accessions
+      --taxon            NCBI Assembly taxon query; generates the FetchM2 input TSV before metadata download
+      --organism         Backward-compatible alias for --taxon
       --outdir           Output directory for results
 
     ⚙️ Optional arguments for FetchM2 metadata/download:
@@ -347,6 +366,9 @@ def helpMessage() {
       --fetchm2_download_workers FetchM2 sequence download workers [default: 1]
       --fetchm2_max_genomes Maximum genomes selected for FetchM2 sequence download
       --fetchm2_keep_assembly_duplicates Keep paired GCA/GCF rows in fetchm2_clean.csv [default: false]
+      --organism_max_records Maximum NCBI Assembly records to write when --organism is used; 0 writes all returned records [default: 0]
+      --organism_candidate_records Candidate records fetched before BioProject-diverse selection [default: 0]
+      --organism_diverse_bioproject Round-robin selected records across BioProjects when --organism_max_records is set [default: true]
 
         🧬 Instead of global resistance analysis, you may do specific analysis by providing: 
       --host             Host species (e.g. "Homo sapiens" "Bos taurus")
@@ -740,6 +762,27 @@ process ORGANISM_TYPING_ENV_VERSIONS {
         kaptive --version || true
         ectyper --version || true
     } > organism_typing_env_versions.txt
+    """
+}
+
+process GENERATE_NCBI_TAXON_INPUT {
+    conda 'envs/fetchm.yaml'
+    publishDir "${params.outdir}/input_generation", mode: 'copy'
+
+    output:
+    path "organism_input", emit: input_bundle
+
+    script:
+    def generatorArgs = [
+        "--organism ${shellQuote(effectiveTaxonQuery())}",
+        "--outdir organism_input",
+        params.organism_max_records ? "--max-records ${params.organism_max_records}" : "",
+        params.organism_candidate_records ? "--candidate-records ${params.organism_candidate_records}" : "",
+        truthyParam(params.organism_diverse_bioproject) ? "--diverse-bioproject" : "",
+        truthyParam(params.organism_prefer_refseq) ? "--prefer-refseq" : "",
+    ].findAll { it }
+    """
+    python ${baseDir}/scripts/generate_ncbi_assembly_input.py ${generatorArgs.join(' ')}
     """
 }
 
@@ -2689,7 +2732,12 @@ process COLLECT_RESULTS {
 // Workflow
 workflow {
     // Create input channel
-    input_ch = Channel.fromPath(params.input, checkIfExists: true)
+    if (hasTaxonQuery()) {
+        GENERATE_NCBI_TAXON_INPUT()
+        input_ch = GENERATE_NCBI_TAXON_INPUT.out.input_bundle.map { input_dir -> input_dir.resolve('ncbi_dataset.tsv') }
+    } else {
+        input_ch = Channel.fromPath(params.input, checkIfExists: true)
+    }
 
     // Capture reproducibility metadata for each Conda environment
     if (params.capture_versions) {

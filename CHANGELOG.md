@@ -2,7 +2,14 @@
 
 ## Unreleased
 
-No unreleased changes yet.
+### Added
+- `--taxon` input mode that generates an NCBI Assembly TSV inside the workflow
+  before running FetchM2, allowing commands such as
+  `--taxon "Acinetobacter pittii"` without a separate manual input-generation
+  step. `--organism` is retained as a backward-compatible alias.
+- Organism-query controls for generated FetchM2 input tables:
+  `--organism_max_records`, `--organism_candidate_records`,
+  `--organism_diverse_bioproject`, and `--organism_prefer_refseq`.
 
 ## 0.6.0 - 2026-05-14
 
