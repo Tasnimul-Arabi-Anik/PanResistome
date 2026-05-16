@@ -9,6 +9,8 @@ import itertools
 import json
 import math
 import re
+import struct
+import zlib
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -3188,6 +3190,746 @@ def _html_table(rows: list[dict[str, str]], fields: list[str], max_rows: int = 2
     return f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(body_rows)}</tbody></table>"
 
 
+COUNTRY_COORDS = {
+    "argentina": (-38.42, -63.62),
+    "australia": (-25.27, 133.78),
+    "austria": (47.52, 14.55),
+    "bangladesh": (23.68, 90.36),
+    "belgium": (50.50, 4.47),
+    "brazil": (-14.24, -51.93),
+    "canada": (56.13, -106.35),
+    "chile": (-35.68, -71.54),
+    "china": (35.86, 104.20),
+    "colombia": (4.57, -74.30),
+    "denmark": (56.26, 9.50),
+    "egypt": (26.82, 30.80),
+    "finland": (61.92, 25.75),
+    "france": (46.23, 2.21),
+    "germany": (51.17, 10.45),
+    "ghana": (7.95, -1.02),
+    "greece": (39.07, 21.82),
+    "india": (20.59, 78.96),
+    "indonesia": (-0.79, 113.92),
+    "iran": (32.43, 53.69),
+    "iraq": (33.22, 43.68),
+    "ireland": (53.41, -8.24),
+    "israel": (31.05, 34.85),
+    "italy": (41.87, 12.57),
+    "japan": (36.20, 138.25),
+    "kenya": (-0.02, 37.91),
+    "malaysia": (4.21, 101.98),
+    "mexico": (23.63, -102.55),
+    "nepal": (28.39, 84.12),
+    "netherlands": (52.13, 5.29),
+    "new zealand": (-40.90, 174.89),
+    "nigeria": (9.08, 8.68),
+    "norway": (60.47, 8.47),
+    "pakistan": (30.38, 69.35),
+    "peru": (-9.19, -75.02),
+    "philippines": (12.88, 121.77),
+    "poland": (51.92, 19.15),
+    "portugal": (39.40, -8.22),
+    "russia": (61.52, 105.32),
+    "saudi arabia": (23.89, 45.08),
+    "singapore": (1.35, 103.82),
+    "south africa": (-30.56, 22.94),
+    "south korea": (35.91, 127.77),
+    "spain": (40.46, -3.75),
+    "sri lanka": (7.87, 80.77),
+    "sweden": (60.13, 18.64),
+    "switzerland": (46.82, 8.23),
+    "taiwan": (23.70, 120.96),
+    "thailand": (15.87, 100.99),
+    "turkey": (38.96, 35.24),
+    "united kingdom": (55.38, -3.44),
+    "uk": (55.38, -3.44),
+    "united states": (37.09, -95.71),
+    "usa": (37.09, -95.71),
+    "vietnam": (14.06, 108.28),
+}
+
+
+BASIC_DATASET_FIELDS = [
+    "assembly_accession",
+    "sample_id",
+    "organism_name",
+    "taxid",
+    "assembly_level",
+    "refseq_category",
+    "genome_representation",
+    "assembly_release_date",
+    "bioproject",
+    "biosample",
+    "country",
+    "continent",
+    "subcontinent",
+    "collection_year",
+    "host",
+    "isolation_source",
+    "sample_type",
+    "environment_medium",
+    "submitter",
+    "ftp_path_refseq",
+    "ftp_path_genbank",
+    "qc_status",
+    "qc_pass",
+    "qc_fail_reasons",
+    "genome_size",
+    "contig_count",
+    "n50",
+    "gc_percent",
+    "checkm2_completeness",
+    "checkm2_contamination",
+    "quast_status",
+    "ani_status",
+    "ani_species_match",
+    "mash_status",
+    "amr_gene_count",
+    "amrfinderplus_gene_count",
+    "vfdb_gene_count",
+    "plasmidfinder_replicon_count",
+    "integronfinder_feature_count",
+    "mlst_feature_count",
+    "mobsuite_feature_count",
+    "genomad_region_count",
+    "defensefinder_feature_count",
+    "mobileelementfinder_feature_count",
+    "amr_genes",
+    "amrfinderplus_genes",
+    "drug_classes",
+    "resistance_mechanisms",
+    "vfdb_genes",
+    "vfdb_categories",
+    "plasmid_replicons",
+    "integron_features",
+    "mlst_ST",
+    "mobsuite_plasmid_types",
+    "genomad_regions",
+    "defense_systems",
+    "mobile_elements",
+    "ani_cluster",
+    "mash_cluster",
+    "dominant_lineage_label",
+    "features_detected_databases",
+    "modules_run",
+    "modules_failed",
+    "modules_warning",
+    "panresistome_version",
+    "feature_contract_version",
+]
+
+
+def _clean_country(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return text.split(":", 1)[0].strip()
+
+
+def _accession_keys(value: str) -> set[str]:
+    text = str(value or "").strip()
+    if not text:
+        return set()
+    stem = Path(text).stem
+    values = {text, stem}
+    if stem.endswith("_genomic"):
+        values.add(stem[:-8])
+    parts = stem.split("_")
+    if len(parts) >= 2 and parts[0] in {"GCF", "GCA"}:
+        values.add("_".join(parts[:2]))
+        values.add("_".join(parts[:2]).split(".", 1)[0])
+    return {value.lower() for value in values if value}
+
+
+def _index_by_accession(rows: list[dict[str, str]], candidates: list[str]) -> dict[str, dict[str, str]]:
+    index = {}
+    for row in rows:
+        value = first_value(row, candidates, "")
+        for key in _accession_keys(value):
+            index[key] = row
+    return index
+
+
+def _lookup_by_accession(index: dict[str, dict[str, str]], value: str) -> dict[str, str]:
+    for key in _accession_keys(value):
+        if key in index:
+            return index[key]
+    return {}
+
+
+def _join_values(values: set[str], limit: int = 80) -> str:
+    cleaned = sorted({value for value in values if value and not is_missing_value(value)})
+    if len(cleaned) > limit:
+        return ";".join(cleaned[:limit] + [f"...{len(cleaned) - limit}_more"])
+    return ";".join(cleaned)
+
+
+def _float_text(value: str) -> str:
+    numeric = _float_or_none(value)
+    if numeric is None:
+        return ""
+    return f"{numeric:g}"
+
+
+def _module_summary(out_dir: Path) -> tuple[str, str, str]:
+    run = set()
+    failed = set()
+    warning = set()
+    paths = [
+        out_dir / "manifest" / "database_setup_status.tsv",
+        out_dir / "manifest" / "module_status_summary.tsv",
+        out_dir / "manifest" / "native_runner_merge_audit.tsv",
+        out_dir / "manifest" / "native_runner_module_status.tsv",
+    ]
+    for path in [
+        path for path in paths if path.exists()
+    ]:
+        rows = read_table(path)
+        run_source = path.name != "database_setup_status.tsv"
+        for row in rows:
+            name = first_value(row, ["database_or_tool", "module", "database"], "")
+            status = first_value(row, ["status"], "").upper()
+            if not name:
+                continue
+            skipped_status = any(token in status for token in ["SKIPPED", "NOT_REQUESTED", "NOT_RUN", "NOT_FOUND", "UNAVAILABLE"])
+            if run_source and status and not skipped_status:
+                run.add(name)
+            if "FAIL" in status or "ERROR" in status:
+                failed.add(name)
+            if "WARN" in status:
+                warning.add(name)
+    return ";".join(sorted(run)), ";".join(sorted(failed)), ";".join(sorted(warning))
+
+
+def write_basic_enriched_dataset(
+    sample_dir: Path,
+    out_dir: Path,
+    output_dir: Path,
+    pipeline_version: str = "",
+) -> dict[str, str]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    metadata_rows = load_metadata_rows(sample_dir)
+    normalized_metadata = normalize_metadata_rows(metadata_rows)
+    metadata_index = _index_by_accession(metadata_rows, ["Assembly Accession", "assembly_accession", "sequence_accession", "sample_id"])
+    normalized_index = _index_by_accession(normalized_metadata, ["assembly_accession", "sample_id"])
+    all_features = read_table(out_dir / "features" / "all_features.tsv")
+    ani_rows = read_table(out_dir / "ani" / "analysis" / "panr2_ani_summary.csv") or read_table(sample_dir / "ani" / "analysis" / "panr2_ani_summary.csv")
+    mash_rows = read_table(sample_dir / "mash" / "analysis" / "closest_mash_neighbor.csv")
+    ani_index = _index_by_accession(ani_rows, ["assembly_accession", "sample_id"])
+    mash_index = _index_by_accession(mash_rows, ["query"])
+    modules_run, modules_failed, modules_warning = _module_summary(out_dir)
+
+    samples = sorted({
+        metadata_accession(row) for row in metadata_rows if metadata_accession(row)
+    } | {
+        row.get("assembly_accession", "") for row in all_features if row.get("assembly_accession")
+    })
+
+    by_sample_database: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
+    detected_databases_by_sample: dict[str, set[str]] = defaultdict(set)
+    for feature in all_features:
+        sample = feature.get("assembly_accession", "") or feature.get("sample_id", "")
+        database = feature.get("database", "")
+        if not sample or not database or feature.get("presence", "1") == "0":
+            continue
+        by_sample_database[(sample, database)].append(feature)
+        detected_databases_by_sample[sample].add(database)
+
+    def features(sample: str, database: str) -> list[dict[str, str]]:
+        return by_sample_database.get((sample, database), [])
+
+    def feature_ids(sample: str, database: str, categories: set[str] | None = None) -> set[str]:
+        values = set()
+        for row in features(sample, database):
+            if categories and row.get("feature_category", "") not in categories:
+                continue
+            values.add(row.get("feature_id", ""))
+        return values
+
+    rows = []
+    for sample in samples:
+        raw_metadata = _lookup_by_accession(metadata_index, sample)
+        norm_metadata = _lookup_by_accession(normalized_index, sample)
+        ani_row = _lookup_by_accession(ani_index, sample)
+        mash_row = _lookup_by_accession(mash_index, sample)
+        mlst_st = feature_ids(sample, "mlst", {"sequence_type"})
+        mlst_st = {value for value in mlst_st if not value.endswith("ST-") and value != "ST_-"}
+        ani_cluster = first_value(ani_row, ["feature_id"], "")
+        mash_cluster = ""
+        if mash_row:
+            neighbor = first_value(mash_row, ["reference"], "")
+            distance = first_value(mash_row, ["mash_distance"], "")
+            mash_cluster = f"nearest:{neighbor};distance:{distance}" if neighbor else ""
+        qc_status = first_value(raw_metadata, ["combined_qc_status", "sequence_qc_status"], "")
+        row = {
+            "assembly_accession": sample,
+            "sample_id": first_value(raw_metadata, ["sample_id", "sequence_accession", "Assembly Name"], sample),
+            "organism_name": first_value(raw_metadata, ["Organism Name", "organism_name", "Species"], ""),
+            "taxid": first_value(raw_metadata, ["Organism Taxonomic ID", "TaxID", "taxid"], ""),
+            "assembly_level": first_value(raw_metadata, ["Assembly Level", "assembly_level"], ""),
+            "refseq_category": first_value(raw_metadata, ["RefSeq Category", "refseq_category"], ""),
+            "genome_representation": first_value(raw_metadata, ["Genome Representation", "genome_representation"], ""),
+            "assembly_release_date": first_value(raw_metadata, ["Assembly Release Date", "assembly_release_date"], ""),
+            "bioproject": first_value(raw_metadata, ["Assembly BioProject Accession", "bioproject"], ""),
+            "biosample": first_value(raw_metadata, ["Assembly BioSample Accession", "biosample"], ""),
+            "country": _clean_country(first_value(norm_metadata, ["country"], "") or first_value(raw_metadata, ["Country", "Geographic Location"], "")),
+            "continent": first_value(norm_metadata, ["continent"], "") or first_value(raw_metadata, ["Continent"], ""),
+            "subcontinent": first_value(norm_metadata, ["subcontinent"], "") or first_value(raw_metadata, ["Subcontinent"], ""),
+            "collection_year": first_value(norm_metadata, ["collection_year"], "") or first_value(raw_metadata, ["Collection_Year", "Collection Date"], ""),
+            "host": first_value(norm_metadata, ["host"], "") or first_value(raw_metadata, ["Host_SD", "Host"], ""),
+            "isolation_source": first_value(norm_metadata, ["isolation_source"], "") or first_value(raw_metadata, ["Isolation_Source_SD", "Isolation Source"], ""),
+            "sample_type": first_value(norm_metadata, ["sample_type"], "") or first_value(raw_metadata, ["Sample_Type_SD", "Sample Type"], ""),
+            "environment_medium": first_value(norm_metadata, ["environment_medium"], "") or first_value(raw_metadata, ["Environment_Medium_SD", "Environment Medium"], ""),
+            "submitter": first_value(raw_metadata, ["Assembly Submitter", "submitter"], ""),
+            "ftp_path_refseq": first_value(raw_metadata, ["FTP Path RefSeq", "ftp_path_refseq"], ""),
+            "ftp_path_genbank": first_value(raw_metadata, ["FTP Path GenBank", "ftp_path_genbank"], ""),
+            "qc_status": qc_status,
+            "qc_pass": "true" if qc_status.upper() == "PASS" else "false",
+            "qc_fail_reasons": first_value(raw_metadata, ["combined_qc_fail_reasons", "sequence_qc_fail_reasons"], ""),
+            "genome_size": first_value(raw_metadata, ["sequence_total_length", "Assembly Stats Total Sequence Length"], ""),
+            "contig_count": first_value(raw_metadata, ["sequence_num_contigs", "Assembly Stats Number of Scaffolds"], ""),
+            "n50": first_value(raw_metadata, ["sequence_n50", "Assembly Stats Contig N50", "Assembly Stats Scaffold N50"], ""),
+            "gc_percent": first_value(raw_metadata, ["sequence_gc_percent", "checkm2_gc_percent"], ""),
+            "checkm2_completeness": first_value(raw_metadata, ["checkm2_completeness", "CheckM completeness"], ""),
+            "checkm2_contamination": first_value(raw_metadata, ["checkm2_contamination", "CheckM contamination"], ""),
+            "quast_status": "PASS" if (out_dir / "assembly_qc" / "analysis" / "panr2_quast_summary.csv").exists() else "",
+            "ani_status": "PASS" if ani_row else "",
+            "ani_species_match": _float_text(first_value(ani_row, ["identity"], "")),
+            "mash_status": "PASS" if mash_row else "",
+            "amr_gene_count": str(len(feature_ids(sample, "amr"))),
+            "amrfinderplus_gene_count": str(len(feature_ids(sample, "amrfinderplus"))),
+            "vfdb_gene_count": str(len(feature_ids(sample, "vfdb"))),
+            "plasmidfinder_replicon_count": str(len(feature_ids(sample, "plasmidfinder"))),
+            "integronfinder_feature_count": str(len(feature_ids(sample, "integronfinder"))),
+            "mlst_feature_count": str(len(feature_ids(sample, "mlst"))),
+            "mobsuite_feature_count": str(len(feature_ids(sample, "mobsuite"))),
+            "genomad_region_count": str(len(feature_ids(sample, "prophage")) + len(feature_ids(sample, "genomad"))),
+            "defensefinder_feature_count": str(len(feature_ids(sample, "defensefinder"))),
+            "mobileelementfinder_feature_count": str(len(feature_ids(sample, "mobileelementfinder"))),
+            "amr_genes": _join_values(feature_ids(sample, "amr")),
+            "amrfinderplus_genes": _join_values(feature_ids(sample, "amrfinderplus")),
+            "drug_classes": _join_values({row.get("drug_class") or row.get("feature_category", "") for db in ["amr", "amrfinderplus"] for row in features(sample, db)}),
+            "resistance_mechanisms": _join_values({row.get("mechanism", "") for db in ["amr", "amrfinderplus"] for row in features(sample, db)}),
+            "vfdb_genes": _join_values(feature_ids(sample, "vfdb")),
+            "vfdb_categories": _join_values({row.get("feature_category", "") for row in features(sample, "vfdb")}),
+            "plasmid_replicons": _join_values(feature_ids(sample, "plasmidfinder")),
+            "integron_features": _join_values(feature_ids(sample, "integronfinder")),
+            "mlst_ST": _join_values(mlst_st),
+            "mobsuite_plasmid_types": _join_values(feature_ids(sample, "mobsuite")),
+            "genomad_regions": _join_values(feature_ids(sample, "prophage") | feature_ids(sample, "genomad")),
+            "defense_systems": _join_values(feature_ids(sample, "defensefinder")),
+            "mobile_elements": _join_values(feature_ids(sample, "mobileelementfinder")),
+            "ani_cluster": ani_cluster,
+            "mash_cluster": mash_cluster,
+            "dominant_lineage_label": _join_values(mlst_st, limit=3) or ani_cluster or mash_cluster,
+            "features_detected_databases": ";".join(sorted(detected_databases_by_sample.get(sample, set()))),
+            "modules_run": modules_run,
+            "modules_failed": modules_failed,
+            "modules_warning": modules_warning,
+            "panresistome_version": pipeline_version,
+            "feature_contract_version": CONTRACT_VERSION,
+        }
+        rows.append(row)
+
+    csv_path = output_dir / "enriched_genome_dataset.csv"
+    tsv_path = output_dir / "enriched_genome_dataset.tsv"
+    write_rows(csv_path, rows, BASIC_DATASET_FIELDS, delimiter=",")
+    write_rows(tsv_path, rows, BASIC_DATASET_FIELDS, delimiter="\t")
+    return {"basic_enriched_csv": str(csv_path), "basic_enriched_tsv": str(tsv_path)}
+
+
+def _country_xy(country: str, width: int, height: int) -> tuple[float, float] | None:
+    coords = COUNTRY_COORDS.get(_clean_country(country).lower())
+    if not coords:
+        return None
+    lat, lon = coords
+    x = (lon + 180.0) / 360.0 * width
+    y = (90.0 - lat) / 180.0 * height
+    return x, y
+
+
+def _svg_geographic_map(rows: list[dict[str, str]], title: str) -> str:
+    width, height = 960, 480
+    points = []
+    for row in rows:
+        xy = _country_xy(row.get("country", ""), width, height)
+        if not xy:
+            continue
+        prevalence = _float_or_none(row.get("prevalence", "")) or 0.0
+        total = int(_float_or_none(row.get("total_genomes", "")) or 0)
+        radius = max(5, min(28, 4 + math.sqrt(max(total, 1)) * 4))
+        red = int(230 * prevalence)
+        blue = int(200 * (1 - prevalence))
+        fill = f"rgb({red},80,{blue})"
+        label = f"{row.get('country', '')}: {row.get('positive_genomes', '0')}/{row.get('total_genomes', '0')} ({prevalence * 100:.1f}%)"
+        points.append(
+            f"<circle cx='{xy[0]:.1f}' cy='{xy[1]:.1f}' r='{radius:.1f}' fill='{fill}' "
+            "fill-opacity='0.75' stroke='#1f2933' stroke-width='1'>"
+            f"<title>{html.escape(label)}</title></circle>"
+            f"<text x='{xy[0] + radius + 3:.1f}' y='{xy[1] + 4:.1f}' font-size='11' fill='#1f2933'>{html.escape(row.get('country', ''))}</text>"
+        )
+    grid = []
+    for lon in range(-120, 181, 60):
+        x = (lon + 180) / 360 * width
+        grid.append(f"<line x1='{x:.1f}' y1='0' x2='{x:.1f}' y2='{height}' stroke='#d9e2ec' stroke-width='1'/>")
+    for lat in range(-60, 91, 30):
+        y = (90 - lat) / 180 * height
+        grid.append(f"<line x1='0' y1='{y:.1f}' x2='{width}' y2='{y:.1f}' stroke='#d9e2ec' stroke-width='1'/>")
+    return (
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height + 58}' viewBox='0 0 {width} {height + 58}'>"
+        "<rect width='100%' height='100%' fill='#f8fafc'/>"
+        f"<text x='20' y='28' font-size='20' font-family='Arial' font-weight='700' fill='#102a43'>{html.escape(title)}</text>"
+        f"<g transform='translate(0,48)'><rect x='0' y='0' width='{width}' height='{height}' fill='#eff6ff' stroke='#bcccdc'/>"
+        + "".join(grid)
+        + "".join(points)
+        + "</g></svg>\n"
+    )
+
+
+def _write_png(path: Path, width: int, height: int, pixels: list[bytearray]) -> None:
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(data))
+            + kind
+            + data
+            + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+        )
+
+    raw = b"".join(b"\x00" + bytes(row) for row in pixels)
+    payload = (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(raw, 9))
+        + chunk(b"IEND", b"")
+    )
+    path.write_bytes(payload)
+
+
+def _geographic_map_png(rows: list[dict[str, str]], path: Path) -> None:
+    width, map_height, header = 960, 480, 48
+    height = map_height + header + 10
+    pixels = [bytearray([248, 250, 252] * width) for _ in range(height)]
+
+    def set_pixel(x: int, y: int, color: tuple[int, int, int]) -> None:
+        if 0 <= x < width and 0 <= y < height:
+            idx = x * 3
+            pixels[y][idx:idx + 3] = bytes(color)
+
+    def draw_rect(x0: int, y0: int, x1: int, y1: int, color: tuple[int, int, int]) -> None:
+        for y in range(max(0, y0), min(height, y1)):
+            row = pixels[y]
+            for x in range(max(0, x0), min(width, x1)):
+                idx = x * 3
+                row[idx:idx + 3] = bytes(color)
+
+    def draw_circle(cx: float, cy: float, radius: float, color: tuple[int, int, int]) -> None:
+        r2 = radius * radius
+        for y in range(int(cy - radius) - 1, int(cy + radius) + 2):
+            for x in range(int(cx - radius) - 1, int(cx + radius) + 2):
+                if (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r2:
+                    set_pixel(x, y, color)
+
+    draw_rect(0, header, width, header + map_height, (239, 246, 255))
+    for lon in range(-120, 181, 60):
+        x = int((lon + 180) / 360 * width)
+        for y in range(header, header + map_height):
+            set_pixel(x, y, (217, 226, 236))
+    for lat in range(-60, 91, 30):
+        y = header + int((90 - lat) / 180 * map_height)
+        for x in range(width):
+            set_pixel(x, y, (217, 226, 236))
+
+    for row in rows:
+        xy = _country_xy(row.get("country", ""), width, map_height)
+        if not xy:
+            continue
+        prevalence = _float_or_none(row.get("prevalence", "")) or 0.0
+        total = int(_float_or_none(row.get("total_genomes", "")) or 0)
+        radius = max(5, min(28, 4 + math.sqrt(max(total, 1)) * 4))
+        color = (int(230 * prevalence), 80, int(200 * (1 - prevalence)))
+        draw_circle(xy[0], xy[1] + header, radius, color)
+    _write_png(path, width, height, pixels)
+
+
+def write_important_geographic_outputs(sample_dir: Path, out_dir: Path, important_dir: Path, top_n: int = 20) -> dict[str, str]:
+    key_tables = important_dir / "key_tables"
+    figures = important_dir / "figures"
+    key_tables.mkdir(parents=True, exist_ok=True)
+    figures.mkdir(parents=True, exist_ok=True)
+    metadata_rows = normalize_metadata_rows(load_metadata_rows(sample_dir))
+    features = read_table(out_dir / "features" / "all_features.tsv")
+    samples = sorted({row.get("assembly_accession", "") for row in metadata_rows if row.get("assembly_accession")})
+    metadata_by_sample = {row["assembly_accession"]: row for row in metadata_rows if row.get("assembly_accession")}
+    presence = feature_presence(features)
+    database_presence: dict[str, set[str]] = defaultdict(set)
+    for feature in features:
+        sample = feature.get("assembly_accession", "")
+        database = feature.get("database", "")
+        if sample and database and feature.get("presence", "1") != "0":
+            database_presence[database].add(sample)
+
+    feature_rank = sorted(presence.items(), key=lambda item: (-len(item[1]), item[0][0], item[0][1]))
+    selected_features = feature_rank[:max(top_n, 0)]
+    rows = []
+
+    def add_rows(mode: str, database: str, feature_id: str, present_samples: set[str]):
+        for year_mode in ["all_years", "by_year"]:
+            groups: dict[tuple[str, str], set[str]] = defaultdict(set)
+            positives: dict[tuple[str, str], set[str]] = defaultdict(set)
+            for sample in samples:
+                meta = metadata_by_sample.get(sample, {})
+                country = _clean_country(meta.get("country", ""))
+                if not country:
+                    continue
+                year = meta.get("collection_year", "") if year_mode == "by_year" else "all"
+                key = (country, year or "unknown")
+                groups[key].add(sample)
+                if sample in present_samples:
+                    positives[key].add(sample)
+            for (country, year), members in sorted(groups.items()):
+                positive = len(positives.get((country, year), set()))
+                total = len(members)
+                meta_example = next((metadata_by_sample.get(sample, {}) for sample in members), {})
+                prevalence = positive / total if total else 0.0
+                warnings = []
+                if total < 5:
+                    warnings.append("small_sample_size")
+                if not _country_xy(country, 960, 480):
+                    warnings.append("missing_map_coordinate")
+                rows.append({
+                    "mode": mode,
+                    "database": database,
+                    "feature_id": feature_id,
+                    "country": country,
+                    "continent": meta_example.get("continent", ""),
+                    "subcontinent": meta_example.get("subcontinent", ""),
+                    "collection_year": year,
+                    "total_genomes": str(total),
+                    "positive_genomes": str(positive),
+                    "prevalence": f"{prevalence:.4f}",
+                    "prevalence_percent": f"{prevalence * 100:.1f}",
+                    "warning_flags": ";".join(warnings),
+                })
+
+    for database, present_samples in sorted(database_presence.items()):
+        add_rows("database_burden", database, "__any_feature__", present_samples)
+    for (database, feature_id), present_samples in selected_features:
+        add_rows("feature", database, feature_id, present_samples)
+
+    fields = [
+        "mode",
+        "database",
+        "feature_id",
+        "country",
+        "continent",
+        "subcontinent",
+        "collection_year",
+        "total_genomes",
+        "positive_genomes",
+        "prevalence",
+        "prevalence_percent",
+        "warning_flags",
+    ]
+    data_path = key_tables / "geographic_distribution.tsv"
+    write_rows(data_path, rows, fields)
+    (figures / "geographic_distribution.data.tsv").write_text(data_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+    first_key = next((row for row in rows if row["collection_year"] == "all"), None)
+    first_rows = [
+        row for row in rows
+        if first_key and row["mode"] == first_key["mode"] and row["database"] == first_key["database"] and row["feature_id"] == first_key["feature_id"] and row["collection_year"] == "all"
+    ]
+    svg_path = figures / "geographic_distribution_map.svg"
+    svg_path.write_text(_svg_geographic_map(first_rows, "Geographic Distribution"), encoding="utf-8")
+    png_path = figures / "geographic_distribution_map.png"
+    _geographic_map_png(first_rows, png_path)
+
+    datasets = json.dumps(rows)
+    html_path = figures / "geographic_distribution_map.html"
+    html_path.write_text(
+        f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>Geographic Distribution</title>
+<style>
+body {{ font-family: Arial, sans-serif; color: #1f2933; margin: 1.5rem; }}
+label {{ font-weight: 700; margin-right: 0.4rem; }}
+select {{ margin: 0 1rem 1rem 0; padding: 0.35rem; }}
+#map svg {{ max-width: 100%; height: auto; border: 1px solid #d9e2ec; }}
+.warning {{ background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; margin: 1rem 0; }}
+</style></head><body>
+<h1>Geographic Distribution</h1>
+<p>Select a database/feature and year scope. Prevalence reflects this dataset only, not global prevalence.</p>
+<div class="warning">Small country/year groups are flagged in the data table. Interpret geographic patterns with BioProject, lineage, and collection-year bias in mind.</div>
+<label for="feature">Feature</label><select id="feature"></select>
+<label for="year">Year</label><select id="year"></select>
+<div id="summary"></div>
+<div id="map"></div>
+<p><a href="geographic_distribution_map.png">Download initial PNG</a> | <a href="geographic_distribution_map.svg">Download initial SVG</a> | <a href="geographic_distribution.data.tsv">Download plotted data TSV</a></p>
+<script>
+const rows = {datasets};
+const coords = {json.dumps(COUNTRY_COORDS)};
+const width = 960, height = 480;
+function cleanCountry(value) {{ return (value || '').split(':')[0].trim(); }}
+function key(row) {{ return row.mode + ' | ' + row.database + ' | ' + row.feature_id; }}
+function xy(country) {{
+  const item = coords[cleanCountry(country).toLowerCase()];
+  if (!item) return null;
+  const lat = item[0], lon = item[1];
+  return [((lon + 180) / 360) * width, ((90 - lat) / 180) * height];
+}}
+const featureSelect = document.getElementById('feature');
+const yearSelect = document.getElementById('year');
+for (const value of [...new Set(rows.map(key))].sort()) {{
+  const opt = document.createElement('option'); opt.value = value; opt.textContent = value; featureSelect.appendChild(opt);
+}}
+function updateYears() {{
+  const selected = featureSelect.value;
+  yearSelect.innerHTML = '';
+  const years = [...new Set(rows.filter(r => key(r) === selected).map(r => r.collection_year))].sort();
+  for (const year of years) {{ const opt = document.createElement('option'); opt.value = year; opt.textContent = year; yearSelect.appendChild(opt); }}
+  if (years.includes('all')) yearSelect.value = 'all';
+}}
+function render() {{
+  const selected = featureSelect.value, year = yearSelect.value;
+  const active = rows.filter(r => key(r) === selected && r.collection_year === year);
+  const total = active.reduce((a, r) => a + Number(r.total_genomes || 0), 0);
+  const positive = active.reduce((a, r) => a + Number(r.positive_genomes || 0), 0);
+  document.getElementById('summary').innerHTML = `<p><strong>${{selected}}</strong>: ${{positive}} positive observations across ${{total}} country-level genome observations.</p>`;
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${{width}}" height="${{height + 45}}" viewBox="0 0 ${{width}} ${{height + 45}}">`;
+  svg += `<rect width="100%" height="100%" fill="#f8fafc"/><text x="20" y="28" font-size="20" font-family="Arial" font-weight="700" fill="#102a43">Geographic Distribution</text>`;
+  svg += `<g transform="translate(0,45)"><rect x="0" y="0" width="${{width}}" height="${{height}}" fill="#eff6ff" stroke="#bcccdc"/>`;
+  for (let lon = -120; lon <= 180; lon += 60) {{ const x = ((lon + 180) / 360) * width; svg += `<line x1="${{x}}" y1="0" x2="${{x}}" y2="${{height}}" stroke="#d9e2ec"/>`; }}
+  for (let lat = -60; lat <= 90; lat += 30) {{ const y = ((90 - lat) / 180) * height; svg += `<line x1="0" y1="${{y}}" x2="${{width}}" y2="${{y}}" stroke="#d9e2ec"/>`; }}
+  for (const row of active) {{
+    const point = xy(row.country); if (!point) continue;
+    const prevalence = Number(row.prevalence || 0), total = Number(row.total_genomes || 0);
+    const radius = Math.max(5, Math.min(28, 4 + Math.sqrt(Math.max(total, 1)) * 4));
+    const fill = `rgb(${{Math.round(230 * prevalence)}},80,${{Math.round(200 * (1 - prevalence))}})`;
+    const label = `${{row.country}}: ${{row.positive_genomes}}/${{row.total_genomes}} (${{row.prevalence_percent}}%)`;
+    svg += `<circle cx="${{point[0].toFixed(1)}}" cy="${{point[1].toFixed(1)}}" r="${{radius.toFixed(1)}}" fill="${{fill}}" fill-opacity="0.75" stroke="#1f2933"><title>${{label}}</title></circle>`;
+    svg += `<text x="${{(point[0] + radius + 3).toFixed(1)}}" y="${{(point[1] + 4).toFixed(1)}}" font-size="11" fill="#1f2933">${{row.country}}</text>`;
+  }}
+  svg += '</g></svg>';
+  document.getElementById('map').innerHTML = svg;
+}}
+featureSelect.addEventListener('change', () => {{ updateYears(); render(); }});
+yearSelect.addEventListener('change', render);
+updateYears(); render();
+</script></body></html>
+""",
+        encoding="utf-8",
+    )
+    return {
+        "important_geographic_distribution": str(data_path),
+        "important_geographic_map_html": str(html_path),
+        "important_geographic_map_svg": str(svg_path),
+        "important_geographic_map_png": str(png_path),
+    }
+
+
+def write_important_results_report(
+    sample_dir: Path,
+    out_dir: Path,
+    important_dir: Path,
+    geographic_outputs: dict[str, str],
+) -> dict[str, str]:
+    important_dir.mkdir(parents=True, exist_ok=True)
+    basic_csv = sample_dir / "basic" / "enriched_genome_dataset.csv"
+    dataset_rows = read_table(basic_csv)
+    all_features = read_table(out_dir / "features" / "all_features.tsv")
+    schema_summary = (out_dir / "manifest" / "schema_validation_summary.txt").read_text(encoding="utf-8") if (out_dir / "manifest" / "schema_validation_summary.txt").exists() else ""
+    total_features = len(all_features)
+    databases = sorted({row.get("database", "") for row in all_features if row.get("database")})
+    qc_pass = sum(1 for row in dataset_rows if row.get("qc_pass") == "true")
+    warning_count = sum(1 for row in dataset_rows if row.get("modules_warning"))
+    cards = [
+        ("Genomes", str(len(dataset_rows))),
+        ("QC PASS", f"{qc_pass}/{len(dataset_rows)}" if dataset_rows else "0"),
+        ("Feature rows", str(total_features)),
+        ("Databases", str(len(databases))),
+        ("Schema", "PASS" if "unmatched_feature_rows=0" in schema_summary and "invalid_feature_rows=0" in schema_summary else "CHECK"),
+        ("Warnings", str(warning_count)),
+    ]
+    card_html = "".join(f"<div class='card'><span>{html.escape(label)}</span><strong>{html.escape(value)}</strong></div>" for label, value in cards)
+    db_badges = " ".join(f"<span class='badge'>{html.escape(db)}</span>" for db in databases)
+    report_path = important_dir / "results.html"
+    report_path.write_text(
+        f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>PanResistome Important Results</title>
+<style>
+body {{ font-family: Arial, sans-serif; margin: 0; color: #1f2933; background: #f8fafc; }}
+nav {{ position: fixed; left: 0; top: 0; bottom: 0; width: 210px; background: #102a43; color: white; padding: 1rem; }}
+nav a {{ display: block; color: white; text-decoration: none; margin: 0.8rem 0; }}
+main {{ margin-left: 240px; padding: 1.5rem 2rem; }}
+section {{ background: white; border: 1px solid #d9e2ec; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }}
+.cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; }}
+.card {{ border: 1px solid #d9e2ec; border-radius: 6px; padding: 0.75rem; background: #f8fafc; }}
+.card span {{ display: block; font-size: 0.8rem; color: #52606d; }}
+.card strong {{ display: block; font-size: 1.4rem; margin-top: 0.3rem; }}
+.badge {{ display: inline-block; background: #e0f2fe; border: 1px solid #7dd3fc; padding: 0.2rem 0.45rem; border-radius: 999px; margin: 0.15rem; }}
+.downloads a {{ display: inline-block; margin: 0.25rem 0.5rem 0.25rem 0; padding: 0.45rem 0.7rem; background: #0f766e; color: white; text-decoration: none; border-radius: 4px; }}
+.warning {{ background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; }}
+iframe {{ width: 100%; height: 680px; border: 1px solid #d9e2ec; }}
+</style></head>
+<body>
+<nav>
+<h2>Results</h2>
+<a href="#featured">Featured Results</a>
+<a href="#overview">Run Overview</a>
+<a href="#geography">Geographic Distribution</a>
+<a href="#files">Important Files</a>
+<a href="#warnings">Warnings</a>
+</nav>
+<main>
+<section id="featured"><h1>Featured Results</h1><div class="cards">{card_html}</div><p>{db_badges}</p></section>
+<section id="overview"><h2>Run Overview</h2><p>This curated report summarizes the key outputs while preserving complete advanced outputs in the full PanResistome bundle.</p>
+<div class="downloads"><a href="../basic/enriched_genome_dataset.csv">Download enriched dataset CSV</a><a href="../basic/enriched_genome_dataset.tsv">Download enriched dataset TSV</a><a href="../panr2_inputs/report/panr2_handoff_index.html">Open complete PanR2 handoff report</a></div></section>
+<section id="geography"><h2>Geographic Distribution</h2><div class="warning">Geographic patterns reflect the analyzed dataset only. They are not global prevalence estimates and can be affected by BioProject, lineage, country, and year sampling bias.</div>
+<iframe src="figures/geographic_distribution_map.html" title="Geographic distribution map"></iframe>
+<div class="downloads"><a href="figures/geographic_distribution_map.html">Open map</a><a href="figures/geographic_distribution_map.png">Download initial PNG</a><a href="figures/geographic_distribution_map.svg">Download initial SVG</a><a href="figures/geographic_distribution.data.tsv">Download data TSV</a></div></section>
+<section id="files"><h2>Important Files</h2><ul>
+<li><a href="../basic/enriched_genome_dataset.csv">Enriched genome dataset CSV</a></li>
+<li><a href="key_tables/geographic_distribution.tsv">Geographic distribution table</a></li>
+<li><a href="../panr2_inputs/features/all_features.tsv">Complete standardized feature table</a></li>
+<li><a href="../panr2_inputs/manifest/schema_validation_summary.txt">Feature-contract validation summary</a></li>
+</ul></section>
+<section id="warnings"><h2>Warnings And Limitations</h2><p>Association, geography, and co-occurrence summaries are exploratory. Confirm important findings with denominator checks, lineage context, BioProject balance, and independent datasets.</p></section>
+</main></body></html>
+""",
+        encoding="utf-8",
+    )
+    return {"important_results_html": str(report_path), **geographic_outputs}
+
+
+def write_user_output_bundles(
+    sample_dir: Path,
+    out_dir: Path,
+    output_mode: str = "all",
+    figure_formats: str = "png,svg,tsv",
+    publication_figures: bool = False,
+    pipeline_version: str = "",
+) -> dict[str, str]:
+    mode = (output_mode or "all").strip().lower()
+    if mode not in {"basic", "important", "all"}:
+        raise ValueError(f"Unsupported output_mode: {output_mode}")
+    outputs = write_basic_enriched_dataset(sample_dir, out_dir, sample_dir / "basic", pipeline_version=pipeline_version)
+    if mode in {"important", "all"}:
+        important_dir = sample_dir / "important"
+        manifest_dir = important_dir / "manifest"
+        manifest_dir.mkdir(parents=True, exist_ok=True)
+        geographic_outputs = write_important_geographic_outputs(sample_dir, out_dir, important_dir)
+        outputs.update(write_important_results_report(sample_dir, out_dir, important_dir, geographic_outputs))
+        write_rows(
+            manifest_dir / "important_output_manifest.tsv",
+            [
+                {"setting": "output_mode", "value": mode, "message": "User-facing output bundle mode."},
+                {"setting": "figure_formats_requested", "value": figure_formats, "message": "Requested figure formats. Current geographic first-pass writes HTML, PNG, SVG, and TSV without new plotting dependencies."},
+                {"setting": "publication_figures", "value": str(publication_figures).lower(), "message": "Reserved for PDF/static publication figure expansion."},
+            ],
+            ["setting", "value", "message"],
+        )
+    return outputs
+
+
 def write_interpretation_reports(
     out_dir: Path,
     report_mode: str = "publication",
@@ -3506,6 +4248,10 @@ def export_contract(
     skip_heavy_interactive_plots: bool = False,
     core_feature_threshold: float = 0.95,
     rare_feature_threshold: float = 0.05,
+    output_mode: str = "all",
+    figure_formats: str = "png,svg,tsv",
+    publication_figures: bool = False,
+    pipeline_version: str = "",
 ) -> dict[str, str]:
     written = write_feature_tables(sample_dir, out_dir)
     validation = validate_feature_tables(sample_dir, out_dir)
@@ -3557,6 +4303,14 @@ def export_contract(
         max_metadata_columns=max_metadata_columns,
         skip_heavy_interactive_plots=skip_heavy_interactive_plots,
     )
+    user_outputs = write_user_output_bundles(
+        sample_dir,
+        out_dir,
+        output_mode=output_mode,
+        figure_formats=figure_formats,
+        publication_figures=publication_figures,
+        pipeline_version=pipeline_version,
+    )
     return {
         **written,
         **validation,
@@ -3569,4 +4323,5 @@ def export_contract(
         **contract_outputs,
         **control_outputs,
         **report_outputs,
+        **user_outputs,
     }

@@ -91,6 +91,9 @@ params.panr2_label_max_length = 40
 params.panr2_cross_database_max_features = 300
 params.large_dataset = false
 params.report_mode = 'publication'
+params.output_mode = 'all'
+params.figure_formats = 'png,svg,tsv'
+params.publication_figures = false
 params.max_features_heatmap = null
 params.max_features_network = null
 params.max_metadata_columns = null
@@ -308,6 +311,15 @@ def effectiveReportMode() {
     return mode
 }
 
+def effectiveOutputMode() {
+    def mode = (params.output_mode ?: 'all').toString().trim().toLowerCase()
+    if (!(mode in ['basic', 'important', 'all'])) {
+        log.warn "Unsupported --output_mode '${params.output_mode}', using 'all'."
+        return 'all'
+    }
+    return mode
+}
+
 def effectiveMaxFeaturesHeatmap() {
     return params.max_features_heatmap ? params.max_features_heatmap as int : (truthyParam(params.large_dataset) ? 150 : 300)
 }
@@ -440,6 +452,10 @@ def helpMessage() {
       --panr2_label_max_length Maximum feature-label length in PanR2 plots [default: 40]
       --large_dataset          Enable large-dataset report safeguards and compact defaults [default: false]
       --report_mode            PanR2 handoff report mode: compact, publication, exploratory [default: publication; compact when --large_dataset true]
+      --output_mode            Final user output mode: basic, important, all [default: all]
+                              basic publishes only basic/enriched_genome_dataset.csv and .tsv
+      --figure_formats         Requested user-facing figure formats [default: png,svg,tsv; first-pass geographic map writes html,png,svg,tsv]
+      --publication_figures    Request publication-style figure expansion where supported [default: false]
       --max_features_heatmap   Maximum features retained in handoff presence/absence matrices [default: 300; 150 in large-dataset mode]
       --max_features_network   Maximum features used for cross-database co-occurrence/proximity summaries [default: --panr2_cross_database_max_features; 150 in large-dataset mode]
       --max_metadata_columns   Maximum metadata audit rows shown in handoff HTML pages [default: 80; 20 in large-dataset mode]
@@ -2408,6 +2424,8 @@ process EXPORT_PANR2_INPUTS {
             --sample-dir ${sample_dir} \\
             --versions-dir ${shellQuote(versionReportsDir)} \\
             --report-mode ${effectiveReportMode()} \\
+            --output-mode ${effectiveOutputMode()} \\
+            --figure-formats ${shellQuote(params.figure_formats.toString())} \\
             --max-features-heatmap ${effectiveMaxFeaturesHeatmap()} \\
             --max-features-network ${effectiveMaxFeaturesNetwork()} \\
             --max-metadata-columns ${effectiveMaxMetadataColumns()} \\
@@ -2424,6 +2442,7 @@ process EXPORT_PANR2_INPUTS {
             --nextflow-session-id ${shellQuote(sessionId)} \\
             --nextflow-run-name ${shellQuote(runName)} \\
             ${largeDatasetFlag} \\
+            ${params.publication_figures ? "--publication-figures" : ""} \\
             ${skipHeavyPlotsFlag}
     fi
     """
@@ -2745,18 +2764,42 @@ process PANR2_COMPREHENSIVE {
 
 // Process 11: Collect final results
 process COLLECT_RESULTS {
-    publishDir "${params.outdir}", mode: 'copy'
-
     input:
     path sample_dir
 
     output:
-    path "${sample_dir.name}", emit: final_results
+    path "collect_complete.txt", emit: final_results
 
     script:
+    def mode = effectiveOutputMode()
+    def outputRoot = params.outdir.toString().startsWith("/") ? params.outdir.toString() : "${launchDir}/${params.outdir}"
+    def targetDir = "${outputRoot}/${sample_dir.name}"
+    def stagingDir = "${outputRoot}/.${sample_dir.name}.collect_tmp"
     """
-    mkdir -p ${params.outdir}/${sample_dir.name}
-    cp -r ${sample_dir}/* ${params.outdir}/${sample_dir.name}/
+    rm -rf ${shellQuote(stagingDir)}
+    mkdir -p ${shellQuote(stagingDir)}
+    if [ "${mode}" = "basic" ]; then
+        if [ -d "${sample_dir}/basic" ]; then
+            cp -r "${sample_dir}/basic" ${shellQuote(stagingDir)}/
+        else
+            echo "Basic output mode requested, but ${sample_dir}/basic was not generated." >&2
+            exit 1
+        fi
+    elif [ "${mode}" = "important" ]; then
+        for bundle in basic important; do
+            if [ -d "${sample_dir}/\${bundle}" ]; then
+                cp -r "${sample_dir}/\${bundle}" ${shellQuote(stagingDir)}/
+            fi
+        done
+        if [ -d "${sample_dir}/panr2_inputs" ]; then
+            cp -r "${sample_dir}/panr2_inputs" ${shellQuote(stagingDir)}/
+        fi
+    else
+        cp -r "${sample_dir}"/* ${shellQuote(stagingDir)}/
+    fi
+    rm -rf ${shellQuote(targetDir)}
+    mv ${shellQuote(stagingDir)} ${shellQuote(targetDir)}
+    printf '%s\\n' ${shellQuote(targetDir)} > collect_complete.txt
     """
 }
 
@@ -2870,8 +2913,13 @@ workflow {
     qc_ready_ch = COMBINED_QC.out.combined_qc_results
 
     if (effectiveStopAfterQc()) {
-        // Collect QC-only results to output directory
-        COLLECT_RESULTS(qc_ready_ch)
+        if (effectiveOutputMode() in ['basic', 'important']) {
+            EXPORT_PANR2_INPUTS(qc_ready_ch)
+            COLLECT_RESULTS(EXPORT_PANR2_INPUTS.out.panr2_inputs_results)
+        } else {
+            // Collect QC-only results to output directory
+            COLLECT_RESULTS(qc_ready_ch)
+        }
     } else {
         if (params.run_amrfinderplus) {
             AMRFINDERPLUS_ANALYSIS(qc_ready_ch)
@@ -2903,8 +2951,12 @@ workflow {
                 PANR2_FEATURE_RUNNERS(qc_ready_ch)
                 qc_ready_ch = PANR2_FEATURE_RUNNERS.out.panr2_feature_runner_results
             }
-            PANR2_COMPREHENSIVE(qc_ready_ch)
-            EXPORT_PANR2_INPUTS(PANR2_COMPREHENSIVE.out.panr2_comprehensive_results)
+            if (effectiveOutputMode() == 'basic') {
+                EXPORT_PANR2_INPUTS(qc_ready_ch)
+            } else {
+                PANR2_COMPREHENSIVE(qc_ready_ch)
+                EXPORT_PANR2_INPUTS(PANR2_COMPREHENSIVE.out.panr2_comprehensive_results)
+            }
             COLLECT_RESULTS(EXPORT_PANR2_INPUTS.out.panr2_inputs_results)
         } else {
             if (params.run_abricate) {
@@ -2913,11 +2965,15 @@ workflow {
 
                 EXPORT_PANR2_INPUTS(ABRICATE.out.abricate_results)
 
-                // Run panR on each sample directory after abricate
-                PANR(EXPORT_PANR2_INPUTS.out.panr2_inputs_results)
+                if (effectiveOutputMode() == 'basic') {
+                    COLLECT_RESULTS(EXPORT_PANR2_INPUTS.out.panr2_inputs_results)
+                } else {
+                    // Run panR on each sample directory after abricate
+                    PANR(EXPORT_PANR2_INPUTS.out.panr2_inputs_results)
 
-                // Collect final results to output directory
-                COLLECT_RESULTS(PANR.out.panr_results)
+                    // Collect final results to output directory
+                    COLLECT_RESULTS(PANR.out.panr_results)
+                }
             } else {
                 // Optional-runner/table-input validation path: export current standardized outputs without legacy ABRicate/PanR.
                 EXPORT_PANR2_INPUTS(qc_ready_ch)

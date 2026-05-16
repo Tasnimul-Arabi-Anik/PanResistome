@@ -189,6 +189,12 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue(Path(outputs["feature_cooccurrence"]).exists())
             self.assertTrue(Path(outputs["report_controls"]).exists())
             self.assertTrue(Path(outputs["report_controls_html"]).exists())
+            self.assertTrue((sample_dir / "basic" / "enriched_genome_dataset.csv").exists())
+            self.assertTrue((sample_dir / "basic" / "enriched_genome_dataset.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "results.html").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "geographic_distribution_map.html").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "geographic_distribution_map.png").exists())
+            self.assertTrue((sample_dir / "important" / "key_tables" / "geographic_distribution.tsv").exists())
 
     def test_optional_table_inputs_export_contract_features(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -517,6 +523,36 @@ class FetchM2AdapterTests(unittest.TestCase):
             complete_features.update(zip(complete_proximity["feature_b_database"], complete_proximity["feature_b_id"]))
             self.assertGreater(len(complete_features), len(proximity_features))
             self.assertTrue(Path(outputs["report_controls_html"]).exists())
+
+    def test_basic_output_mode_skips_important_user_bundle(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sample_dir = Path(tmpdir) / "Klebsiella_oxytoca"
+            metadata_dir = sample_dir / "metadata_output"
+            abricate_dir = sample_dir / "abricate"
+            metadata_dir.mkdir(parents=True)
+            abricate_dir.mkdir()
+            pd.DataFrame(
+                [
+                    {
+                        "Assembly Accession": "GCF_000000001.1",
+                        "Organism Name": "Klebsiella oxytoca",
+                        "Country": "Bangladesh",
+                        "Collection_Year": "2024",
+                        "combined_qc_status": "PASS",
+                    }
+                ]
+            ).to_csv(metadata_dir / "ncbi_clean.csv", index=False)
+            (abricate_dir / "ncbi_results.tab").write_text(
+                "#FILE\tSEQUENCE\tSTART\tEND\tGENE\t%COVERAGE\t%IDENTITY\tDATABASE\tACCESSION\tPRODUCT\tRESISTANCE\n"
+                "GCF_000000001.1.fna\tcontig1\t10\t90\tblaTEM-1\t100\t99.5\tncbi\tACC1\tbeta-lactamase\tbeta-lactam\n",
+                encoding="utf-8",
+            )
+
+            export_contract(sample_dir, sample_dir / "panr2_inputs", output_mode="basic")
+
+            self.assertTrue((sample_dir / "basic" / "enriched_genome_dataset.csv").exists())
+            self.assertTrue((sample_dir / "basic" / "enriched_genome_dataset.tsv").exists())
+            self.assertFalse((sample_dir / "important").exists())
 
     def test_isfinder_blast_converter_writes_abricate_style_tables(self):
         with tempfile.TemporaryDirectory() as tmpdir:

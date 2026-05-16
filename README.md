@@ -115,6 +115,8 @@ Database setup automation is documented in [`docs/database_automation_matrix.md`
 
 For large runs, add `--large_dataset true` or combine a resource profile with `large`, for example `-profile conda,mamba,desktop_parallel,large`. Large-dataset mode still writes complete feature TSV outputs, but caps report-facing matrices/co-occurrence/proximity summaries, switches the handoff pages to compact mode, summarizes top features per database, and records the applied limits in `panr2_inputs/manifest/report_controls.tsv`. Complete proximity evidence is preserved separately as `panr2_inputs/cross_database/feature_proximity_all.tsv`.
 
+Use `--output_mode basic|important|all` to control the final user-facing bundle. The default is `all`, preserving the complete advanced output tree. `basic` is intentionally minimal: the final sample directory contains only `basic/enriched_genome_dataset.csv` and `basic/enriched_genome_dataset.tsv`, one row per genome with metadata, QC summaries, annotation burdens, compact annotation lists, lineage labels, and module provenance. `important` publishes the enriched dataset plus `important/results.html`, a curated report whose first-pass visualization focuses on geographic distribution with feature and year selectors; it also includes PNG/SVG/TSV geographic outputs, key tables, and links to the complete `panr2_inputs/` handoff bundle.
+
 For 300+ genome desktop validations, start with CheckM2, ANI, and AMRFinderPlus disabled, then add those heavier stages intentionally. The documented 300-record Klebsiella large-mode run used `--run_checkm2 false --run_ani false --run_amrfinderplus false` and still validated FetchM2, sequence QC, QUAST, Mash, ABRicate AMR/VFDB/PlasmidFinder, IntegronFinder, MLST, PanR2 feature contracts, and compact report safeguards. FastANI all-vs-all and AMRFinderPlus nucleotide `tblastn` were the observed long-running optional stages at this scale. If ANI is enabled with `--large_dataset true`, the default `--ani_large_run_strategy auto` skips all-vs-all ANI above `--ani_max_all_vs_all_genomes` and writes an ANI status audit instead of accidentally launching a long all-vs-all run.
 
 ### Recommended Analysis Profiles
@@ -561,6 +563,9 @@ PanResistome/
 | `--panr2_cross_database_max_features` | int | 300 | Default feature cap for PanR2 cross-database summaries when large-dataset mode is not enabled |
 | `--large_dataset` | bool | false | Enable compact report safeguards for large feature matrices while preserving complete TSV exports |
 | `--report_mode` | str | publication | Handoff report density preset: `compact`, `publication`, or `exploratory`; defaults to compact when `--large_dataset true` |
+| `--output_mode` | str | all | Final user-facing output bundle: `basic`, `important`, or `all`; `basic` publishes only `basic/enriched_genome_dataset.csv` and `.tsv` |
+| `--figure_formats` | str | png,svg,tsv | Requested user-facing figure formats; current first-pass important geographic output writes HTML, PNG, SVG, and plotted TSV without extra plotting dependencies |
+| `--publication_figures` | bool | false | Reserved switch for expanded PDF/publication figure generation in later report phases |
 | `--max_features_heatmap` | int | 300 | Maximum features retained in exported presence/absence matrices; defaults to 150 in large-dataset mode |
 | `--max_features_network` | int | `--panr2_cross_database_max_features` | Maximum features used for co-occurrence/proximity summaries; defaults to 150 in large-dataset mode |
 | `--max_metadata_columns` | int | 80 | Maximum metadata audit rows shown in handoff HTML pages; defaults to 20 in large-dataset mode |
@@ -652,9 +657,41 @@ Explicit command-line parameters override profile values when both are supplied.
 
 ## 📂 Output Structure
 
+Final output depends on `--output_mode`:
+
+```text
+--output_mode basic
+results/
+└── <organism>/
+    └── basic/
+        ├── enriched_genome_dataset.csv
+        └── enriched_genome_dataset.tsv
+
+--output_mode important
+results/
+└── <organism>/
+    ├── basic/
+    │   ├── enriched_genome_dataset.csv
+    │   └── enriched_genome_dataset.tsv
+    ├── important/
+    │   ├── results.html
+    │   ├── key_tables/geographic_distribution.tsv
+    │   ├── figures/geographic_distribution_map.html
+    │   ├── figures/geographic_distribution_map.png
+    │   ├── figures/geographic_distribution_map.svg
+    │   └── figures/geographic_distribution.data.tsv
+    └── panr2_inputs/
+
+--output_mode all
+```
+
+`all` keeps the complete advanced output tree shown below and also includes the `basic/` and `important/` user-facing bundles.
+
 ```bash
 results/
 └── <organism>/
+    ├── basic/              # one-row-per-genome enriched dataset
+    ├── important/          # curated report and geographic first-pass visual outputs
     ├── abricate/            # Raw and summary AMR annotation results
     ├── figures/             # PNG, TIFF, and interactive HTML visualizations
     │   ├── heatmap/

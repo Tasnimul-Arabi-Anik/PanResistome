@@ -174,6 +174,16 @@ panr2_inputs/
 
 `panr2_inputs/features/*.features.tsv` is the strict contract layer. Raw tool folders are still copied for traceability, but downstream analysis should prefer the standardized feature tables when possible. `schema_validation_report.csv` checks required columns, and `unmatched_features.csv` lists feature rows whose assembly accession cannot be matched to metadata. `database_setup_status.tsv` records the required database/tool checks for the selected profile, including CheckM2, AMRFinderPlus, ABRicate `ncbi/vfdb/plasmidfinder`, optional ISfinder FASTA, GTDB-Tk, geNomad, Kaptive, MobileElementFinder, IntegronFinder, and MLST status where relevant. `abricate_database_setup_status.tsv`, `mobsuite_database_setup_status.tsv`, and `genomad_database_setup_status.tsv` record pre/post database setup state for modules with automated setup helpers.
 
+PanResistome also writes user-facing output bundles controlled by
+`--output_mode basic|important|all`. `basic` is deliberately outside the
+advanced PanR2 contract tree and publishes only `basic/enriched_genome_dataset`
+CSV/TSV in the final output directory. `important` adds a curated
+`important/results.html` entry point, key tables, and a first-pass offline
+geographic distribution map with database/feature and year selectors. The
+geographic bundle writes HTML, PNG, SVG, and plotted TSV outputs without adding
+new runtime plotting dependencies. `all` preserves the full advanced output
+tree and includes both user-facing bundles.
+
 `manifest/report_controls.tsv` records report density settings such as `large_dataset`, `report_mode`, feature caps for handoff matrices/co-occurrence/proximity summaries, metadata row caps for HTML pages, and whether heavy interactive plots were skipped or deprioritized. Complete feature TSVs remain available even when large-dataset safeguards cap report-facing summaries.
 
 `manifest/feature_contract.json` records the formal PanR2 feature-contract
