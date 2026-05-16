@@ -21,7 +21,7 @@ Docker installed and usable by the current user
 Nextflow installed on the host
 Internet access for genome/database downloads
 Enough disk space for the image, work directory, and results
-Mounted paths for large optional databases such as geNomad, GTDB-Tk, CheckM2, or ISfinder
+Mounted paths for large optional databases such as GTDB-Tk or ISfinder; CheckM2 and geNomad can auto-download into the output cache when enabled, but shared predownloaded paths are still useful on restricted networks
 ```
 
 ## Image
@@ -69,7 +69,46 @@ that permission.
 
 ## Main Workflow
 
-Example 100-record validation-style run:
+Recommended stable comprehensive run for a remote Docker/GHCR user:
+
+```bash
+nextflow run main.nf \
+  --taxon "Acinetobacter pittii" \
+  --organism_max_records 10 \
+  --outdir validation_runs/acinetobacter_pittii_10_docker \
+  -profile docker \
+  --container_image ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
+  --analysis_profile comprehensive \
+  --qc_filter true \
+  --run_gtdbtk false \
+  --run_checkm2 true \
+  --run_quast true \
+  --run_ani true \
+  --run_mash true \
+  --run_amrfinderplus true \
+  --run_genomad true \
+  --panr2_native_feature_runners true \
+  --panr2_native_feature_runner_mode parallel \
+  --panr2_run_mobileelementfinder false \
+  --panr2_run_defensefinder false \
+  --threads 8 \
+  --checkm2_threads 4 \
+  --fetchm2_download_workers 2
+```
+
+This command keeps GTDB-Tk, DefenseFinder, MobileElementFinder, and ISfinder
+out of the first-pass route. It exercises FetchM2, sequence QC, CheckM2, QUAST,
+ANI/skani, Mash, AMRFinderPlus, geNomad/prophage, ABRicate
+ncbi/vfdb/plasmidfinder, IntegronFinder, MLST, PanR2 comprehensive reporting,
+and PanR2 handoff export.
+
+The same route passed a 5-genome `Acinetobacter pittii` Docker/GHCR validation
+on 2026-05-16 with no `--checkm2_db` argument, `--threads 4`, and
+`--checkm2_threads 1`. That run auto-downloaded CheckM2 and geNomad databases,
+produced 5/5 CheckM2 rows, 5/5 combined QC PASS calls, 630 PanR2 feature rows,
+and zero unmatched, invalid, or duplicate feature rows.
+
+For a desktop-safe scale run, reduce the heavy modules intentionally:
 
 ```bash
 nextflow run main.nf \
@@ -90,11 +129,6 @@ nextflow run main.nf \
   --threads 8 \
   --fetchm2_download_workers 2
 ```
-
-This command keeps the validation desktop-safe by disabling CheckM2, QUAST,
-ANI, AMRFinderPlus, and GTDB-Tk. It still exercises FetchM2, sequence QC, Mash,
-ABRicate ncbi/vfdb/plasmidfinder, IntegronFinder, MLST, PanR2 comprehensive
-reporting, large-mode report caps, and PanR2 handoff export.
 
 The same pattern completed with both the local built image and the pulled GHCR
 image:
@@ -192,7 +226,8 @@ images are read-only.
 The image is large; first pull can be slow.
 GTDB-Tk remains external/opt-in because its database is very large.
 ISfinder still requires a user-supplied authorized FASTA.
-CheckM2 and AMRFinderPlus work in the pipeline, but the 100-genome Docker scale validation intentionally disabled them for desktop safety.
+The 100-genome Docker scale validation intentionally disabled CheckM2 and AMRFinderPlus for desktop safety.
+CheckM2 now has GHCR model-load, standalone prediction, Docker-profile QC fixture evidence, and a 5-genome Acinetobacter Docker/GHCR comprehensive PASS with automatic database download.
 Normal Docker use requires Docker socket permission or sudo; Docker group changes require a new login session.
 GHCR Docker is validated for both two-genome geNomad biological execution and 100-record large-mode scale execution.
 ```

@@ -882,6 +882,24 @@ def parse_mobsuite_tables(path: Path, sample_map: dict[str, str]) -> list[dict[s
 
 def discover_raw_feature_databases(sample_dir: Path) -> set[str]:
     raw_databases: set[str] = set()
+    abricate_dirs_by_database = {
+        "amr": [
+            sample_dir / "abricate",
+            sample_dir / "amr",
+            sample_dir / "tool_results" / "abricate" / "ncbi",
+        ],
+        "vfdb": [
+            sample_dir / "vfdb",
+            sample_dir / "tool_results" / "abricate" / "vfdb",
+        ],
+        "plasmidfinder": [
+            sample_dir / "plasmidfinder",
+            sample_dir / "tool_results" / "abricate" / "plasmidfinder",
+        ],
+    }
+    for database, dirs in abricate_dirs_by_database.items():
+        if any(path.exists() and any(child.is_file() for child in path.rglob("*")) for path in dirs):
+            raw_databases.add(database)
     mlst_dirs = [
         sample_dir / "mlst",
         sample_dir / "tool_results" / "mlst",

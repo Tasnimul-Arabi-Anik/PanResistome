@@ -636,7 +636,18 @@ process CHECKM2_ENV_VERSIONS {
         echo "[checkm2_env]"
         echo "pipeline_version=${params.pipeline_version}"
         date -u +"run_timestamp_utc=%Y-%m-%dT%H:%M:%SZ"
-        checkm2 --version || true
+        checkm2 --version
+        checkm2_bin="\$(command -v checkm2)"
+        checkm2_python="\$(dirname "\${checkm2_bin}")/python"
+        if [ ! -x "\${checkm2_python}" ]; then
+            checkm2_python="python"
+        fi
+        "\${checkm2_python}" - <<'PY'
+from checkm2 import modelProcessing
+
+modelProcessing.modelProcessor(1)
+print("checkm2_model_load=PASS")
+PY
     } > checkm2_env_versions.txt
     """
 }
@@ -1248,11 +1259,31 @@ process CHECKM2_QC {
     fi
 
     if [ -d "\${sequence_dir}" ] && [ -n "\$(find \${sequence_dir} -name "*.fna" -print -quit)" ]; then
-        checkm2 predict \\
+        checkm2_stdout="${sample_dir}/checkm2/checkm2_predict.stdout.log"
+        checkm2_stderr="${sample_dir}/checkm2/checkm2_predict.stderr.log"
+        if ! checkm2 predict \\
             --threads ${checkm2Threads} \\
             --input \${sequence_dir} \\
             --output-directory ${sample_dir}/checkm2 \\
-            -x fna --force ${checkm2_lowmem_arg} \${checkm2_db_arg}
+            -x fna --force ${checkm2_lowmem_arg} \${checkm2_db_arg} \\
+            > "\${checkm2_stdout}" 2> "\${checkm2_stderr}"; then
+            echo "ERROR: CheckM2 prediction failed. Logs:" >&2
+            echo "  stdout: \${checkm2_stdout}" >&2
+            echo "  stderr: \${checkm2_stderr}" >&2
+            tail -n 80 "\${checkm2_stdout}" >&2 || true
+            tail -n 80 "\${checkm2_stderr}" >&2 || true
+            if grep -qiE "Saved models could not be loaded|specific_model_COMP\\.keras|keras|tensorflow" "\${checkm2_stdout}" "\${checkm2_stderr}" 2>/dev/null; then
+                echo "ERROR: CheckM2 could not load its packaged neural-network model. Rebuild the CheckM2 environment/container from envs/checkm2.yaml, which pins checkm2=1.1.0 build 1 with CPU TensorFlow 2.17. For a deliberate exploratory run without CheckM2 QC, rerun with --run_checkm2 false." >&2
+            else
+                echo "ERROR: CheckM2 is a required QC module when --run_checkm2 true. Verify the CheckM2 database path/download, disk space, and the logs above. Rerun with --run_checkm2 false only if you intentionally want to skip completeness/contamination QC." >&2
+            fi
+            exit 1
+        fi
+        if [ ! -s "${sample_dir}/checkm2/quality_report.tsv" ] || [ "\$(wc -l < "${sample_dir}/checkm2/quality_report.tsv")" -lt 2 ]; then
+            echo "ERROR: CheckM2 completed but did not write any genome rows to ${sample_dir}/checkm2/quality_report.tsv." >&2
+            echo "ERROR: CheckM2 is enabled, so downstream QC cannot silently continue without completeness/contamination results. Inspect \${checkm2_stdout} and \${checkm2_stderr}, or rerun with --run_checkm2 false only for an intentional QC skip." >&2
+            exit 1
+        fi
     else
         echo "Warning: No .fna files found in \${sequence_dir}/ for CheckM2" >&2
         printf "Name\\tCompleteness\\tContamination\\n" > ${sample_dir}/checkm2/quality_report.tsv
@@ -2669,7 +2700,7 @@ process PANR2_COMPREHENSIVE {
                     extra_feature_args="\${extra_feature_args} \${option} \${directory}"
                     echo "Passing PanResistome-native \${name} tables to PanR2: \${directory}"
                 fi
-            elif [ -d "\${directory}" ] && python ${baseDir}/scripts/has_feature_table_rows.py "\${directory}"; then
+            elif [ -d "\${directory}" ] && find "\${directory}" -type f \\( -name "*.tsv" -o -name "*.tab" -o -name "*.csv" \\) -print -quit | grep -q .; then
                 extra_feature_args="\${extra_feature_args} \${option} \${directory}"
                 echo "Passing PanResistome-native \${name} tables to PanR2: \${directory}"
             fi

@@ -8,6 +8,7 @@ import csv
 import re
 import shutil
 import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -222,6 +223,34 @@ def write_audit(path: Path, rows: list[dict[str, str]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=NATIVE_RUNNER_AUDIT_FIELDS, delimiter="\t")
         writer.writeheader()
         writer.writerows(rows)
+
+
+def write_mobileelementfinder_failure_outputs(
+    sample_dir: Path,
+    status_path: Path,
+    audit_path: Path,
+    rows: list[dict[str, str]],
+    audit_rows: list[dict[str, str]],
+    runner_mode: str,
+    started: str,
+    sample_count: int,
+    allow_failure: bool,
+    error: Exception | str,
+) -> str:
+    output_dir = sample_dir / "tool_results" / "mobileelementfinder" / "panr2_inputs"
+    write_empty_abricate_style_table(output_dir / "mobileelementfinder_results.tab")
+    status = "WARNING_FAILED" if allow_failure else "FAIL"
+    message = (
+        "MobileElementFinder failed but was kept nonfatal; header-only PanR2-compatible output was written. "
+        "Inspect native runner status and rerun without --panr2_run_mobileelementfinder if not needed. "
+        f"Original error: {error}"
+    )
+    print(f"Warning: {message}", file=sys.stderr)
+    rows.append(status_row("mobileelementfinder", True, started, status, output_dir, message, sample_count, 0, sample_count))
+    write_status(status_path, rows)
+    audit_rows.append(audit_row("mobileelementfinder", runner_mode, sample_count, 1, sample_count, 0, sample_count, 0, 0, status, message))
+    write_audit(audit_path, audit_rows)
+    return status
 
 
 def _run_command(command: list[str], stdout_path: Path | None = None) -> str:
@@ -747,18 +776,18 @@ def main() -> int:
                 )
             )
         except Exception as exc:
-            output_dir = sample_dir / "tool_results" / "mobileelementfinder" / "panr2_inputs"
-            write_empty_abricate_style_table(output_dir / "mobileelementfinder_results.tab")
-            status = "WARNING_FAILED" if args.mobileelementfinder_allow_failure else "FAIL"
-            message = (
-                "MobileElementFinder failed but was kept nonfatal; inspect native runner status and rerun without "
-                "--panr2_run_mobileelementfinder if not needed. "
-                f"Original error: {exc}"
+            write_mobileelementfinder_failure_outputs(
+                sample_dir,
+                status_path,
+                audit_path,
+                rows,
+                audit_rows,
+                args.mode,
+                started,
+                sample_count,
+                args.mobileelementfinder_allow_failure,
+                exc,
             )
-            rows.append(status_row("mobileelementfinder", True, started, status, output_dir, message, sample_count, 0, sample_count))
-            write_status(status_path, rows)
-            audit_rows.append(audit_row("mobileelementfinder", args.mode, sample_count, 1, sample_count, 0, sample_count, 0, 0, status, message))
-            write_audit(audit_path, audit_rows)
             if not args.mobileelementfinder_allow_failure:
                 raise
     else:

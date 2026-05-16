@@ -10,13 +10,49 @@
 - Organism-query controls for generated FetchM2 input tables:
   `--organism_max_records`, `--organism_candidate_records`,
   `--organism_diverse_bioproject`, and `--organism_prefer_refseq`.
+- Acinetobacter CheckM2-on Docker/GHCR validation target documentation under
+  `validation/deployment/ACINETOBACTER_CHECKM2_VALIDATION_STATUS.md`, including
+  the required fixture pass, stable comprehensive command, and
+  MobileElementFinder follow-up track.
 
 ### Fixed
+- CheckM2 packaging now targets the CheckM2 1.1.0 build that declares the
+  `.keras` model stack, with Python 3.12 and CPU TensorFlow 2.17 pins. The
+  CheckM2 version-capture step, Dockerfile, and GHCR smoke workflow now load the
+  packaged CheckM2 model instead of only checking that the executable exists.
+- `CHECKM2_QC` now treats enabled CheckM2 prediction failures and header-only
+  `quality_report.tsv` outputs as strict, actionable failures, including a
+  specific diagnostic for stale TensorFlow/Keras `specific_model_COMP.keras`
+  load errors and a clear `--run_checkm2 false` escape hatch for intentional QC
+  skips.
+- Opt-in MobileElementFinder failure handling now emits a visible warning while
+  writing the header-only PanR2-compatible output, module status row, and native
+  runner merge-audit row used to keep full runs nonblocking by default.
 - Database/tool preflight now treats experimental optional runners such as
   DefenseFinder and incomplete MOB-suite cache setup as auditable warnings
   instead of strict blockers, so remote comprehensive runs can continue with
   validated core feature analyses while preserving the failure details in
   `database_setup_status.tsv`.
+- Header-only native ABRicate handoff tables now still produce header-only
+  PanR2 feature tables, preventing zero-hit required databases such as
+  PlasmidFinder from being audited as missing after a successful run.
+
+### Changed
+- Public comprehensive validation docs now use the current remote-user target:
+  Docker/GHCR with `--taxon "Acinetobacter pittii"`, CheckM2/QUAST/ANI/Mash,
+  AMRFinderPlus, geNomad, ABRicate NCBI/VFDB/PlasmidFinder, IntegronFinder,
+  MLST, and PanR2 comprehensive mode enabled, while keeping GTDB-Tk,
+  DefenseFinder, MobileElementFinder, and ISfinder out of the first-pass route.
+- CheckM2 stability claims now distinguish historical successful validations
+  from the 2026-05-16 reproduced stale-package model-load failure, record the
+  passing Conda and Docker/GHCR fixture smokes, and record the 5-genome
+  Acinetobacter Docker/GHCR comprehensive PASS with automatic CheckM2 database
+  download, 5/5 CheckM2 rows, 5/5 combined QC PASS calls, 630 PanR2 feature
+  rows, and zero unmatched, invalid, or duplicate feature rows.
+- Docker-profile process CPU requests now respect `--threads` for FetchM,
+  GTDB-Tk, QUAST, PanR, and PanR2 comprehensive stages, so modest remote-user
+  validations can run with low global thread caps instead of failing before
+  launch when a process default requested more CPUs than available.
 
 ## 0.6.0 - 2026-05-14
 

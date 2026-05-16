@@ -90,6 +90,7 @@ jobs:
             genomad --version
             mob_recon --version
             ectyper --version
+            /opt/conda/envs/checkm2_env/bin/python -c "from checkm2 import modelProcessing; modelProcessing.modelProcessor(1); print(\"checkm2_model_load=PASS\")"
             panr --version
           '
 

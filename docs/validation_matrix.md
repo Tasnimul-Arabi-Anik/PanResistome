@@ -13,10 +13,11 @@ This matrix summarizes the major validation evidence used for release hardening.
 | Klebsiella pneumoniae 10 v0.5.0 Docker/GHCR | `Klebsiella pneumoniae` | 10 | 10 | 10 | off | off | off | off | on | on | yes | parallel | 8 | not run | 1348 | 0 | 0 | 0 | yes | PASS | `validation/klebsiella_pneumoniae_10/V0_5_0_DOCKER_VALIDATION_RESULTS.md` |
 | Klebsiella pneumoniae IntegronFinder-positive GHCR evidence | `Klebsiella pneumoniae` | 100 | 99 | 99 | off | off | off | off | on | off | yes | parallel | 8 | not run | 11488 | 0 | 0 | 0 | yes | PASS | `validation/integronfinder_positive/VALIDATION_RESULTS.md` |
 | Klebsiella pneumoniae 10 ANI-lineage Singularity/GHCR | `Klebsiella pneumoniae` | 10 | 10 | 10 | off | off | off | on | on | off | yes | parallel | 8 | not run | 1248 | 0 | 0 | 0 | yes | PASS | `validation/klebsiella_pneumoniae_10/ANI_LINEAGE_SINGULARITY_VALIDATION_RESULTS.md` |
+| Acinetobacter pittii 5 Docker/GHCR comprehensive | `Acinetobacter pittii` | 5 | 5 | 5 | off | auto DB | on | on | on | on | yes | parallel | 4 | 1 | 630 | 0 | 0 | 0 | yes | PASS | `validation/deployment/ACINETOBACTER_CHECKM2_VALIDATION_STATUS.md` |
 
 ## Current Interpretation
 
-- The fresh-clone Delftia run proves the public command can install environments, fetch/build legal databases, and complete without a user-provided CheckM2 database path.
+- The fresh-clone Delftia run historically proved the public command could install environments, fetch/build legal databases, and complete without a user-provided CheckM2 database path. A 2026-05-16 fixture reproduced a stale CheckM2 TensorFlow/Keras package failure; the updated CheckM2 build-1/CPU-TensorFlow route now loads the model and writes real prediction rows in both Conda and Docker/GHCR fixture smokes. The 5-genome Acinetobacter Docker/GHCR comprehensive run confirms the current container route works with CheckM2 auto-download and no manual database path.
 - The native-runner Delftia runs prove ABRicate, IntegronFinder, and MLST can be owned by PanResistome and passed to PanR2 as precomputed results.
 - The Klebsiella run proves the parallel native-runner path handles a biologically richer 100-record input with clean PanR2 feature-contract validation.
 - The 300-record large-mode run proves report safeguards and native feature runners scale on a desktop-safe profile when heavyweight optional stages are intentionally disabled.
@@ -33,4 +34,9 @@ This matrix summarizes the major validation evidence used for release hardening.
   exercise skani all-vs-all ANI, populate ANI-cluster lineage context, preserve
   positive native IntegronFinder handoff rows in strict PanR2 features, and pass
   feature-contract validation after the v0.6.0 native-handoff export fix.
+- The 5-genome Acinetobacter Docker/GHCR run proves the current recommended
+  CheckM2-on comprehensive route can auto-download CheckM2 and geNomAD
+  databases, run QUAST/ANI/Mash/AMRFinderPlus/native ABRicate/IntegronFinder/MLST,
+  and pass PanR2 schema validation with zero unmatched, invalid, or duplicate
+  feature rows.
 - GTDB-Tk remains intentionally excluded from these validations because its reference database is large and should remain opt-in.

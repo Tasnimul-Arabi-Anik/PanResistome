@@ -26,6 +26,22 @@ Then resume the run. On shared systems, pre-download the database once and pass:
 --checkm2_db /path/to/CheckM2_database/uniref100.KO.1.dmnd
 ```
 
+## CheckM2 Model Loading Fails
+
+If CheckM2 fails with a message like:
+
+```text
+Saved models could not be loaded ... specific_model_COMP.keras
+```
+
+the CheckM2 environment was solved with an incompatible Keras/TensorFlow stack.
+Rebuild the Conda environment or container from the current `envs/checkm2.yaml`.
+It pins CheckM2 1.1.0 build 1 with Python 3.12 and CPU TensorFlow 2.17 so the
+packaged `.keras` model can load. When `--run_checkm2 true`, PanResistome treats
+this as a hard failure because completeness/contamination QC would otherwise be
+missing. Use `--run_checkm2 false` only for an intentional exploratory run that
+skips CheckM2 QC.
+
 ## ABRicate Database Missing
 
 The standard comprehensive profile requires `ncbi`, `vfdb`, and `plasmidfinder`. PanResistome runs `panr setup-db` before reporting and records the explicit setup action in:

@@ -2,7 +2,14 @@ name: checkm2_env
 channels:
   - conda-forge
   - bioconda
-  - defaults
 dependencies:
-  - python=3.8
-  - checkm2=1.1.0
+  - python=3.12
+  # CheckM2 build 0 can solve with TensorFlow/Keras versions that cannot load
+  # the packaged specific_model_COMP.keras model. Build 1 declares the newer
+  # model stack; keep TensorFlow CPU-only for the all-in-one image footprint.
+  - checkm2=1.1.0=pyh7e72e81_1
+  - "tensorflow=2.17.*=cpu*"
+  - "tensorflow-base=2.17.*=cpu*"
+  - keras=3.*
+  - scikit-learn=1.6.1
+  - diamond=2.1.11

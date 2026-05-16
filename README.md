@@ -68,7 +68,7 @@ feature_contract.json
 
 Sequence QC filtering is optional. By default, the pipeline reports QC metrics but keeps all assemblies for downstream analysis. Add `--qc_filter true` with one or more thresholds to exclude failed assemblies from ABRicate, PanR2, and later tools.
 
-CheckM2 is enabled by default. If `--checkm2_db` is not provided, PanResistome now attempts to download the CheckM2 database automatically under `<outdir>/databases/checkm2` unless `--checkm2_auto_download_db false` is set. This improves the one-command user path, but the database is large, so users on restricted networks can still pre-download it and pass `--checkm2_db /path/to/checkm2_database.dmnd`.
+CheckM2 is enabled by default. If `--checkm2_db` is not provided, PanResistome attempts to download the CheckM2 database automatically under `<outdir>/databases/checkm2` unless `--checkm2_auto_download_db false` is set. The CheckM2 environment is pinned to the CheckM2 1.1.0 build that can load the packaged `.keras` model with CPU TensorFlow 2.17; the image build and version-capture step now smoke-test that model load instead of only checking `command -v checkm2`. The database is large, so users on restricted networks can still pre-download it and pass `--checkm2_db /path/to/checkm2_database.dmnd`.
 
 For a lighter validation run on modest hardware, use `--stop_after_qc true`. This runs FetchM2 metadata processing, sequence QC, and CheckM2, then collects QC outputs without running GTDB-Tk, ABRicate, or PanR2.
 
@@ -147,21 +147,27 @@ Recommended public comprehensive command for a fresh user:
 
 ```bash
 nextflow run main.nf \
-  --input validation/delftia_tsuruhatensis_current/ncbi_dataset.tsv \
-  --outdir validation_runs/delftia_fresh \
+  --taxon "Acinetobacter pittii" \
+  --organism_max_records 10 \
+  --outdir validation_runs/acinetobacter_pittii_10_conda \
   -profile conda,mamba \
   --analysis_profile comprehensive \
   --qc_filter true \
   --run_gtdbtk false \
+  --run_checkm2 true \
   --run_quast true \
   --run_ani true \
   --run_mash true \
   --run_amrfinderplus true \
-  --threads 4 \
+  --run_genomad true \
+  --panr2_run_mobileelementfinder false \
+  --panr2_run_defensefinder false \
+  --threads 8 \
+  --checkm2_threads 4 \
   --fetchm2_download_workers 2
 ```
 
-This command intentionally does not require a local CheckM2 database path, manual AMRFinderPlus database setup, manual ABRicate database setup, GTDB-Tk, MobileElementFinder, or ISfinder. ABRicate databases are installed, force-refreshed, and verified automatically by default; add `--panr2_update_abricate_db false` when you want to reuse a cached ABRicate database without refreshing it. The run should write the main dashboard to `<outdir>/<organism>/report/index.html`, the setup audit to `<outdir>/<organism>/panr2_inputs/manifest/database_setup_status.tsv`, and the ABRicate setup action report to `<outdir>/<organism>/panr2_inputs/manifest/abricate_database_setup_status.tsv`.
+This command intentionally does not require a local CheckM2 database path, manual AMRFinderPlus database setup, manual ABRicate database setup, GTDB-Tk, MobileElementFinder, DefenseFinder, or ISfinder. ABRicate databases are installed, force-refreshed, and verified automatically by default; add `--panr2_update_abricate_db false` when you want to reuse a cached ABRicate database without refreshing it. The run should write the main dashboard to `<outdir>/<organism>/report/index.html`, the setup audit to `<outdir>/<organism>/panr2_inputs/manifest/database_setup_status.tsv`, and the ABRicate setup action report to `<outdir>/<organism>/panr2_inputs/manifest/abricate_database_setup_status.tsv`.
 
 For desktop-scale validation with parallel native feature runners, use the resource profile instead of manually tuning every thread option:
 
@@ -182,7 +188,10 @@ nextflow run main.nf \
 Experimental container profiles are available for deployment testing. The Docker
 route now has local-image and GHCR-image biological validation, including a
 two-genome run, a geNomad database/download runner test, and a 100-record
-Klebsiella large-mode run with clean PanR2 feature-contract output. Singularity
+Klebsiella large-mode run with clean PanR2 feature-contract output. A 5-genome
+Acinetobacter Docker/GHCR comprehensive run also passed with CheckM2 automatic
+database download, 5/5 combined QC PASS calls, 630 PanR2 feature rows, and zero
+unmatched, invalid, or duplicate feature rows. Singularity
 CE has also validated the GHCR image on two-genome geNomad-enabled and
 100-record large-mode biological workflows. The main deployment caveat is the
 large first GHCR pull or GHCR-to-SIF conversion; use a persistent
@@ -200,23 +209,30 @@ python scripts/check_container_readiness.py \
 # use --pull-test-timeout 7200 or another site-appropriate timeout.
 
 nextflow run main.nf \
-  --input validation/klebsiella_pneumoniae_100/ncbi_dataset.tsv \
-  --outdir validation_runs/klebsiella_100_docker_large \
-  -profile docker,large \
+  --taxon "Acinetobacter pittii" \
+  --organism_max_records 10 \
+  --outdir validation_runs/acinetobacter_pittii_10_docker \
+  -profile docker \
   --container_image ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
   --analysis_profile comprehensive \
   --qc_filter true \
   --run_gtdbtk false \
-  --run_checkm2 false \
-  --run_quast false \
-  --run_ani false \
+  --run_checkm2 true \
+  --run_quast true \
+  --run_ani true \
   --run_mash true \
-  --run_amrfinderplus false \
+  --run_amrfinderplus true \
+  --run_genomad true \
   --panr2_native_feature_runners true \
   --panr2_native_feature_runner_mode parallel \
+  --panr2_run_mobileelementfinder false \
+  --panr2_run_defensefinder false \
   --threads 8 \
+  --checkm2_threads 4 \
   --fetchm2_download_workers 2
 ```
+
+For a first desktop-scale Docker run, keep GTDB-Tk, DefenseFinder, MobileElementFinder, and ISfinder off. GTDB-Tk and ISfinder still require user-supplied databases; DefenseFinder remains table-input/experimental; MobileElementFinder is validated as opt-in/nonblocking only after its own organism-specific pass.
 
 The experimental image definition is in [`containers/Dockerfile`](containers/Dockerfile),
 and the GHCR build workflow is in [`.github/workflows/container.yml`](.github/workflows/container.yml).
@@ -225,6 +241,9 @@ The Docker image is large. For the shortest user-facing container instructions,
 see [`docs/docker_quickstart.md`](docs/docker_quickstart.md). For full
 deployment evidence, see [`validation/deployment/DOCKER_REMOTE_USER_VALIDATION_RESULTS.md`](validation/deployment/DOCKER_REMOTE_USER_VALIDATION_RESULTS.md).
 For the 100-record GHCR Docker scale validation, see [`validation/deployment/GHCR_DOCKER_100_VALIDATION_RESULTS.md`](validation/deployment/GHCR_DOCKER_100_VALIDATION_RESULTS.md).
+For the current Acinetobacter CheckM2-on validation target and the 2026-05-16
+CheckM2 packaging status, see
+[`validation/deployment/ACINETOBACTER_CHECKM2_VALIDATION_STATUS.md`](validation/deployment/ACINETOBACTER_CHECKM2_VALIDATION_STATUS.md).
 
 `desktop_parallel` sets `--threads 16`, `--checkm2_threads 2`, `--fetchm2_download_workers 2`, and `--panr2_native_feature_runner_mode parallel`. Use `lowmem` for smaller machines and `workstation` when additional RAM is available.
 
@@ -240,7 +259,7 @@ For validation status, see [`docs/validation_matrix.md`](docs/validation_matrix.
 | --- | --- | --- | --- | --- |
 | FetchM2 metadata/download | Stable | Yes | Local and remote-style runs | Default metadata engine |
 | Sequence QC | Stable | Yes | CI + validation runs | `seqkit` with Python fixture fallback |
-| CheckM2 | Stable | Yes | Remote-style run with auto DB | Large DB can be auto-downloaded or supplied |
+| CheckM2 | Core, Conda and Docker/GHCR fixture smokes plus 5-genome Acinetobacter Docker/GHCR comprehensive pass | Yes | Historical remote-style run with auto DB; 2026-05-16 stale TensorFlow/Keras failure reproduced, then fixed package route loaded the model and produced real `quality_report.tsv` rows in Conda and Docker; Acinetobacter Docker/GHCR comprehensive run produced 5/5 CheckM2 rows | Large DB can be auto-downloaded or supplied; failure is now strict and actionable when `--run_checkm2 true` |
 | GTDB-Tk | Stable but heavy | No | Partial | Requires external reference data |
 | QUAST | Stable optional | No | Remote-style run | Assembly structure QC |
 | FastANI/skani | Stable optional | No | Remote-style FastANI run | ANI, outliers, duplicates |

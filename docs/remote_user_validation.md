@@ -22,7 +22,7 @@ PanR2 handoff export
 HTML report
 ```
 
-GTDB-Tk is intentionally disabled because it requires a large external database. MobileElementFinder remains opt-in. ISfinder requires a user-supplied authorized FASTA and is not part of the default public run.
+GTDB-Tk is intentionally disabled because it requires a large external database. MobileElementFinder remains opt-in and nonblocking when explicitly enabled. ISfinder requires a user-supplied authorized FASTA and is not part of the default public run. DefenseFinder remains table-input/experimental and is excluded from the recommended comprehensive route.
 
 ## Fresh Clone Setup
 
@@ -55,6 +55,59 @@ This test uses tiny local fixtures and does not download genomes or large databa
 
 ## Standard Comprehensive Validation Command
 
+Current Acinetobacter Docker/GHCR target:
+
+```bash
+nextflow run main.nf \
+  --taxon "Acinetobacter pittii" \
+  --organism_max_records 10 \
+  --outdir validation_runs/acinetobacter_pittii_10_docker \
+  -profile docker \
+  --container_image ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
+  --analysis_profile comprehensive \
+  --qc_filter true \
+  --run_gtdbtk false \
+  --run_checkm2 true \
+  --run_quast true \
+  --run_ani true \
+  --run_mash true \
+  --run_amrfinderplus true \
+  --run_genomad true \
+  --panr2_native_feature_runners true \
+  --panr2_native_feature_runner_mode parallel \
+  --panr2_run_mobileelementfinder false \
+  --panr2_run_defensefinder false \
+  --threads 8 \
+  --checkm2_threads 4 \
+  --fetchm2_download_workers 2
+```
+
+Equivalent Conda/Mamba target:
+
+```bash
+nextflow run main.nf \
+  --taxon "Acinetobacter pittii" \
+  --organism_max_records 10 \
+  --outdir validation_runs/acinetobacter_pittii_10_conda \
+  -profile conda,mamba \
+  --analysis_profile comprehensive \
+  --qc_filter true \
+  --run_gtdbtk false \
+  --run_checkm2 true \
+  --run_quast true \
+  --run_ani true \
+  --run_mash true \
+  --run_amrfinderplus true \
+  --run_genomad true \
+  --panr2_run_mobileelementfinder false \
+  --panr2_run_defensefinder false \
+  --threads 8 \
+  --checkm2_threads 4 \
+  --fetchm2_download_workers 2
+```
+
+Historical Delftia fresh-clone command:
+
 ```bash
 nextflow run main.nf \
   --input validation/delftia_tsuruhatensis_current/ncbi_dataset.tsv \
@@ -74,6 +127,16 @@ nextflow run main.nf \
 Use `--threads 4` on modest desktops. Increase only after a smaller run is stable.
 
 The 2026-05-08 fresh-clone validation of this command on 45 `Delftia tsuruhatensis` assemblies completed in 4h 29m on a 24-thread laptop with 15 GiB RAM visible to the OS. The command used no `--checkm2_db` path and completed all 19 Nextflow processes.
+
+On 2026-05-16, a local fixture run reproduced a CheckM2 model-loading regression from the stale environment route:
+
+```text
+Saved models could not be loaded ... specific_model_COMP.keras
+```
+
+The intended CheckM2 package route is now `checkm2=1.1.0=pyh7e72e81_1` with CPU TensorFlow 2.17 and Python 3.12 in `envs/checkm2.yaml`. On 2026-05-16, a fresh temporary Conda environment and the GHCR Docker image both loaded the CheckM2 model and completed `checkm2 predict` against a local full-genome fixture, producing one real `quality_report.tsv` genome row with no Keras/model-loading error. The Docker-profile Nextflow QC fixture also passed with `checkm2_model_load=PASS`.
+
+The current Docker/GHCR comprehensive route passed on 2026-05-16 with 5 `Acinetobacter pittii` records, no `--checkm2_db` argument, GTDB-Tk/DefenseFinder/MobileElementFinder/ISfinder disabled, and CheckM2/QUAST/ANI/Mash/AMRFinderPlus/geNomAD/native ABRicate/IntegronFinder/MLST/PanR2 comprehensive enabled. The run completed in 2h 21m 30s on a constrained desktop configuration (`--threads 4 --checkm2_threads 1`), produced 5/5 CheckM2 rows, 5/5 combined QC PASS calls, 630 PanR2 feature rows, and zero unmatched, invalid, or duplicate feature rows. See `validation/deployment/ACINETOBACTER_CHECKM2_VALIDATION_STATUS.md`.
 
 ## What The Command Must Do Automatically
 
@@ -97,31 +160,31 @@ Write the combined HTML dashboard
 ## Expected Main Outputs
 
 ```text
-validation_runs/delftia_fresh/<organism>/report/index.html
-validation_runs/delftia_fresh/<organism>/panr2_inputs/features/all_features.tsv
-validation_runs/delftia_fresh/<organism>/panr2_inputs/manifest/database_setup_status.tsv
-validation_runs/delftia_fresh/<organism>/panr2_inputs/manifest/abricate_database_setup_status.tsv
-validation_runs/delftia_fresh/<organism>/panr2_inputs/manifest/schema_validation_summary.txt
-validation_runs/delftia_fresh/<organism>/panr2_inputs/manifest/feature_completeness_audit.tsv
-validation_runs/delftia_fresh/<organism>/panr2_inputs/manifest/module_status_summary.tsv
-validation_runs/delftia_fresh/<organism>/panr2_inputs/manifest/software_versions.csv
-validation_runs/delftia_fresh/<organism>/qc/qc_master_report.csv
-validation_runs/delftia_fresh/pipeline_versions/
+validation_runs/acinetobacter_pittii_10_docker/<organism>/report/index.html
+validation_runs/acinetobacter_pittii_10_docker/<organism>/panr2_inputs/features/all_features.tsv
+validation_runs/acinetobacter_pittii_10_docker/<organism>/panr2_inputs/manifest/database_setup_status.tsv
+validation_runs/acinetobacter_pittii_10_docker/<organism>/panr2_inputs/manifest/abricate_database_setup_status.tsv
+validation_runs/acinetobacter_pittii_10_docker/<organism>/panr2_inputs/manifest/schema_validation_summary.txt
+validation_runs/acinetobacter_pittii_10_docker/<organism>/panr2_inputs/manifest/feature_completeness_audit.tsv
+validation_runs/acinetobacter_pittii_10_docker/<organism>/panr2_inputs/manifest/module_status_summary.tsv
+validation_runs/acinetobacter_pittii_10_docker/<organism>/panr2_inputs/manifest/software_versions.csv
+validation_runs/acinetobacter_pittii_10_docker/<organism>/qc/qc_master_report.csv
+validation_runs/acinetobacter_pittii_10_docker/pipeline_versions/
 ```
 
 After the run completes, generate a compact release-evidence summary:
 
 ```bash
 scripts/summarize_validation_run.py \
-  --run-dir validation_runs/delftia_fresh \
-  --out-dir validation_runs/delftia_fresh
+  --run-dir validation_runs/acinetobacter_pittii_10_docker \
+  --out-dir validation_runs/acinetobacter_pittii_10_docker
 ```
 
 This writes:
 
 ```text
-validation_runs/delftia_fresh/validation_summary.csv
-validation_runs/delftia_fresh/validation_summary.md
+validation_runs/acinetobacter_pittii_10_docker/validation_summary.csv
+validation_runs/acinetobacter_pittii_10_docker/validation_summary.md
 ```
 
 ## Required Feature Tables
@@ -156,7 +219,7 @@ A fresh-clone validation is release-passing only if:
 The run starts from a clean clone and clean output directory.
 No --checkm2_db path is supplied.
 GTDB-Tk is disabled.
-CheckM2 database setup succeeds or produces a clear actionable failure.
+CheckM2 database setup succeeds, `checkm2/quality_report.tsv` has genome rows, and no `specific_model_COMP.keras`/Keras model-load error appears.
 AMRFinderPlus database setup succeeds.
 ABRicate ncbi/vfdb/plasmidfinder are present after setup.
 database_setup_status.tsv has no FAIL rows where required_for_profile=true.
@@ -173,13 +236,43 @@ These are intentionally outside the default public command:
 
 ```text
 GTDB-Tk: large external reference database
-MobileElementFinder: opt-in because upstream parser failures were observed on valid assemblies
+MobileElementFinder: opt-in and nonblocking by default; when enabled, failures must produce header-only PanR2 output, a module status row, a native runner merge-audit row, and a visible warning
 ISfinder: requires authorized local FASTA; not auto-downloaded or redistributed
 MOB-suite: optional plasmid reconstruction/typing
 geNomad: requires a geNomad database path
 Kleborate/Kaptive/ECTyper: organism-specific; table passthrough is preferred for difficult installs
-DefenseFinder: available in PanR2 but not default until its environment is consistently stable
+DefenseFinder: table-input/experimental; leave `--panr2_run_defensefinder false` for broad remote runs
 ```
+
+## MobileElementFinder Validation Track
+
+After the stable CheckM2-on comprehensive run passes, run a separate Acinetobacter validation with MobileElementFinder enabled:
+
+```bash
+nextflow run main.nf \
+  --taxon "Acinetobacter pittii" \
+  --organism_max_records 10 \
+  --outdir validation_runs/acinetobacter_pittii_10_mobileelementfinder \
+  -profile docker \
+  --container_image ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
+  --analysis_profile comprehensive \
+  --qc_filter true \
+  --run_gtdbtk false \
+  --run_checkm2 true \
+  --run_quast true \
+  --run_ani true \
+  --run_mash true \
+  --run_amrfinderplus true \
+  --run_genomad true \
+  --panr2_run_mobileelementfinder true \
+  --panr2_mobileelementfinder_allow_failure true \
+  --panr2_run_defensefinder false \
+  --threads 8 \
+  --checkm2_threads 4 \
+  --fetchm2_download_workers 2
+```
+
+Acceptable MobileElementFinder outcomes are either `PASS` with real MGE rows, or `WARNING_FAILED` with clean header-only output and no workflow abort.
 
 ## Runtime Caveat
 

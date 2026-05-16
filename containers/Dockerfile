@@ -96,7 +96,8 @@ RUN python --version && \
         ectyper \
         panr; do \
         command -v "${tool}" || exit 1; \
-    done
+    done && \
+    /opt/conda/envs/checkm2_env/bin/python -c "from checkm2 import modelProcessing; modelProcessing.modelProcessor(1); print('checkm2_model_load=PASS')"
 
 WORKDIR /work
 CMD ["bash"]

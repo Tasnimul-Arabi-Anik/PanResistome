@@ -20,7 +20,7 @@ This checklist turns the public-user reliability goals into release gates. A Pan
    - Evidence: `qc/sequence_qc.csv` exists and downstream filtered FASTA files are derived from the combined QC decision.
 
 6. CheckM2 works without a pre-existing local database
-   - Evidence: when `--checkm2_db` is omitted, the run downloads/caches the database under `<outdir>/databases/checkm2/` and records the path in logs/manifests.
+   - Evidence: when `--checkm2_db` is omitted, the run downloads/caches the database under `<outdir>/databases/checkm2/`, records the path in logs/manifests, writes genome rows to `checkm2/quality_report.tsv`, and does not show a `specific_model_COMP.keras`/Keras model-load failure.
 
 7. QUAST, ANI/skani, and Mash are optional but validated in the standard comprehensive command
    - Evidence: their output tables are present when `--run_quast true --run_ani true --run_mash true` are used.
@@ -42,7 +42,7 @@ This checklist turns the public-user reliability goals into release gates. A Pan
     - Evidence: `--run_amrfinderplus true` records the AMRFinderPlus executable version, database version, setup action, and per-sample status.
 
 13. Fragile or restricted modules are honest opt-ins
-    - Evidence: GTDB-Tk, MobileElementFinder, ISfinder FASTA, MOB-suite, geNomad, DefenseFinder, and organism-specific typing are documented as optional or table-input modules unless their required databases are supplied.
+    - Evidence: GTDB-Tk, MobileElementFinder, ISfinder FASTA, MOB-suite, DefenseFinder, and organism-specific typing are documented as optional or table-input modules unless their required databases are supplied. geNomad may be enabled in the Docker/GHCR route after its auto-download/cache path is validated for the target run.
 
 14. Every enabled feature-like module exports the PanR2 contract
     - Evidence: `panr2_inputs/features/<database>.features.tsv` exists for enabled modules that create feature rows. Tools that run successfully but produce no biological calls, such as unsupported-organism MLST, should write a header-only feature table and a documented warning rather than disappearing.
@@ -69,18 +69,26 @@ This checklist turns the public-user reliability goals into release gates. A Pan
 
 ```bash
 nextflow run main.nf \
-  --input validation/delftia_tsuruhatensis_current/ncbi_dataset.tsv \
-  --outdir validation_runs/delftia_fresh \
-  -profile conda,mamba \
+  --taxon "Acinetobacter pittii" \
+  --organism_max_records 10 \
+  --outdir validation_runs/acinetobacter_pittii_10_docker \
+  -profile docker \
+  --container_image ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
   --analysis_profile comprehensive \
   --qc_filter true \
   --run_gtdbtk false \
+  --run_checkm2 true \
   --run_quast true \
   --run_ani true \
   --run_mash true \
   --run_amrfinderplus true \
+  --run_genomad true \
   --panr2_native_feature_runners true \
-  --threads 4 \
+  --panr2_native_feature_runner_mode parallel \
+  --panr2_run_mobileelementfinder false \
+  --panr2_run_defensefinder false \
+  --threads 8 \
+  --checkm2_threads 4 \
   --fetchm2_download_workers 2
 ```
 
@@ -88,7 +96,9 @@ nextflow run main.nf \
 
 - GTDB-Tk is intentionally excluded from the public comprehensive validation because its reference database is large.
 - ISfinder is not auto-downloaded or redistributed. Use `--run_isfinder true --isfinder_db_fasta <authorized.fasta>` when the user has an authorized local database.
-- MobileElementFinder remains opt-in because upstream output parsing has failed on otherwise valid assemblies during real validation.
+- DefenseFinder remains table-input/experimental and should stay off in broad remote-user validation.
+- MobileElementFinder remains opt-in because upstream output parsing has failed on otherwise valid assemblies during real validation. When explicitly enabled, its default failure mode must be nonblocking and auditable.
 - Standard ABRicate, IntegronFinder, MLST, and opt-in MobileElementFinder execution is now owned by the PanResistome native feature-runner stage when `--panr2_native_feature_runners true`. Parallel mode now uses per-genome ABRicate workers within each database and per-assembly IntegronFinder/MLST workers inside that stage; a later optimization can split these into finer-grained Nextflow channels if needed.
 - `--panr2_native_feature_runner_mode parallel` is validated for the Delftia parallel comparison and the Klebsiella 100-record run, but `serial` remains the conservative fallback.
 - `--checkm2_threads` should remain low on desktops. The `desktop_parallel` profile uses 16 general threads with a 2-thread CheckM2 cap.
+- The CheckM2 environment was updated after a 2026-05-16 fixture reproduced the stale TensorFlow/Keras `.keras` model-load failure. Fresh Conda and Docker/GHCR fixture smokes loaded the model and produced real `quality_report.tsv` rows; a 5-genome Acinetobacter Docker/GHCR comprehensive run then passed with automatic CheckM2 database download, 5/5 CheckM2 rows, 5/5 combined QC PASS calls, 630 PanR2 feature rows, and zero unmatched, invalid, or duplicate feature rows.

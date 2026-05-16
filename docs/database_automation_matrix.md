@@ -18,7 +18,7 @@ safe to fetch automatically.
 | Module/database | Automated by default? | When enabled? | User path needed? | Notes |
 | --- | --- | --- | --- | --- |
 | FetchM2 metadata/download | Yes | Default metadata workflow | No | Fetches metadata and assemblies from user input. |
-| CheckM2 database | Yes | `--run_checkm2 true` default | No, unless offline/restricted | Downloads under `<outdir>/databases/checkm2`; pass `--checkm2_db` for cached/reproducible runs. |
+| CheckM2 database | Yes | `--run_checkm2 true` default | No, unless offline/restricted | Downloads under `<outdir>/databases/checkm2`; pass `--checkm2_db` for cached/reproducible runs. The CheckM2 package stack is pinned to build 1 with CPU TensorFlow 2.17 after a 2026-05-16 fixture reproduced the stale Keras model-load failure. |
 | ABRicate `ncbi` | Yes | Comprehensive profiles | No | `panr setup-db` plus default forced refresh with `abricate-get_db --force`; audited in `abricate_database_setup_status.tsv`. |
 | ABRicate `vfdb` | Yes | Comprehensive profiles | No | Same as above. |
 | ABRicate `plasmidfinder` | Yes | Comprehensive profiles | No | Same as above. |
