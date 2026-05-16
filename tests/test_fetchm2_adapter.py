@@ -17,6 +17,7 @@ from check_genomad_readiness import resolve_database_dir
 from check_container_readiness import as_list as container_as_list
 from check_container_readiness import image_exec_command
 from check_container_readiness import parse_args as parse_container_args
+from check_comprehensive_validation_outputs import check_sample_dir
 
 
 class FetchM2AdapterTests(unittest.TestCase):
@@ -1273,6 +1274,78 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("feature_table_rows", metrics)
             self.assertFalse(summary["sample_dir"].str.contains("tool_results").any())
             self.assertTrue((root / "validation_summary.md").exists())
+
+    def test_comprehensive_validation_checker_accepts_nonfatal_mobileelementfinder_warning(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            sample_dir = root / "Acinetobacter_pittii"
+            manifest = sample_dir / "panr2_inputs" / "manifest"
+            features = sample_dir / "panr2_inputs" / "features"
+            for directory in [
+                manifest,
+                features,
+                sample_dir / "report",
+                sample_dir / "checkm2",
+                sample_dir / "metadata_output",
+                sample_dir / "sequence_qc",
+                sample_dir / "prophage",
+            ]:
+                directory.mkdir(parents=True)
+
+            (sample_dir / "report" / "index.html").write_text("<html></html>\n", encoding="utf-8")
+            (features / "all_features.tsv").write_text(
+                "sample_id\tassembly_accession\tdatabase\tfeature_id\n"
+                "GCF_000000001.1\tGCF_000000001.1\tamr\tblaTEM\n",
+                encoding="utf-8",
+            )
+            (features / "prophage.features.tsv").write_text(
+                "sample_id\tassembly_accession\tdatabase\tfeature_id\n",
+                encoding="utf-8",
+            )
+            (manifest / "schema_validation_summary.txt").write_text(
+                "feature_rows=1\nunmatched_feature_rows=0\ninvalid_feature_rows=0\nduplicate_feature_rows=0\n",
+                encoding="utf-8",
+            )
+            (manifest / "database_setup_status.tsv").write_text(
+                "database_or_tool\trequired_for_profile\tstatus\tmessage\n"
+                "checkm2\ttrue\tPASS\tOK\n"
+                "mobileelementfinder\tfalse\tWARNING_MISSING\toptional\n",
+                encoding="utf-8",
+            )
+            (manifest / "native_runner_merge_audit.tsv").write_text(
+                "module\tstatus\tmessage\n"
+                "abricate\tPASS\tOK\n"
+                "integronfinder\tPASS\tOK\n"
+                "mlst\tPASS\tOK\n"
+                "mobileelementfinder\tWARNING_FAILED\toptional runner failed nonfatally\n",
+                encoding="utf-8",
+            )
+            (sample_dir / "checkm2" / "quality_report.tsv").write_text(
+                "Name\tCompleteness\tContamination\nGCF_000000001.1\t99.0\t0.1\n",
+                encoding="utf-8",
+            )
+            (sample_dir / "sequence_qc" / "qc_decisions.tsv").write_text(
+                "sequence_file\tcombined_qc_status\nGCF_000000001.1_genomic.fna\tPASS\n",
+                encoding="utf-8",
+            )
+            (sample_dir / "metadata_output" / "ncbi_enriched.csv").write_text(
+                "Assembly Accession,checkm2_completeness\nGCF_000000001.1,99.0\n",
+                encoding="utf-8",
+            )
+            (sample_dir / "prophage" / "module_status.tsv").write_text(
+                "module\tstatus\tmessage\ngenomad\tPASS\tOK\n",
+                encoding="utf-8",
+            )
+
+            failures = check_sample_dir(
+                sample_dir,
+                require_checkm2=True,
+                require_genomad=True,
+                allow_mobileelementfinder_warning=True,
+                expect_zero_schema_errors=True,
+            )
+
+            self.assertEqual(failures, [])
 
 
 if __name__ == "__main__":

@@ -87,6 +87,10 @@ nextflow run main.nf \
   --run_mash true \
   --run_amrfinderplus true \
   --run_genomad true \
+  --genomad_jobs 1 \
+  --genomad_threads_per_sample 1 \
+  --genomad_splits 8 \
+  --genomad_sensitivity 3.0 \
   --panr2_native_feature_runners true \
   --panr2_native_feature_runner_mode parallel \
   --panr2_run_mobileelementfinder false \
@@ -107,6 +111,16 @@ on 2026-05-16 with no `--checkm2_db` argument, `--threads 4`, and
 `--checkm2_threads 1`. That run auto-downloaded CheckM2 and geNomad databases,
 produced 5/5 CheckM2 rows, 5/5 combined QC PASS calls, 630 PanR2 feature rows,
 and zero unmatched, invalid, or duplicate feature rows.
+
+Validate the completed run with:
+
+```bash
+python scripts/check_comprehensive_validation_outputs.py \
+  --run-dir validation_runs/acinetobacter_pittii_10_docker \
+  --require-checkm2 \
+  --require-genomad \
+  --expect-zero-schema-errors
+```
 
 For a desktop-safe scale run, reduce the heavy modules intentionally:
 

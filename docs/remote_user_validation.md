@@ -73,6 +73,10 @@ nextflow run main.nf \
   --run_mash true \
   --run_amrfinderplus true \
   --run_genomad true \
+  --genomad_jobs 1 \
+  --genomad_threads_per_sample 1 \
+  --genomad_splits 8 \
+  --genomad_sensitivity 3.0 \
   --panr2_native_feature_runners true \
   --panr2_native_feature_runner_mode parallel \
   --panr2_run_mobileelementfinder false \
@@ -99,6 +103,10 @@ nextflow run main.nf \
   --run_mash true \
   --run_amrfinderplus true \
   --run_genomad true \
+  --genomad_jobs 1 \
+  --genomad_threads_per_sample 1 \
+  --genomad_splits 8 \
+  --genomad_sensitivity 3.0 \
   --panr2_run_mobileelementfinder false \
   --panr2_run_defensefinder false \
   --threads 8 \
@@ -264,6 +272,10 @@ nextflow run main.nf \
   --run_mash true \
   --run_amrfinderplus true \
   --run_genomad true \
+  --genomad_jobs 1 \
+  --genomad_threads_per_sample 1 \
+  --genomad_splits 8 \
+  --genomad_sensitivity 3.0 \
   --panr2_run_mobileelementfinder true \
   --panr2_mobileelementfinder_allow_failure true \
   --panr2_run_defensefinder false \

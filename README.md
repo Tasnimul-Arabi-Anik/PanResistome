@@ -160,6 +160,10 @@ nextflow run main.nf \
   --run_mash true \
   --run_amrfinderplus true \
   --run_genomad true \
+  --genomad_jobs 1 \
+  --genomad_threads_per_sample 1 \
+  --genomad_splits 8 \
+  --genomad_sensitivity 3.0 \
   --panr2_run_mobileelementfinder false \
   --panr2_run_defensefinder false \
   --threads 8 \
@@ -168,6 +172,16 @@ nextflow run main.nf \
 ```
 
 This command intentionally does not require a local CheckM2 database path, manual AMRFinderPlus database setup, manual ABRicate database setup, GTDB-Tk, MobileElementFinder, DefenseFinder, or ISfinder. ABRicate databases are installed, force-refreshed, and verified automatically by default; add `--panr2_update_abricate_db false` when you want to reuse a cached ABRicate database without refreshing it. The run should write the main dashboard to `<outdir>/<organism>/report/index.html`, the setup audit to `<outdir>/<organism>/panr2_inputs/manifest/database_setup_status.tsv`, and the ABRicate setup action report to `<outdir>/<organism>/panr2_inputs/manifest/abricate_database_setup_status.tsv`.
+
+After the run finishes, validate the core outputs:
+
+```bash
+python scripts/check_comprehensive_validation_outputs.py \
+  --run-dir validation_runs/acinetobacter_pittii_10_conda \
+  --require-checkm2 \
+  --require-genomad \
+  --expect-zero-schema-errors
+```
 
 For desktop-scale validation with parallel native feature runners, use the resource profile instead of manually tuning every thread option:
 
@@ -223,6 +237,10 @@ nextflow run main.nf \
   --run_mash true \
   --run_amrfinderplus true \
   --run_genomad true \
+  --genomad_jobs 1 \
+  --genomad_threads_per_sample 1 \
+  --genomad_splits 8 \
+  --genomad_sensitivity 3.0 \
   --panr2_native_feature_runners true \
   --panr2_native_feature_runner_mode parallel \
   --panr2_run_mobileelementfinder false \

@@ -339,6 +339,10 @@ nextflow run main.nf \
   --run_mash true \
   --run_amrfinderplus true \
   --run_genomad true \
+  --genomad_jobs 1 \
+  --genomad_threads_per_sample 1 \
+  --genomad_splits 8 \
+  --genomad_sensitivity 3.0 \
   --panr2_native_feature_runners true \
   --panr2_native_feature_runner_mode parallel \
   --panr2_run_mobileelementfinder false \
@@ -351,6 +355,38 @@ nextflow run main.nf \
 ## MobileElementFinder Follow-Up Target
 
 After the stable comprehensive run passes, rerun or resume with:
+
+```bash
+nextflow run main.nf \
+  --taxon "Acinetobacter pittii" \
+  --organism_max_records 10 \
+  --outdir validation_runs/acinetobacter_pittii_10_mobileelementfinder \
+  -profile docker \
+  --container_image ghcr.io/tasnimul-arabi-anik/panresistome:experimental \
+  --analysis_profile comprehensive \
+  --qc_filter true \
+  --run_gtdbtk false \
+  --run_checkm2 true \
+  --run_quast true \
+  --run_ani true \
+  --run_mash true \
+  --run_amrfinderplus true \
+  --run_genomad true \
+  --genomad_jobs 1 \
+  --genomad_threads_per_sample 1 \
+  --genomad_splits 8 \
+  --genomad_sensitivity 3.0 \
+  --panr2_native_feature_runners true \
+  --panr2_native_feature_runner_mode parallel \
+  --panr2_run_mobileelementfinder true \
+  --panr2_mobileelementfinder_allow_failure true \
+  --panr2_run_defensefinder false \
+  --threads 8 \
+  --checkm2_threads 4 \
+  --fetchm2_download_workers 2
+```
+
+For a resume-only test against an existing successful run, the key changes are:
 
 ```bash
 --panr2_run_mobileelementfinder true \
