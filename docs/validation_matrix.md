@@ -13,7 +13,7 @@ This matrix summarizes the major validation evidence used for release hardening.
 | Klebsiella pneumoniae 10 v0.5.0 Docker/GHCR | `Klebsiella pneumoniae` | 10 | 10 | 10 | off | off | off | off | on | on | yes | parallel | 8 | not run | 1348 | 0 | 0 | 0 | yes | PASS | `validation/klebsiella_pneumoniae_10/V0_5_0_DOCKER_VALIDATION_RESULTS.md` |
 | Klebsiella pneumoniae IntegronFinder-positive GHCR evidence | `Klebsiella pneumoniae` | 100 | 99 | 99 | off | off | off | off | on | off | yes | parallel | 8 | not run | 11488 | 0 | 0 | 0 | yes | PASS | `validation/integronfinder_positive/VALIDATION_RESULTS.md` |
 | Klebsiella pneumoniae 10 ANI-lineage Singularity/GHCR | `Klebsiella pneumoniae` | 10 | 10 | 10 | off | off | off | on | on | off | yes | parallel | 8 | not run | 1248 | 0 | 0 | 0 | yes | PASS | `validation/klebsiella_pneumoniae_10/ANI_LINEAGE_SINGULARITY_VALIDATION_RESULTS.md` |
-| Acinetobacter pittii 5 Docker/GHCR comprehensive | `Acinetobacter pittii` | 5 | 5 | 5 | off | auto DB | on | on | on | on | yes | parallel | 4 | 1 | 630 | 0 | 0 | 0 | yes | PASS | `validation/deployment/ACINETOBACTER_CHECKM2_VALIDATION_STATUS.md` |
+| Acinetobacter pittii 5 Docker/GHCR comprehensive | `Acinetobacter pittii` | 5 | 5 | 5 | off | auto DB | on | on | on | on | yes | parallel | 8 | 4 | 630 | 0 | 0 | 0 | yes | PASS | `validation/deployment/ACINETOBACTER_PITTII_5_DOCKER_STABILITY.md` |
 
 ## Current Interpretation
 
