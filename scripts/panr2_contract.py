@@ -4692,6 +4692,95 @@ def _mann_whitney_u_p_value(group_values: list[float], outside_values: list[floa
     return math.erfc(abs(z_score) / math.sqrt(2.0))
 
 
+def _regularized_gamma_q(a: float, x: float) -> float:
+    if a <= 0:
+        return 1.0
+    if x <= 0:
+        return 1.0
+    gln = math.lgamma(a)
+    if x < a + 1.0:
+        ap = a
+        delta = 1.0 / a
+        total = delta
+        for _ in range(100):
+            ap += 1.0
+            delta *= x / ap
+            total += delta
+            if abs(delta) < abs(total) * 1e-12:
+                break
+        p_value = total * math.exp(-x + a * math.log(x) - gln)
+        return min(max(1.0 - p_value, 0.0), 1.0)
+    tiny = 1e-300
+    b = x + 1.0 - a
+    c = 1.0 / tiny
+    d = 1.0 / max(b, tiny)
+    h = d
+    for i in range(1, 101):
+        an = -float(i) * (float(i) - a)
+        b += 2.0
+        d = an * d + b
+        if abs(d) < tiny:
+            d = tiny
+        c = b + an / c
+        if abs(c) < tiny:
+            c = tiny
+        d = 1.0 / d
+        delta = d * c
+        h *= delta
+        if abs(delta - 1.0) < 1e-12:
+            break
+    q_value = math.exp(-x + a * math.log(x) - gln) * h
+    return min(max(q_value, 0.0), 1.0)
+
+
+def _chi_square_survival(value: float, degrees_freedom: int) -> float:
+    if degrees_freedom <= 0:
+        return 1.0
+    if value <= 0:
+        return 1.0
+    return _regularized_gamma_q(degrees_freedom / 2.0, value / 2.0)
+
+
+def _kruskal_wallis(groups: list[list[float]]) -> tuple[float, float] | None:
+    groups = [group for group in groups if group]
+    if len(groups) < 2:
+        return None
+    combined = [value for group in groups for value in group]
+    n_total = len(combined)
+    if n_total <= len(groups):
+        return None
+    ranks = _rank_values(combined)
+    offset = 0
+    rank_sums = []
+    for group in groups:
+        rank_sums.append(sum(ranks[offset:offset + len(group)]))
+        offset += len(group)
+    statistic = (12.0 / (n_total * (n_total + 1.0))) * sum((rank_sum ** 2) / len(group) for rank_sum, group in zip(rank_sums, groups)) - 3.0 * (n_total + 1.0)
+    tie_counts = Counter(combined)
+    tie_sum = sum(count ** 3 - count for count in tie_counts.values() if count > 1)
+    if tie_sum:
+        correction = 1.0 - tie_sum / (n_total ** 3 - n_total)
+        if correction > 0:
+            statistic /= correction
+    statistic = max(statistic, 0.0)
+    return statistic, _chi_square_survival(statistic, len(groups) - 1)
+
+
+def _metadata_support_label_for_counts(counts: list[int]) -> str:
+    if not counts:
+        return "insufficient_support"
+    minimum = min(counts)
+    if minimum < 5:
+        return "insufficient_support"
+    if minimum < 10:
+        return "descriptive_only"
+    if minimum < 30:
+        return "exploratory"
+    if minimum >= 100:
+        return "strong_support"
+    return "standard_support"
+
+
 def _dominance_flag(samples: set[str], metadata_by_sample: dict[str, dict[str, str]], column: str, flag: str) -> str:
     values = [metadata_by_sample.get(sample, {}).get(column, "") for sample in samples]
     values = [value for value in values if value and not is_missing_value(value)]
@@ -6527,17 +6616,22 @@ def write_important_metadata_association_outputs(
 
     burden_rows = []
     category_rows = []
+    burden_omnibus_rows = []
+    category_omnibus_rows = []
     for metadata_column in metadata_columns:
         groups = groups_for_column(metadata_column)
         all_column_samples = set().union(*groups.values()) if groups else set()
+        ordered_groups = sorted(groups.items(), key=lambda item: (-len(item[1]), item[0]))
         for database in databases:
-            for group, group_samples in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0])):
+            burden_group_values = []
+            for group, group_samples in ordered_groups:
                 outside_samples = all_column_samples - group_samples
                 group_n = len(group_samples)
                 outside_n = len(outside_samples)
                 if not group_n or not outside_n:
                     continue
                 group_values = burden_values(database, group_samples)
+                burden_group_values.append((group, group_values))
                 outside_values = burden_values(database, outside_samples)
                 support_label = _metadata_support_label(group_n, outside_n)
                 p_value = _mann_whitney_u_p_value(group_values, outside_values) if support_label not in {"insufficient_support", "descriptive_only"} else None
@@ -6569,14 +6663,51 @@ def write_important_metadata_association_outputs(
                     "warning_flags": _flag_string(flags),
                     "interpretation_label": "",
                 })
+            if len(burden_group_values) >= 2:
+                group_counts = [len(values) for _, values in burden_group_values]
+                support_label = _metadata_support_label_for_counts(group_counts)
+                test_result = _kruskal_wallis([values for _, values in burden_group_values]) if support_label not in {"insufficient_support", "descriptive_only"} else None
+                medians = {group: _median(values) for group, values in burden_group_values}
+                means = {group: _mean(values) for group, values in burden_group_values}
+                median_values = list(medians.values())
+                burden_range = (max(median_values) - min(median_values)) if median_values else 0.0
+                flags = ["multiple_testing", "exploratory_only"]
+                if support_label == "insufficient_support":
+                    flags.append("insufficient_group_size")
+                elif support_label == "descriptive_only":
+                    flags.append("descriptive_only")
+                elif support_label == "exploratory":
+                    flags.append("exploratory_support")
+                if missing_fraction_by_column.get(metadata_column, 0.0) >= 0.30:
+                    flags.append("missing_metadata")
+                statistic, p_value = test_result if test_result else (None, None)
+                burden_omnibus_rows.append({
+                    "database": database,
+                    "metadata_column": metadata_column,
+                    "groups_tested": str(len(burden_group_values)),
+                    "samples_tested": str(sum(group_counts)),
+                    "group_sizes": ";".join(f"{group}:{len(values)}" for group, values in burden_group_values),
+                    "median_burden_by_group": ";".join(f"{group}:{medians[group]:.4f}" for group, _ in burden_group_values),
+                    "mean_burden_by_group": ";".join(f"{group}:{means[group]:.4f}" for group, _ in burden_group_values),
+                    "burden_range_median": f"{burden_range:.4f}",
+                    "test_name": "kruskal_wallis" if test_result else "descriptive_only",
+                    "test_statistic": f"{statistic:.6g}" if statistic is not None else "",
+                    "p_value": _format_pvalue(p_value),
+                    "q_value": "",
+                    "support_label": support_label,
+                    "warning_flags": _flag_string(flags),
+                    "interpretation_label": "",
+                })
         for database, category in categories:
-            for group, group_samples in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0])):
+            category_group_values = []
+            for group, group_samples in ordered_groups:
                 outside_samples = all_column_samples - group_samples
                 group_n = len(group_samples)
                 outside_n = len(outside_samples)
                 if not group_n or not outside_n:
                     continue
                 group_values = category_values(database, category, group_samples)
+                category_group_values.append((group, group_values))
                 outside_values = category_values(database, category, outside_samples)
                 support_label = _metadata_support_label(group_n, outside_n)
                 p_value = _mann_whitney_u_p_value(group_values, outside_values) if support_label not in {"insufficient_support", "descriptive_only"} else None
@@ -6607,8 +6738,46 @@ def write_important_metadata_association_outputs(
                     "warning_flags": _flag_string(flags),
                     "interpretation_label": "",
                 })
+            if len(category_group_values) >= 2:
+                group_counts = [len(values) for _, values in category_group_values]
+                support_label = _metadata_support_label_for_counts(group_counts)
+                test_result = _kruskal_wallis([values for _, values in category_group_values]) if support_label not in {"insufficient_support", "descriptive_only"} else None
+                medians = {group: _median(values) for group, values in category_group_values}
+                means = {group: _mean(values) for group, values in category_group_values}
+                median_values = list(medians.values())
+                burden_range = (max(median_values) - min(median_values)) if median_values else 0.0
+                flags = ["multiple_testing", "exploratory_only"]
+                if support_label == "insufficient_support":
+                    flags.append("insufficient_group_size")
+                elif support_label == "descriptive_only":
+                    flags.append("descriptive_only")
+                elif support_label == "exploratory":
+                    flags.append("exploratory_support")
+                if missing_fraction_by_column.get(metadata_column, 0.0) >= 0.30:
+                    flags.append("missing_metadata")
+                statistic, p_value = test_result if test_result else (None, None)
+                category_omnibus_rows.append({
+                    "database": database,
+                    "feature_category": category,
+                    "metadata_column": metadata_column,
+                    "groups_tested": str(len(category_group_values)),
+                    "samples_tested": str(sum(group_counts)),
+                    "group_sizes": ";".join(f"{group}:{len(values)}" for group, values in category_group_values),
+                    "median_burden_by_group": ";".join(f"{group}:{medians[group]:.4f}" for group, _ in category_group_values),
+                    "mean_burden_by_group": ";".join(f"{group}:{means[group]:.4f}" for group, _ in category_group_values),
+                    "burden_range_median": f"{burden_range:.4f}",
+                    "test_name": "kruskal_wallis" if test_result else "descriptive_only",
+                    "test_statistic": f"{statistic:.6g}" if statistic is not None else "",
+                    "p_value": _format_pvalue(p_value),
+                    "q_value": "",
+                    "support_label": support_label,
+                    "warning_flags": _flag_string(flags),
+                    "interpretation_label": "",
+                })
     add_bh_qvalues(burden_rows)
     add_bh_qvalues(category_rows)
+    add_bh_qvalues(burden_omnibus_rows)
+    add_bh_qvalues(category_omnibus_rows)
     for row in burden_rows + category_rows:
         q_value = _float_or_none(row.get("q_value", ""))
         diff = _float_or_none(row.get("burden_difference", "")) or 0.0
@@ -6619,8 +6788,28 @@ def write_important_metadata_association_outputs(
             diff,
             row.get("warning_flags", ""),
         )
+    for row in burden_omnibus_rows + category_omnibus_rows:
+        q_value = _float_or_none(row.get("q_value", ""))
+        effect = _float_or_none(row.get("burden_range_median", "")) or 0.0
+        flags = {flag for flag in row.get("warning_flags", "").split(";") if flag}
+        if row.get("support_label") == "insufficient_support":
+            row["interpretation_label"] = "insufficient_support"
+        elif row.get("support_label") == "descriptive_only":
+            row["interpretation_label"] = "descriptive_only"
+        elif row.get("support_label") == "exploratory":
+            row["interpretation_label"] = "exploratory"
+        elif q_value is not None and q_value <= 0.05 and effect >= 1.0 and not flags.intersection({"missing_metadata", "bioproject_dominance", "lineage_dominance"}):
+            row["interpretation_label"] = "strong_supported"
+        elif q_value is not None and q_value <= 0.10 and effect >= 0.5:
+            row["interpretation_label"] = "moderate_supported"
+        elif q_value is not None and q_value <= 0.10:
+            row["interpretation_label"] = "exploratory"
+        else:
+            row["interpretation_label"] = "descriptive_only"
     burden_rows = sorted(burden_rows, key=lambda row: (-abs(_float_or_none(row.get("burden_difference", "")) or 0.0), row.get("database", ""), row.get("metadata_column", "")))
     category_rows = sorted(category_rows, key=lambda row: (-abs(_float_or_none(row.get("burden_difference", "")) or 0.0), row.get("database", ""), row.get("feature_category", "")))
+    burden_omnibus_rows = sorted(burden_omnibus_rows, key=lambda row: (-abs(_float_or_none(row.get("burden_range_median", "")) or 0.0), row.get("database", ""), row.get("metadata_column", "")))
+    category_omnibus_rows = sorted(category_omnibus_rows, key=lambda row: (-abs(_float_or_none(row.get("burden_range_median", "")) or 0.0), row.get("database", ""), row.get("feature_category", "")))
 
     burden_path = tables / "metadata_burden_associations.tsv"
     burden_fields = [
@@ -6646,6 +6835,28 @@ def write_important_metadata_association_outputs(
     category_path = tables / "metadata_category_enrichment.tsv"
     category_fields = ["database", "feature_category", *burden_fields[1:]]
     write_rows(category_path, category_rows, category_fields)
+
+    omnibus_fields = [
+        "database",
+        "metadata_column",
+        "groups_tested",
+        "samples_tested",
+        "group_sizes",
+        "median_burden_by_group",
+        "mean_burden_by_group",
+        "burden_range_median",
+        "test_name",
+        "test_statistic",
+        "p_value",
+        "q_value",
+        "support_label",
+        "warning_flags",
+        "interpretation_label",
+    ]
+    burden_omnibus_path = tables / "metadata_burden_omnibus.tsv"
+    category_omnibus_path = tables / "metadata_category_omnibus.tsv"
+    write_rows(burden_omnibus_path, burden_omnibus_rows, omnibus_fields)
+    write_rows(category_omnibus_path, category_omnibus_rows, ["database", "feature_category", *omnibus_fields[1:]])
 
     default_database = "amr" if any(row.get("database") == "amr" for row in feature_rows) else (feature_rows[0]["database"] if feature_rows else (databases[0] if databases else "all"))
     default_column = "isolation_source" if "isolation_source" in metadata_columns else ("country" if "country" in metadata_columns else (metadata_columns[0] if metadata_columns else "metadata"))
@@ -6763,7 +6974,8 @@ def write_important_metadata_association_outputs(
     moderate_features = sum(1 for row in feature_rows if row.get("interpretation_label") == "moderate_supported")
     exploratory_features = sum(1 for row in feature_rows if row.get("interpretation_label") == "exploratory")
     strong_burdens = sum(1 for row in burden_rows if row.get("interpretation_label") == "strong_supported")
-    warning_count = sum(1 for row in feature_rows + burden_rows + category_rows if row.get("warning_flags"))
+    strong_omnibus = sum(1 for row in burden_omnibus_rows + category_omnibus_rows if row.get("interpretation_label") == "strong_supported")
+    warning_count = sum(1 for row in feature_rows + burden_rows + category_rows + burden_omnibus_rows + category_omnibus_rows if row.get("warning_flags"))
     usable_metadata_columns = sum(1 for row in usability_rows if row.get("recommended_use") == "association_testing")
     sparse_metadata_columns = sum(1 for row in usability_rows if row.get("recommended_use") == "descriptive_or_bias_check")
     excluded_metadata_columns_count = sum(1 for row in usability_rows if row.get("recommended_use") == "exclude")
@@ -6779,6 +6991,9 @@ def write_important_metadata_association_outputs(
         {"metric": "exploratory_feature_associations", "value": str(exploratory_features), "message": "Feature rows retained as exploratory signals."},
         {"metric": "database_burden_associations", "value": str(len(burden_rows)), "message": "Database-burden group comparisons."},
         {"metric": "strong_burden_associations", "value": str(strong_burdens), "message": "Database-burden rows with strong_supported interpretation labels."},
+        {"metric": "burden_omnibus_tests", "value": str(len(burden_omnibus_rows)), "message": "Kruskal-Wallis multi-group database-burden tests."},
+        {"metric": "category_omnibus_tests", "value": str(len(category_omnibus_rows)), "message": "Kruskal-Wallis multi-group category-burden tests."},
+        {"metric": "strong_omnibus_tests", "value": str(strong_omnibus), "message": "Omnibus rows with strong_supported interpretation labels."},
         {"metric": "warning_rows", "value": str(warning_count), "message": "Rows carrying at least one caution flag."},
         {"metric": "default_view", "value": f"{default_database}|{default_column}|{default_group}", "message": "Default database, metadata variable, and group shown in figures."},
         {"metric": "feature_cap", "value": str(max_features_per_database), "message": f"Report-facing feature screening cap per database. Capped databases: {','.join(sorted(capped_databases)) or 'none'}."},
@@ -6788,7 +7003,7 @@ def write_important_metadata_association_outputs(
 
     metadata_tables_zip = important_dir / "metadata_association_tables.zip"
     metadata_figures_zip = important_dir / "metadata_association_figures.zip"
-    _write_zip_bundle(metadata_tables_zip, [usability_path, feature_path, burden_path, category_path, summary_path], important_dir)
+    _write_zip_bundle(metadata_tables_zip, [usability_path, feature_path, burden_path, category_path, burden_omnibus_path, category_omnibus_path, summary_path], important_dir)
     _write_zip_bundle(
         metadata_figures_zip,
         [
@@ -6823,8 +7038,10 @@ th {{ background: #f0f4f8; }}
 <label for="metadataColumn">Metadata variable</label><select id="metadataColumn"></select>
 <label for="metadataGroup">Group</label><select id="metadataGroup"></select>
 <label for="minGroup">Minimum group size</label><select id="minGroup"><option value="0">All</option><option value="5">n >= 5</option><option value="10" selected>n >= 10</option><option value="30">n >= 30</option></select>
-<label for="significance">Significance</label><select id="significance"><option value="q0.05">q < 0.05</option><option value="q0.10" selected>q < 0.10</option><option value="all">show all</option></select>
+<label for="significance">Significance</label><select id="significance"><option value="q0.05">q < 0.05</option><option value="q0.10" selected>q < 0.10</option><option value="p0.05">p < 0.05</option><option value="all">show all</option></select>
+<label for="effectSize">Effect size</label><select id="effectSize"><option value="any" selected>any</option><option value="diff10">difference >= 10%</option><option value="diff20">difference >= 20%</option><option value="or2">odds ratio >= 2 or <= 0.5</option><option value="or5">odds ratio >= 5 or <= 0.2</option><option value="burden1">burden difference >= 1</option><option value="burden5">burden difference >= 5</option></select>
 <label for="warningFilter">Warning filter</label><select id="warningFilter"><option value="all" selected>show all</option><option value="hide_weak">hide weak support</option><option value="strong">strong only</option></select>
+<label for="displayCount">Display</label><select id="displayCount"><option value="10">Top 10</option><option value="20" selected>Top 20</option><option value="50">Top 50</option><option value="99999">Complete</option></select>
 <div id="summary"></div>
 <div class="panel"><h2>Default Visuals</h2><div class="figure-row">
 <div><h3>Volcano plot</h3><img src="{html.escape(volcano_base)}.svg" alt="Metadata volcano plot"><p><a href="{html.escape(volcano_base)}.png">PNG</a> | <a href="{html.escape(volcano_base)}.svg">SVG</a> | <a href="{html.escape(volcano_base)}.pdf">PDF</a> | <a href="{html.escape(volcano_base)}.data.tsv">Data TSV</a></p></div>
@@ -6833,16 +7050,18 @@ th {{ background: #f0f4f8; }}
 <div><h3>Category enrichment</h3><img src="{html.escape(category_base)}.svg" alt="Metadata category enrichment"><p><a href="{html.escape(category_base)}.png">PNG</a> | <a href="{html.escape(category_base)}.svg">SVG</a> | <a href="{html.escape(category_base)}.pdf">PDF</a> | <a href="{html.escape(category_base)}.data.tsv">Data TSV</a></p></div>
 </div></div>
 <h2>Filtered Results</h2><div id="table"></div>
-<p><a href="../tables/metadata_usability_summary.tsv">Download metadata usability summary</a> | <a href="../tables/metadata_feature_enrichment.tsv">Download feature enrichment table</a> | <a href="../tables/metadata_burden_associations.tsv">Download burden associations</a> | <a href="../tables/metadata_category_enrichment.tsv">Download category enrichment</a> | <a href="../metadata_association_tables.zip">Download all metadata association tables ZIP</a> | <a href="../metadata_association_figures.zip">Download all metadata association figures ZIP</a></p>
+<p><a href="../tables/metadata_usability_summary.tsv">Download metadata usability summary</a> | <a href="../tables/metadata_feature_enrichment.tsv">Download feature enrichment table</a> | <a href="../tables/metadata_burden_associations.tsv">Download burden associations</a> | <a href="../tables/metadata_category_enrichment.tsv">Download category enrichment</a> | <a href="../tables/metadata_burden_omnibus.tsv">Download burden omnibus tests</a> | <a href="../tables/metadata_category_omnibus.tsv">Download category omnibus tests</a> | <a href="../metadata_association_tables.zip">Download all metadata association tables ZIP</a> | <a href="../metadata_association_figures.zip">Download all metadata association figures ZIP</a></p>
 <script>
 const featureRows = {json.dumps(feature_rows[:4000])};
 const burdenRows = {json.dumps(burden_rows[:3000])};
 const categoryRows = {json.dumps(category_rows[:3000])};
+const burdenOmnibusRows = {json.dumps(burden_omnibus_rows[:1000])};
+const categoryOmnibusRows = {json.dumps(category_omnibus_rows[:1000])};
 const defaultDatabase = {json.dumps(default_database)};
 const defaultColumn = {json.dumps(default_column)};
 const defaultGroup = {json.dumps(default_group)};
 function num(value) {{ const n = Number(value); return Number.isFinite(n) ? n : 0; }}
-const database = document.getElementById('database'), associationType = document.getElementById('associationType'), metadataColumn = document.getElementById('metadataColumn'), metadataGroup = document.getElementById('metadataGroup'), minGroup = document.getElementById('minGroup'), significance = document.getElementById('significance'), warningFilter = document.getElementById('warningFilter');
+const database = document.getElementById('database'), associationType = document.getElementById('associationType'), metadataColumn = document.getElementById('metadataColumn'), metadataGroup = document.getElementById('metadataGroup'), minGroup = document.getElementById('minGroup'), significance = document.getElementById('significance'), effectSize = document.getElementById('effectSize'), warningFilter = document.getElementById('warningFilter'), displayCount = document.getElementById('displayCount');
 function currentRows() {{ return associationType.value === 'burden' ? burdenRows : (associationType.value === 'category' ? categoryRows : featureRows); }}
 function fillSelect(select, values, preferred) {{ select.innerHTML = values.map(v => `<option value="${{v}}">${{v}}</option>`).join(''); if (values.includes(preferred)) select.value = preferred; }}
 function refreshControls() {{
@@ -6860,24 +7079,36 @@ function passes(row) {{
   if (num(row.group_n) < num(minGroup.value)) return false;
   if (significance.value === 'q0.05' && !(num(row.q_value) > 0 && num(row.q_value) < 0.05)) return false;
   if (significance.value === 'q0.10' && !(num(row.q_value) > 0 && num(row.q_value) < 0.10)) return false;
+  if (significance.value === 'p0.05' && !(num(row.p_value) > 0 && num(row.p_value) < 0.05)) return false;
+  const diff = Math.abs(num(row.prevalence_difference || row.burden_difference));
+  const odds = num(row.odds_ratio);
+  if (effectSize.value === 'diff10' && diff < 0.10) return false;
+  if (effectSize.value === 'diff20' && diff < 0.20) return false;
+  if (effectSize.value === 'or2' && row.odds_ratio && !(odds >= 2 || (odds > 0 && odds <= 0.5))) return false;
+  if (effectSize.value === 'or5' && row.odds_ratio && !(odds >= 5 || (odds > 0 && odds <= 0.2))) return false;
+  if (effectSize.value === 'burden1' && Math.abs(num(row.burden_difference)) < 1) return false;
+  if (effectSize.value === 'burden5' && Math.abs(num(row.burden_difference)) < 5) return false;
   if (warningFilter.value === 'hide_weak' && ['insufficient_support','descriptive_only'].includes(row.interpretation_label)) return false;
   if (warningFilter.value === 'strong' && row.interpretation_label !== 'strong_supported') return false;
   return true;
 }}
 function render() {{
-  const rows = currentRows().filter(passes).slice(0, 100);
+  const rows = currentRows().filter(passes).slice(0, Number(displayCount.value));
   const cols = associationType.value === 'feature'
     ? ['database','feature_id','metadata_column','metadata_group','group_n','positive_in_group','prevalence_in_group','prevalence_difference','odds_ratio','q_value','effect_size_label','support_label','interpretation_label','warning_flags']
     : (associationType.value === 'category'
       ? ['database','feature_category','metadata_column','metadata_group','group_n','median_burden_group','median_burden_outside','burden_difference','q_value','support_label','interpretation_label','warning_flags']
       : ['database','metadata_column','metadata_group','group_n','median_burden_group','median_burden_outside','burden_difference','q_value','support_label','interpretation_label','warning_flags']);
-  document.getElementById('summary').innerHTML = `<p>${{rows.length}} rows shown after filters. Statistical labels use tiered sample-size support; rows with q-values are FDR-corrected within this report-facing screen.</p>`;
+  const omnibus = associationType.value === 'category' ? categoryOmnibusRows : burdenOmnibusRows;
+  const omnibusMatches = omnibus.filter(r => r.database === database.value && r.metadata_column === metadataColumn.value).slice(0, 10);
+  const omnibusText = associationType.value === 'feature' ? '' : `<p>Omnibus Kruskal-Wallis tests for this view: ${{omnibusMatches.map(r => `${{r.test_name}} q=${{r.q_value || 'NA'}} support=${{r.support_label}}`).join('; ') || 'none available'}}.</p>`;
+  document.getElementById('summary').innerHTML = `<p>${{rows.length}} rows shown after filters. Statistical labels use tiered sample-size support; rows with q-values are FDR-corrected within this report-facing screen.</p>${{omnibusText}}`;
   document.getElementById('table').innerHTML = '<table><thead><tr>' + cols.map(c => `<th>${{c}}</th>`).join('') + '</tr></thead><tbody>' + rows.map(r => '<tr>' + cols.map(c => `<td>${{r[c] || ''}}</td>`).join('') + '</tr>').join('') + '</tbody></table>';
 }}
 associationType.addEventListener('change', () => {{ refreshControls(); render(); }});
 database.addEventListener('change', () => {{ refreshGroups(); render(); }});
 metadataColumn.addEventListener('change', () => {{ refreshGroups(); render(); }});
-[metadataGroup, minGroup, significance, warningFilter].forEach(el => el.addEventListener('change', render));
+[metadataGroup, minGroup, significance, effectSize, warningFilter, displayCount].forEach(el => el.addEventListener('change', render));
 refreshControls(); render();
 </script></body></html>
 """,
@@ -6889,6 +7120,8 @@ refreshControls(); render();
         "important_metadata_feature_enrichment": str(feature_path),
         "important_metadata_burden_associations": str(burden_path),
         "important_metadata_category_enrichment": str(category_path),
+        "important_metadata_burden_omnibus": str(burden_omnibus_path),
+        "important_metadata_category_omnibus": str(category_omnibus_path),
         "important_metadata_association_summary": str(summary_path),
         "important_metadata_volcano_svg": str(volcano_svg),
         "important_metadata_volcano_png": str(volcano_png),
@@ -6953,6 +7186,8 @@ def write_important_results_report(
     metadata_feature_rows = read_table(important_dir / "tables" / "metadata_feature_enrichment.tsv")
     metadata_burden_rows = read_table(important_dir / "tables" / "metadata_burden_associations.tsv")
     metadata_category_rows = read_table(important_dir / "tables" / "metadata_category_enrichment.tsv")
+    metadata_burden_omnibus_rows = read_table(important_dir / "tables" / "metadata_burden_omnibus.tsv")
+    metadata_category_omnibus_rows = read_table(important_dir / "tables" / "metadata_category_omnibus.tsv")
     metadata_summary_rows = read_table(important_dir / "tables" / "metadata_association_summary.tsv")
     metadata_usability_rows = read_table(important_dir / "tables" / "metadata_usability_summary.tsv")
     top_prevalence = sorted(prevalence_rows, key=lambda row: (row.get("database", ""), -(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("feature_id", "")))[:20]
@@ -6973,6 +7208,10 @@ def write_important_results_report(
         metadata_burden_rows,
         key=lambda row: (-abs(_float_or_none(row.get("burden_difference", "")) or 0.0), row.get("database", ""), row.get("metadata_column", "")),
     )[:20]
+    top_metadata_omnibus = sorted(
+        metadata_burden_omnibus_rows + metadata_category_omnibus_rows,
+        key=lambda row: (-abs(_float_or_none(row.get("burden_range_median", "")) or 0.0), row.get("database", ""), row.get("metadata_column", "")),
+    )[:20]
     qc_table_html = _html_table(qc_steps, ["step_order", "qc_step", "tool", "enabled", "pass", "warning", "fail", "skipped", "status", "notes"], max_rows=20)
     prevalence_table_html = _html_table(top_prevalence, ["database", "feature_id", "positive_genomes", "sample_count", "prevalence_percent", "feature_rows"], max_rows=20)
     variation_table_html = _html_table(top_variation, ["database", "feature_id", "total_hits", "positive_genomes", "median_identity", "iqr_identity", "median_coverage", "iqr_coverage", "variation_label", "warning_flags"], max_rows=20)
@@ -6981,6 +7220,7 @@ def write_important_results_report(
     context_table_html = _html_table(top_context, ["selected_database", "selected_feature", "context_database", "context_feature", "assembly_accession", "contig", "distance_bp", "evidence_level", "warning_flags"], max_rows=20)
     metadata_feature_table_html = _html_table(top_metadata_features, ["database", "feature_id", "metadata_column", "metadata_group", "group_n", "positive_in_group", "prevalence_in_group", "prevalence_difference", "odds_ratio", "q_value", "effect_size_label", "support_label", "interpretation_label", "warning_flags"], max_rows=20)
     metadata_burden_table_html = _html_table(top_metadata_burden, ["database", "metadata_column", "metadata_group", "group_n", "median_burden_group", "median_burden_outside", "burden_difference", "q_value", "support_label", "interpretation_label", "warning_flags"], max_rows=20)
+    metadata_omnibus_table_html = _html_table(top_metadata_omnibus, ["database", "feature_category", "metadata_column", "groups_tested", "samples_tested", "burden_range_median", "test_name", "test_statistic", "q_value", "support_label", "interpretation_label", "warning_flags"], max_rows=20)
     prevalence_figures = []
     for path in sorted((important_dir / "figures").glob("prevalence_*_top20.svg")):
         database = path.name.replace("prevalence_", "").replace("_top20.svg", "")
@@ -7170,7 +7410,9 @@ th {{ background: #f0f4f8; }}
 {metadata_feature_table_html}
 <h3>Top database-burden associations</h3>
 {metadata_burden_table_html}
-<div class="downloads"><a href="figures/metadata_associations.html">Open interactive metadata association report</a><a href="metadata_association_tables.zip">Download all metadata association tables ZIP</a><a href="metadata_association_figures.zip">Download all metadata association figures ZIP</a><a href="tables/metadata_usability_summary.tsv">Download metadata usability summary</a><a href="tables/metadata_feature_enrichment.tsv">Download feature enrichment</a><a href="tables/metadata_burden_associations.tsv">Download burden associations</a><a href="tables/metadata_category_enrichment.tsv">Download category enrichment</a><a href="tables/metadata_association_summary.tsv">Download metadata association summary</a></div></section>
+<h3>Top multi-group burden tests</h3>
+{metadata_omnibus_table_html}
+<div class="downloads"><a href="figures/metadata_associations.html">Open interactive metadata association report</a><a href="metadata_association_tables.zip">Download all metadata association tables ZIP</a><a href="metadata_association_figures.zip">Download all metadata association figures ZIP</a><a href="tables/metadata_usability_summary.tsv">Download metadata usability summary</a><a href="tables/metadata_feature_enrichment.tsv">Download feature enrichment</a><a href="tables/metadata_burden_associations.tsv">Download burden associations</a><a href="tables/metadata_category_enrichment.tsv">Download category enrichment</a><a href="tables/metadata_burden_omnibus.tsv">Download burden omnibus tests</a><a href="tables/metadata_category_omnibus.tsv">Download category omnibus tests</a><a href="tables/metadata_association_summary.tsv">Download metadata association summary</a></div></section>
 <section id="files"><h2>Important Files</h2><ul>
 <li><a href="../basic/enriched_genome_dataset.csv">Enriched genome dataset CSV</a></li>
 <li><a href="key_tables/qc_step_summary.tsv">QC step summary</a></li>
@@ -7183,6 +7425,8 @@ th {{ background: #f0f4f8; }}
 <li><a href="tables/metadata_feature_enrichment.tsv">Metadata feature enrichment</a></li>
 <li><a href="tables/metadata_burden_associations.tsv">Metadata burden associations</a></li>
 <li><a href="tables/metadata_usability_summary.tsv">Metadata usability summary</a></li>
+<li><a href="tables/metadata_burden_omnibus.tsv">Metadata burden omnibus tests</a></li>
+<li><a href="tables/metadata_category_omnibus.tsv">Metadata category omnibus tests</a></li>
 <li><a href="../panr2_inputs/features/all_features.tsv">Complete standardized feature table</a></li>
 <li><a href="../panr2_inputs/manifest/schema_validation_summary.txt">Feature-contract validation summary</a></li>
 </ul></section>

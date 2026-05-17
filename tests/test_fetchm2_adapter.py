@@ -12,7 +12,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from normalize_fetchm2_output import normalize_fetchm2_output
 from export_panr2_inputs import parse_version_line
-from panr2_contract import export_contract
+from panr2_contract import export_contract, _kruskal_wallis
 from check_genomad_readiness import resolve_database_dir
 from check_container_readiness import as_list as container_as_list
 from check_container_readiness import image_exec_command
@@ -21,6 +21,13 @@ from check_comprehensive_validation_outputs import check_sample_dir
 
 
 class FetchM2AdapterTests(unittest.TestCase):
+    def test_kruskal_wallis_detects_multi_group_burden_difference(self):
+        result = _kruskal_wallis([[1, 1, 2, 2], [5, 5, 6, 6], [9, 9, 10, 10]])
+        self.assertIsNotNone(result)
+        statistic, p_value = result
+        self.assertGreater(statistic, 6.0)
+        self.assertLess(p_value, 0.05)
+
     def test_resolves_nested_genomad_database_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir) / "genomad_cache"
@@ -230,6 +237,8 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue((sample_dir / "important" / "tables" / "metadata_category_enrichment.tsv").exists())
             self.assertTrue((sample_dir / "important" / "tables" / "metadata_association_summary.tsv").exists())
             self.assertTrue((sample_dir / "important" / "tables" / "metadata_usability_summary.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "metadata_burden_omnibus.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "metadata_category_omnibus.tsv").exists())
             self.assertTrue((sample_dir / "important" / "figures" / "metadata_associations.html").exists())
             self.assertTrue((sample_dir / "important" / "metadata_association_tables.zip").exists())
             self.assertTrue((sample_dir / "important" / "metadata_association_figures.zip").exists())
@@ -259,12 +268,14 @@ class FetchM2AdapterTests(unittest.TestCase):
             cooccurrence_pairs = pd.read_csv(sample_dir / "important" / "tables" / "cooccurrence_pair_summary.tsv", sep="\t")
             self.assertTrue({"phi_correlation", "q_value", "significance_label", "evidence_level", "warning_flags"}.issubset(cooccurrence_pairs.columns))
             metadata_html = (sample_dir / "important" / "figures" / "metadata_associations.html").read_text(encoding="utf-8")
-            for control in ["Database", "Association type", "Metadata variable", "Group", "Minimum group size", "Significance", "Warning filter"]:
+            for control in ["Database", "Association type", "Metadata variable", "Group", "Minimum group size", "Significance", "Effect size", "Warning filter", "Display"]:
                 self.assertIn(control, metadata_html)
             metadata_enrichment = pd.read_csv(sample_dir / "important" / "tables" / "metadata_feature_enrichment.tsv", sep="\t")
             self.assertTrue({"odds_ratio", "p_value", "q_value", "support_label", "interpretation_label", "warning_flags"}.issubset(metadata_enrichment.columns))
             metadata_usability = pd.read_csv(sample_dir / "important" / "tables" / "metadata_usability_summary.tsv", sep="\t")
             self.assertTrue({"metadata_column", "non_missing_count", "missing_fraction", "eligible_for_testing", "recommended_use"}.issubset(metadata_usability.columns))
+            metadata_omnibus = pd.read_csv(sample_dir / "important" / "tables" / "metadata_burden_omnibus.tsv", sep="\t")
+            self.assertTrue({"test_name", "test_statistic", "p_value", "q_value", "support_label", "interpretation_label"}.issubset(metadata_omnibus.columns))
             report_html = (sample_dir / "important" / "results.html").read_text(encoding="utf-8")
             for section in [
                 "Featured Results",

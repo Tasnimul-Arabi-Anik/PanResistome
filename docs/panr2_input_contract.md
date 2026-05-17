@@ -194,9 +194,10 @@ separate from same-contig/proximity evidence and should not be interpreted as
 proof of physical linkage, transfer, expression, phenotype, or plasmid
 localization. Metadata Associations includes an interactive enrichment-style
 viewer, a metadata usability summary, FDR-corrected feature-prevalence screens,
-database/category burden comparisons, volcano plots, enrichment heatmaps,
-burden boxplots, warning flags, and conservative interpretation labels. These
-metadata associations are
+database/category group-vs-outside burden comparisons, Kruskal-Wallis
+multi-group burden tests, volcano plots, enrichment heatmaps, burden boxplots,
+warning flags, and conservative interpretation labels. These metadata
+associations are
 exploratory and may reflect sampling, BioProject, lineage, geography,
 collection-year, or missing-metadata bias. `all` preserves the full advanced
 output tree and includes both user-facing bundles.
