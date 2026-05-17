@@ -225,6 +225,10 @@ class FetchM2AdapterTests(unittest.TestCase):
             html = (sample_dir / "important" / "figures" / "diversity_analysis.html").read_text(encoding="utf-8")
             for control in ["Diversity scope", "Diversity view", "Metadata color/group", "Display", "Sort", "Pan-feature accumulation", "Jaccard similarity/distance"]:
                 self.assertIn(control, html)
+            for metric in ["total_feature_rows", "max_features_in_one_genome", "databases_represented", "jaccard_matrix_available", "pan_feature_curve_available"]:
+                self.assertIn(metric, html)
+            report_summary = pd.read_csv(sample_dir / "important" / "tables" / "diversity_report_summary.tsv", sep="\t")
+            self.assertTrue({"total_feature_rows", "max_features_in_one_genome", "databases_represented", "jaccard_matrix_available", "pan_feature_curve_available"}.issubset(set(report_summary["metric"])))
 
     def test_kruskal_wallis_detects_multi_group_burden_difference(self):
         result = _kruskal_wallis([[1, 1, 2, 2], [5, 5, 6, 6], [9, 9, 10, 10]])
@@ -580,6 +584,8 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue({"database", "feature_id", "positive_genomes", "prevalence_percent", "feature_class", "feature_rows"}.issubset(diversity_classes.columns))
             diversity_jaccard = pd.read_csv(sample_dir / "important" / "tables" / "diversity_jaccard_distance_matrix.tsv", sep="\t")
             self.assertTrue({"sample_a", "sample_b", "jaccard_distance", "jaccard_similarity"}.issubset(diversity_jaccard.columns))
+            diversity_summary = pd.read_csv(sample_dir / "important" / "tables" / "diversity_report_summary.tsv", sep="\t")
+            self.assertTrue({"total_feature_rows", "max_features_in_one_genome", "databases_represented", "jaccard_matrix_available", "pan_feature_curve_available"}.issubset(set(diversity_summary["metric"])))
             report_controls = pd.read_csv(outputs["report_controls"], sep="\t")
             self.assertIn("important_lineage_feature_cap_per_database", set(report_controls["setting"]))
             self.assertIn("important_diversity_jaccard_heatmap_cap", set(report_controls["setting"]))

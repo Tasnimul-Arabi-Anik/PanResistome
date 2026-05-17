@@ -10102,7 +10102,12 @@ function columnsForRows(rows) {{
 function render() {{
   const rows = rowsForView();
   const cols = columnsForRows(rows);
-  document.getElementById('cards').innerHTML = summaryRows.slice(0, 8).map(r => `<div class="card"><span>${{r.metric}}</span><strong>${{r.value}}</strong></div>`).join('');
+  const cardMetrics = ['total_genomes', 'total_feature_rows', 'unique_features', 'median_features_per_genome', 'max_features_in_one_genome', 'core_features', 'common_features', 'accessory_features', 'rare_features', 'databases_represented', 'jaccard_matrix_available', 'pan_feature_curve_available', 'pan_feature_space_label'];
+  const summaryByMetric = Object.fromEntries(summaryRows.map(r => [r.metric, r]));
+  document.getElementById('cards').innerHTML = cardMetrics
+    .filter(metric => summaryByMetric[metric])
+    .map(metric => `<div class="card"><span>${{metric}}</span><strong>${{summaryByMetric[metric].value}}</strong></div>`)
+    .join('');
   document.getElementById('table').innerHTML = '<table><thead><tr>' + cols.map(c => `<th>${{c}}</th>`).join('') + '</tr></thead><tbody>' + rows.map(r => '<tr>' + cols.map(c => `<td>${{r[c] || ''}}</td>`).join('') + '</tr>').join('') + '</tbody></table>';
 }}
 [scope, view, metadata, display, sort].forEach(el => el.addEventListener('change', render));
@@ -10563,10 +10568,15 @@ def write_important_results_report(
     diversity_cards_html = (
         "<div class='cards'>"
         f"<div class='card'><span>Total genomes</span><strong>{html.escape(diversity_summary.get('total_genomes', '0'))}</strong></div>"
+        f"<div class='card'><span>Total feature rows</span><strong>{html.escape(diversity_summary.get('total_feature_rows', '0'))}</strong></div>"
         f"<div class='card'><span>Unique features</span><strong>{html.escape(diversity_summary.get('unique_features', '0'))}</strong></div>"
         f"<div class='card'><span>Median features/genome</span><strong>{html.escape(diversity_summary.get('median_features_per_genome', '0'))}</strong></div>"
+        f"<div class='card'><span>Max features/genome</span><strong>{html.escape(diversity_summary.get('max_features_in_one_genome', '0'))}</strong></div>"
         f"<div class='card'><span>Core / common</span><strong>{html.escape(diversity_summary.get('core_features', '0'))} / {html.escape(diversity_summary.get('common_features', '0'))}</strong></div>"
         f"<div class='card'><span>Accessory / rare</span><strong>{html.escape(diversity_summary.get('accessory_features', '0'))} / {html.escape(diversity_summary.get('rare_features', '0'))}</strong></div>"
+        f"<div class='card'><span>Databases represented</span><strong>{html.escape(diversity_summary.get('databases_represented', '0'))}</strong></div>"
+        f"<div class='card'><span>Jaccard matrix</span><strong>{html.escape(diversity_summary.get('jaccard_matrix_available', 'no'))}</strong></div>"
+        f"<div class='card'><span>Pan-feature curve</span><strong>{html.escape(diversity_summary.get('pan_feature_curve_available', 'no'))}</strong></div>"
         f"<div class='card'><span>Pan-feature space</span><strong>{html.escape(diversity_summary.get('pan_feature_space_label', '')) or 'NA'}</strong></div>"
         "</div>"
     )
