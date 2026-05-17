@@ -5144,57 +5144,548 @@ def write_important_qc_outputs(sample_dir: Path, out_dir: Path, important_dir: P
     return outputs
 
 
+def _prevalence_label(percent: float) -> str:
+    if percent >= 95:
+        return "core"
+    if percent >= 50:
+        return "common"
+    if percent >= 5:
+        return "accessory"
+    if percent > 0:
+        return "rare"
+    return "absent"
+
+
+def _write_prevalence_bar_svg(path: Path, rows: list[dict[str, str]], title: str, value_field: str) -> None:
+    width = 1040
+    row_height = 31
+    top = 58
+    left = 285
+    plot_width = 610
+    height = max(190, top + row_height * max(len(rows), 1) + 44)
+    values = [_float_or_none(row.get(value_field, "")) or 0.0 for row in rows]
+    max_value = max(values) if values else 1.0
+    if max_value <= 0:
+        max_value = 1.0
+    parts = [
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
+        "<rect width='100%' height='100%' fill='#f8fafc'/>",
+        f"<text x='20' y='30' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
+    ]
+    for idx, row in enumerate(rows):
+        y = top + idx * row_height
+        value = _float_or_none(row.get(value_field, "")) or 0.0
+        bar_width = value / max_value * plot_width
+        label = row.get("feature_id", "") or row.get("database", "") or row.get("label", "")
+        if len(label) > 42:
+            label = label[:39] + "..."
+        display = row.get("prevalence_display", "") or row.get(value_field, "")
+        tip = (
+            f"{row.get('database', '')}:{row.get('feature_id', '')}; "
+            f"{row.get('positive_genomes', '')}/{row.get('total_genomes', row.get('sample_count', ''))}; "
+            f"rows={row.get('feature_rows', '')}; label={row.get('prevalence_label', '')}"
+        )
+        parts.append(f"<text x='20' y='{y + 18}' font-family='Arial' font-size='12' fill='#1f2933'>{html.escape(label)}</text>")
+        parts.append(f"<rect x='{left}' y='{y}' width='{bar_width:.1f}' height='20' fill='#0f766e'><title>{html.escape(tip)}</title></rect>")
+        parts.append(f"<text x='{left + bar_width + 8:.1f}' y='{y + 15}' font-family='Arial' font-size='12' fill='#1f2933'>{html.escape(display)}</text>")
+    parts.append(f"<text x='{left}' y='{height - 12}' font-family='Arial' font-size='12' fill='#52606d'>{html.escape(value_field)}</text>")
+    parts.append("</svg>\n")
+    path.write_text("".join(parts), encoding="utf-8")
+
+
+def _write_prevalence_stacked_svg(path: Path, rows: list[dict[str, str]], title: str) -> None:
+    width = 980
+    row_height = 34
+    top, left, plot_width = 76, 210, 620
+    height = max(220, top + row_height * max(len(rows), 1) + 50)
+    colors = {
+        "core_features": "#0f766e",
+        "common_features": "#38bdf8",
+        "accessory_features": "#f59e0b",
+        "rare_features": "#94a3b8",
+    }
+    labels = [
+        ("core_features", "core"),
+        ("common_features", "common"),
+        ("accessory_features", "accessory"),
+        ("rare_features", "rare"),
+    ]
+    parts = [
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
+        "<rect width='100%' height='100%' fill='#f8fafc'/>",
+        f"<text x='20' y='30' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
+    ]
+    legend_x = 20
+    for key, label in labels:
+        parts.append(f"<rect x='{legend_x}' y='48' width='12' height='12' fill='{colors[key]}'/>")
+        parts.append(f"<text x='{legend_x + 18}' y='59' font-family='Arial' font-size='12' fill='#334e68'>{label}</text>")
+        legend_x += 112
+    for idx, row in enumerate(rows):
+        y = top + idx * row_height
+        total = _float_or_none(row.get("total_unique_features", "")) or 0.0
+        if total <= 0:
+            total = sum((_float_or_none(row.get(key, "")) or 0.0) for key, _ in labels) or 1.0
+        x = left
+        database = row.get("database", "")
+        parts.append(f"<text x='20' y='{y + 20}' font-family='Arial' font-size='12' fill='#1f2933'>{html.escape(database)}</text>")
+        for key, label in labels:
+            value = _float_or_none(row.get(key, "")) or 0.0
+            width_part = value / total * plot_width
+            parts.append(f"<rect x='{x:.1f}' y='{y}' width='{width_part:.1f}' height='22' fill='{colors[key]}'><title>{html.escape(database)} {label}: {value:g}</title></rect>")
+            x += width_part
+        parts.append(f"<text x='{left + plot_width + 10}' y='{y + 16}' font-family='Arial' font-size='12' fill='#1f2933'>{int(total)}</text>")
+    parts.append("</svg>\n")
+    path.write_text("".join(parts), encoding="utf-8")
+
+
+def _write_prevalence_stacked_png(path: Path, rows: list[dict[str, str]]) -> None:
+    width, height = 980, max(220, 76 + 34 * max(len(rows), 1) + 50)
+    top, left, plot_width = 76, 210, 620
+    colors = {
+        "core_features": (15, 118, 110),
+        "common_features": (56, 189, 248),
+        "accessory_features": (245, 158, 11),
+        "rare_features": (148, 163, 184),
+    }
+    pixels = [bytearray([248, 250, 252] * width) for _ in range(height)]
+
+    def rect(x0: int, y0: int, x1: int, y1: int, color: tuple[int, int, int]) -> None:
+        for y in range(max(0, y0), min(height, y1)):
+            row_pixels = pixels[y]
+            for x in range(max(0, x0), min(width, x1)):
+                idx = x * 3
+                row_pixels[idx:idx + 3] = bytes(color)
+
+    for idx, row in enumerate(rows):
+        y = top + idx * 34
+        total = _float_or_none(row.get("total_unique_features", "")) or 0.0
+        if total <= 0:
+            total = sum((_float_or_none(row.get(key, "")) or 0.0) for key in colors) or 1.0
+        x = left
+        for key, color in colors.items():
+            value = _float_or_none(row.get(key, "")) or 0.0
+            width_part = int(value / total * plot_width)
+            rect(int(x), y, int(x) + width_part, y + 22, color)
+            x += width_part
+    _write_png(path, width, height, pixels)
+
+
 def write_important_prevalence_outputs(sample_dir: Path, out_dir: Path, important_dir: Path, top_n: int = 20) -> dict[str, str]:
     key_tables = important_dir / "key_tables"
+    tables = important_dir / "tables"
     figures = important_dir / "figures"
     key_tables.mkdir(parents=True, exist_ok=True)
+    tables.mkdir(parents=True, exist_ok=True)
     figures.mkdir(parents=True, exist_ok=True)
     metadata_rows = read_table(sample_dir / "basic" / "enriched_genome_dataset.csv")
-    sample_count = len(metadata_rows)
+    metadata_samples = [row.get("assembly_accession", "") or row.get("sample_id", "") for row in metadata_rows]
     features = [row for row in read_table(out_dir / "features" / "all_features.tsv") if row.get("presence", "1") != "0"]
+    feature_samples = [row.get("assembly_accession", "") or row.get("sample_id", "") for row in features]
+    samples = sorted({sample for sample in metadata_samples + feature_samples if sample})
+    sample_count = len(samples)
+    metadata_by_sample = {
+        row.get("assembly_accession", "") or row.get("sample_id", ""): row
+        for row in metadata_rows
+        if row.get("assembly_accession", "") or row.get("sample_id", "")
+    }
     by_feature: dict[tuple[str, str], set[str]] = defaultdict(set)
     rows_by_feature: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
+    sample_database_rows: Counter[tuple[str, str]] = Counter()
+    sample_database_features: dict[tuple[str, str], set[str]] = defaultdict(set)
     for row in features:
         key = (row.get("database", ""), row.get("feature_id", ""))
         sample = row.get("assembly_accession", "") or row.get("sample_id", "")
         if key[0] and key[1] and sample:
             by_feature[key].add(sample)
             rows_by_feature[key].append(row)
+            sample_database_rows[(sample, key[0])] += 1
+            sample_database_features[(sample, key[0])].add(key[1])
 
-    summary_rows = []
+    feature_rows = []
     for (database, feature_id), samples in sorted(by_feature.items()):
-        feature_rows = rows_by_feature[(database, feature_id)]
-        category = first_value(feature_rows[0], ["feature_category"], "")
+        rows = rows_by_feature[(database, feature_id)]
+        category = first_value(rows[0], ["feature_category"], "")
+        subcategory = first_value(rows[0], ["feature_subcategory"], "")
+        identities = [_float_or_none(row.get("identity", "")) for row in rows]
+        coverages = [_float_or_none(row.get("coverage", "")) for row in rows]
+        identities = [value for value in identities if value is not None]
+        coverages = [value for value in coverages if value is not None]
+        identity_stats = _summary_stats(identities)
+        coverage_stats = _summary_stats(coverages)
         prevalence = len(samples) / sample_count if sample_count else 0.0
-        summary_rows.append({
+        prevalence_percent = prevalence * 100
+        mean_hits = len(rows) / len(samples) if samples else 0.0
+        has_coordinates = any(row.get("contig") and row.get("start") and row.get("end") for row in rows)
+        tools_detected = sorted({row.get("tool", "") for row in rows if row.get("tool", "")})
+        database_versions = sorted({row.get("database_version", "") for row in rows if row.get("database_version", "")})
+        label = _prevalence_label(prevalence_percent)
+        warnings = []
+        if prevalence_percent < 5:
+            warnings.append("low_prevalence")
+        if len(samples) == 1:
+            warnings.append("single_genome_feature")
+        if not category:
+            warnings.append("missing_category_annotation")
+        if len(rows) > len(samples):
+            warnings.append("duplicate_feature_rows_detected")
+        row_out = {
             "database": database,
             "feature_id": feature_id,
+            "feature_name": first_value(rows[0], ["feature_name", "feature_id"], feature_id),
             "feature_category": category,
-            "feature_rows": str(len(feature_rows)),
+            "feature_subcategory": subcategory,
             "positive_genomes": str(len(samples)),
+            "total_genomes": str(sample_count),
             "sample_count": str(sample_count),
             "prevalence": f"{prevalence:.4f}",
-            "prevalence_percent": f"{prevalence * 100:.1f}",
-        })
-    summary_rows.sort(key=lambda row: (row["database"], -int(row["positive_genomes"]), row["feature_id"]))
-    summary_path = key_tables / "feature_prevalence_summary.tsv"
-    summary_fields = ["database", "feature_id", "feature_category", "feature_rows", "positive_genomes", "sample_count", "prevalence", "prevalence_percent"]
-    write_rows(summary_path, summary_rows, summary_fields)
+            "prevalence_percent": f"{prevalence_percent:.1f}",
+            "prevalence_display": f"{prevalence_percent:.1f}% ({len(samples)}/{sample_count})",
+            "feature_rows": str(len(rows)),
+            "mean_hits_per_positive_genome": f"{mean_hits:.2f}" if samples else "",
+            "median_identity": identity_stats["median"],
+            "median_coverage": coverage_stats["median"],
+            "has_coordinates": str(has_coordinates).lower(),
+            "tools_detected": ";".join(tools_detected),
+            "database_version": ";".join(database_versions),
+            "prevalence_label": label,
+            "warning_flags": ";".join(warnings),
+        }
+        feature_rows.append(row_out)
+    feature_rows.sort(key=lambda row: (row["database"], -(_float_or_none(row["prevalence_percent"]) or 0.0), row["feature_id"]))
+    feature_fields = [
+        "database", "feature_id", "feature_name", "feature_category", "feature_subcategory",
+        "positive_genomes", "total_genomes", "sample_count", "prevalence", "prevalence_percent", "prevalence_display",
+        "feature_rows", "mean_hits_per_positive_genome", "median_identity", "median_coverage",
+        "has_coordinates", "tools_detected", "database_version", "prevalence_label", "warning_flags",
+    ]
 
-    outputs = {"important_feature_prevalence_summary": str(summary_path)}
-    for database in sorted({row["database"] for row in summary_rows}):
-        db_rows = [row for row in summary_rows if row["database"] == database][:top_n]
+    burden_rows = []
+    databases = sorted({row["database"] for row in feature_rows})
+    for database in databases:
+        for sample in samples:
+            meta = metadata_by_sample.get(sample, {})
+            unique_features = len(sample_database_features.get((sample, database), set()))
+            row_count = sample_database_rows.get((sample, database), 0)
+            burden_rows.append({
+                "database": database,
+                "assembly_accession": sample,
+                "sample_id": meta.get("sample_id", ""),
+                "feature_rows": str(row_count),
+                "unique_features": str(unique_features),
+                "has_feature": str(unique_features > 0).lower(),
+            })
+
+    summary_by_database = []
+    core_rows = []
+    written_rows = []
+    for database in databases:
+        db_features = [row for row in feature_rows if row["database"] == database]
+        db_burden = [row for row in burden_rows if row["database"] == database]
+        unique_counts = [int(_float_or_none(row.get("unique_features", "")) or 0) for row in db_burden]
+        unique_stats = _summary_stats_full([float(value) for value in unique_counts])
+        positive_genomes = sum(1 for row in db_burden if row.get("has_feature") == "true")
+        total_rows = sum(int(_float_or_none(row.get("feature_rows", "")) or 0) for row in db_features)
+        top_feature = db_features[0] if db_features else {}
+        positive_percent = positive_genomes / sample_count * 100 if sample_count else 0.0
+        summary_by_database.append({
+            "database": database,
+            "total_feature_rows": str(total_rows),
+            "unique_features": str(len(db_features)),
+            "positive_genomes": str(positive_genomes),
+            "total_genomes": str(sample_count),
+            "genomes_positive_percent": f"{positive_percent:.1f}",
+            "median_features_per_genome": "" if unique_stats["median"] is None else f"{unique_stats['median']:.2f}",
+            "mean_features_per_genome": "" if unique_stats["mean"] is None else f"{unique_stats['mean']:.2f}",
+            "max_features_per_genome": "" if unique_stats["max"] is None else f"{unique_stats['max']:.0f}",
+            "top_feature_id": top_feature.get("feature_id", ""),
+            "top_feature_prevalence_percent": top_feature.get("prevalence_percent", ""),
+            "top_feature_positive_genomes": top_feature.get("positive_genomes", ""),
+        })
+        label_counts = Counter(row.get("prevalence_label", "") for row in db_features)
+        core_rows.append({
+            "database": database,
+            "core_features": str(label_counts.get("core", 0)),
+            "common_features": str(label_counts.get("common", 0)),
+            "accessory_features": str(label_counts.get("accessory", 0)),
+            "rare_features": str(label_counts.get("rare", 0)),
+            "total_unique_features": str(len(db_features)),
+        })
+        top_text = ", ".join(
+            f"{row.get('feature_id', '')} ({row.get('prevalence_percent', '')}%, {row.get('positive_genomes', '')}/{row.get('total_genomes', '')})"
+            for row in db_features[:5]
+        ) or "none"
+        written_rows.append({
+            "scope": "database",
+            "database": database,
+            "summary": (
+                f"{database} features were detected in {positive_genomes} of {sample_count} genomes. "
+                f"The run identified {total_rows} feature rows and {len(db_features)} unique features from this database. "
+                f"The most prevalent features were {top_text}. "
+                f"The median burden was {summary_by_database[-1]['median_features_per_genome']} features per genome."
+            ),
+        })
+    total_feature_rows = sum(int(row["feature_rows"]) for row in feature_rows)
+    total_unique_features = len(feature_rows)
+    top_databases = sorted(summary_by_database, key=lambda row: -(int(_float_or_none(row.get("total_feature_rows", "")) or 0)))[:5]
+    written_rows.insert(0, {
+        "scope": "overall",
+        "database": "all",
+        "summary": (
+            f"Across {sample_count} analyzed genomes, PanResistome detected {total_feature_rows} standardized feature rows "
+            f"representing {total_unique_features} unique features from {len(databases)} databases. "
+            f"The largest contributors by feature rows were {', '.join(row.get('database', '') for row in top_databases) or 'none'}. "
+            "Prevalence is descriptive and reflects this dataset only."
+        ),
+    })
+
+    top_rows = []
+    for database in databases:
+        top_rows.extend([row for row in feature_rows if row["database"] == database][:top_n])
+
+    summary_path = key_tables / "feature_prevalence_summary.tsv"
+    feature_prevalence_path = tables / "feature_prevalence.tsv"
+    top_path = tables / "feature_prevalence_top.tsv"
+    summary_db_path = tables / "prevalence_summary_by_database.tsv"
+    core_path = tables / "prevalence_core_accessory_rare_summary.tsv"
+    burden_path = tables / "prevalence_database_burden_by_sample.tsv"
+    written_path = tables / "prevalence_written_summaries.tsv"
+    write_rows(summary_path, feature_rows, feature_fields)
+    write_rows(feature_prevalence_path, feature_rows, feature_fields)
+    write_rows(top_path, top_rows, feature_fields)
+    summary_db_fields = [
+        "database", "total_feature_rows", "unique_features", "positive_genomes", "total_genomes",
+        "genomes_positive_percent", "median_features_per_genome", "mean_features_per_genome",
+        "max_features_per_genome", "top_feature_id", "top_feature_prevalence_percent", "top_feature_positive_genomes",
+    ]
+    write_rows(summary_db_path, summary_by_database, summary_db_fields)
+    write_rows(core_path, core_rows, ["database", "core_features", "common_features", "accessory_features", "rare_features", "total_unique_features"])
+    write_rows(burden_path, burden_rows, ["database", "assembly_accession", "sample_id", "feature_rows", "unique_features", "has_feature"])
+    write_rows(written_path, written_rows, ["scope", "database", "summary"])
+
+    figure_files: list[Path] = []
+    counts_data = figures / "prevalence_feature_counts_by_database.data.tsv"
+    counts_svg = figures / "prevalence_feature_counts_by_database.svg"
+    counts_png = figures / "prevalence_feature_counts_by_database.png"
+    counts_pdf = figures / "prevalence_feature_counts_by_database.pdf"
+    write_rows(counts_data, summary_by_database, summary_db_fields)
+    _write_bar_svg(counts_svg, summary_by_database, "Feature Counts By Database", "database", "unique_features", "Unique features")
+    _write_bar_png(counts_png, summary_by_database, "unique_features")
+    _write_simple_pdf(counts_pdf, "Feature Counts By Database", [f"{row['database']}: {row['unique_features']} unique, {row['total_feature_rows']} rows" for row in summary_by_database])
+    figure_files.extend([counts_data, counts_svg, counts_png, counts_pdf])
+
+    genomes_data = figures / "prevalence_genomes_positive_by_database.data.tsv"
+    genomes_svg = figures / "prevalence_genomes_positive_by_database.svg"
+    genomes_png = figures / "prevalence_genomes_positive_by_database.png"
+    genomes_pdf = figures / "prevalence_genomes_positive_by_database.pdf"
+    genome_rows = [
+        {**row, "prevalence_display": f"{row.get('genomes_positive_percent', '')}% ({row.get('positive_genomes', '')}/{row.get('total_genomes', '')})"}
+        for row in summary_by_database
+    ]
+    write_rows(genomes_data, genome_rows, summary_db_fields + ["prevalence_display"])
+    _write_prevalence_bar_svg(genomes_svg, genome_rows, "Genomes Positive By Database", "genomes_positive_percent")
+    _write_bar_png(genomes_png, genome_rows, "genomes_positive_percent")
+    _write_simple_pdf(genomes_pdf, "Genomes Positive By Database", [f"{row['database']}: {row['prevalence_display']}" for row in genome_rows])
+    figure_files.extend([genomes_data, genomes_svg, genomes_png, genomes_pdf])
+
+    core_data = figures / "prevalence_core_accessory_rare_by_database.data.tsv"
+    core_svg = figures / "prevalence_core_accessory_rare_by_database.svg"
+    core_png = figures / "prevalence_core_accessory_rare_by_database.png"
+    core_pdf = figures / "prevalence_core_accessory_rare_by_database.pdf"
+    write_rows(core_data, core_rows, ["database", "core_features", "common_features", "accessory_features", "rare_features", "total_unique_features"])
+    _write_prevalence_stacked_svg(core_svg, core_rows, "Core/Common/Accessory/Rare Features")
+    _write_prevalence_stacked_png(core_png, core_rows)
+    _write_simple_pdf(core_pdf, "Core/Common/Accessory/Rare Features", [f"{row['database']}: core={row['core_features']}, common={row['common_features']}, accessory={row['accessory_features']}, rare={row['rare_features']}" for row in core_rows])
+    figure_files.extend([core_data, core_svg, core_png, core_pdf])
+
+    burden_plot_rows = []
+    for database in databases:
+        counts = [float(int(_float_or_none(row.get("unique_features", "")) or 0)) for row in burden_rows if row["database"] == database]
+        stats = _summary_stats_full(counts)
+        burden_plot_rows.append({
+            "metadata_group": database,
+            "database": database,
+            "n": str(len(counts)),
+            "min": "" if stats["min"] is None else f"{stats['min']:.2f}",
+            "q1": "" if stats["q1"] is None else f"{stats['q1']:.2f}",
+            "median": "" if stats["median"] is None else f"{stats['median']:.2f}",
+            "q3": "" if stats["q3"] is None else f"{stats['q3']:.2f}",
+            "max": "" if stats["max"] is None else f"{stats['max']:.2f}",
+            "mean": "" if stats["mean"] is None else f"{stats['mean']:.2f}",
+        })
+    burden_data = figures / "prevalence_database_burden_by_sample.data.tsv"
+    burden_svg = figures / "prevalence_database_burden_by_sample.svg"
+    burden_png = figures / "prevalence_database_burden_by_sample.png"
+    burden_pdf = figures / "prevalence_database_burden_by_sample.pdf"
+    write_rows(burden_data, burden_plot_rows, ["metadata_group", "database", "n", "min", "q1", "median", "q3", "max", "mean"])
+    _write_burden_boxplot_svg(burden_svg, burden_plot_rows, "Database Burden By Sample")
+    _write_burden_boxplot_png(burden_png, burden_plot_rows)
+    _write_simple_pdf(burden_pdf, "Database Burden By Sample", [f"{row['database']}: median={row['median']}, n={row['n']}" for row in burden_plot_rows])
+    figure_files.extend([burden_data, burden_svg, burden_png, burden_pdf])
+
+    outputs = {
+        "important_feature_prevalence_summary": str(summary_path),
+        "important_feature_prevalence": str(feature_prevalence_path),
+        "important_feature_prevalence_top": str(top_path),
+        "important_prevalence_summary_by_database": str(summary_db_path),
+        "important_prevalence_core_accessory_rare_summary": str(core_path),
+        "important_prevalence_database_burden_by_sample": str(burden_path),
+        "important_prevalence_written_summaries": str(written_path),
+        "important_prevalence_feature_counts_svg": str(counts_svg),
+        "important_prevalence_genomes_positive_svg": str(genomes_svg),
+        "important_prevalence_core_accessory_rare_svg": str(core_svg),
+        "important_prevalence_database_burden_svg": str(burden_svg),
+    }
+    for database in databases:
+        safe_database = _safe_filename(database)
+        db_rows = [row for row in feature_rows if row["database"] == database][:top_n]
         if not db_rows:
             continue
-        data_path = figures / f"prevalence_{database}_top20.data.tsv"
-        svg_path = figures / f"prevalence_{database}_top20.svg"
-        png_path = figures / f"prevalence_{database}_top20.png"
-        write_rows(data_path, db_rows, summary_fields)
-        _write_bar_svg(svg_path, db_rows, f"{database} Prevalence Top {top_n}", "feature_id", "prevalence_percent", "Prevalence (%)")
+        data_path = figures / f"prevalence_top_features_{safe_database}.data.tsv"
+        svg_path = figures / f"prevalence_top_features_{safe_database}.svg"
+        png_path = figures / f"prevalence_top_features_{safe_database}.png"
+        pdf_path = figures / f"prevalence_top_features_{safe_database}.pdf"
+        write_rows(data_path, db_rows, feature_fields)
+        _write_prevalence_bar_svg(svg_path, db_rows, f"{database} Top Feature Prevalence", "prevalence_percent")
         _write_bar_png(png_path, db_rows, "prevalence_percent")
-        outputs[f"important_prevalence_{database}_data"] = str(data_path)
-        outputs[f"important_prevalence_{database}_svg"] = str(svg_path)
-        outputs[f"important_prevalence_{database}_png"] = str(png_path)
+        _write_simple_pdf(pdf_path, f"{database} Top Feature Prevalence", [f"{row['feature_id']}: {row['prevalence_display']}" for row in db_rows])
+        figure_files.extend([data_path, svg_path, png_path, pdf_path])
+        outputs[f"important_prevalence_{safe_database}_data"] = str(data_path)
+        outputs[f"important_prevalence_{safe_database}_svg"] = str(svg_path)
+        outputs[f"important_prevalence_{safe_database}_png"] = str(png_path)
+        outputs[f"important_prevalence_{safe_database}_pdf"] = str(pdf_path)
+
+    html_path = figures / "prevalence_analysis.html"
+    prevalence_html = """<!doctype html>
+<html><head><meta charset="utf-8"><title>Feature Prevalence</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 1.5rem; color: #1f2933; background: #f8fafc; }
+label { font-weight: 700; margin-right: 0.35rem; }
+select, input { margin: 0 0.9rem 1rem 0; padding: 0.35rem; }
+.warning { background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; margin: 1rem 0; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; }
+.card { border: 1px solid #d9e2ec; border-radius: 6px; padding: 0.75rem; background: white; }
+.card span { display: block; color: #52606d; font-size: 0.8rem; }
+.card strong { display: block; font-size: 1.25rem; margin-top: 0.25rem; }
+.figure-box { max-width: 100%; max-height: 680px; overflow: auto; border: 1px solid #d9e2ec; background: white; padding: 0.75rem; }
+svg { max-width: 100%; height: auto; }
+table { border-collapse: collapse; width: 100%; margin-top: 1rem; background: white; font-size: 0.9rem; }
+th, td { border: 1px solid #d9e2ec; padding: 0.4rem; text-align: left; }
+th { background: #f0f4f8; position: sticky; top: 0; }
+.downloads a { display: inline-block; margin: 0.25rem 0.45rem 0.25rem 0; color: #0f766e; font-weight: 700; }
+</style></head><body>
+<h1>Prevalence</h1>
+<p>This section summarizes how frequently each detected feature appears across the analyzed genomes. Prevalence uses positive genome count; feature row count may be higher when a feature appears multiple times in one genome.</p>
+<div class="warning">Prevalence reflects the analyzed dataset, not global prevalence. It is descriptive and does not test association or causality.</div>
+<label for="database">Database</label><select id="database"></select>
+<label for="view">View</label><select id="view"><option value="20">Top 20</option><option value="10">Top 10</option><option value="50">Top 50</option><option value="all">Complete</option></select>
+<label for="metric">Metric</label><select id="metric"><option value="prevalence_percent">Genome prevalence %</option><option value="positive_genomes">Positive genome count</option><option value="feature_rows">Feature row count</option><option value="mean_hits_per_positive_genome">Mean hits per positive genome</option></select>
+<label for="sort">Sort</label><select id="sort"><option value="prevalence">Prevalence descending</option><option value="feature">Feature name</option><option value="category">Feature category</option><option value="database">Database</option><option value="positive">Positive genome count</option><option value="rows">Row count</option></select>
+<label for="minPrev">Minimum prevalence %</label><input id="minPrev" type="number" value="0" min="0" max="100" step="1">
+<label for="minPositive">Minimum positive genomes</label><input id="minPositive" type="number" value="0" min="0" step="1">
+<label><input id="coordsOnly" type="checkbox"> Show only features with coordinates</label>
+<label><input id="categoryOnly" type="checkbox"> Show only features with category annotation</label>
+<div id="summary"></div>
+<p id="written"></p>
+<div class="figure-box" id="figure"></div>
+<div id="table"></div>
+<div class="downloads">
+  <a href="../tables/feature_prevalence.tsv">Download full feature prevalence</a>
+  <a href="../tables/feature_prevalence_top.tsv">Download report-facing top features</a>
+  <a href="../tables/prevalence_summary_by_database.tsv">Download database summary</a>
+  <a href="../prevalence_tables.zip">Download prevalence tables ZIP</a>
+  <a href="../prevalence_figures.zip">Download prevalence figures ZIP</a>
+</div>
+<script>
+const rows = __FEATURE_ROWS__;
+const databaseRows = __DATABASE_ROWS__;
+const writtenRows = __WRITTEN_ROWS__;
+function num(value) { const parsed = Number(value || 0); return Number.isFinite(parsed) ? parsed : 0; }
+const dbSelect = document.getElementById('database');
+for (const db of ['All', ...[...new Set(rows.map(r => r.database).filter(Boolean))].sort()]) {
+  const option = document.createElement('option'); option.value = db; option.textContent = db; dbSelect.appendChild(option);
+}
+function activeRows() {
+  const db = dbSelect.value, metric = document.getElementById('metric').value;
+  const minPrev = num(document.getElementById('minPrev').value), minPositive = num(document.getElementById('minPositive').value);
+  const coordsOnly = document.getElementById('coordsOnly').checked, categoryOnly = document.getElementById('categoryOnly').checked;
+  let active = rows.filter(row => (db === 'All' || row.database === db) && num(row.prevalence_percent) >= minPrev && num(row.positive_genomes) >= minPositive);
+  if (coordsOnly) active = active.filter(row => row.has_coordinates === 'true');
+  if (categoryOnly) active = active.filter(row => row.feature_category);
+  const sort = document.getElementById('sort').value;
+  if (sort === 'feature') active = active.slice().sort((a, b) => (a.feature_id || '').localeCompare(b.feature_id || ''));
+  else if (sort === 'category') active = active.slice().sort((a, b) => (a.feature_category || '').localeCompare(b.feature_category || ''));
+  else if (sort === 'database') active = active.slice().sort((a, b) => (a.database || '').localeCompare(b.database || ''));
+  else if (sort === 'positive') active = active.slice().sort((a, b) => num(b.positive_genomes) - num(a.positive_genomes));
+  else if (sort === 'rows') active = active.slice().sort((a, b) => num(b.feature_rows) - num(a.feature_rows));
+  else active = active.slice().sort((a, b) => num(b[metric]) - num(a[metric]));
+  const view = document.getElementById('view').value;
+  if (view === 'all') return active;
+  return active.slice(0, Number(view || 20));
+}
+function renderCards(active) {
+  const db = dbSelect.value;
+  const dbRows = db === 'All' ? databaseRows : databaseRows.filter(row => row.database === db);
+  const featureCount = active.length;
+  const rowCount = active.reduce((a, r) => a + num(r.feature_rows), 0);
+  const positive = Math.max(...active.map(r => num(r.positive_genomes)), 0);
+  document.getElementById('summary').innerHTML = `<div class="cards">
+    <div class="card"><span>Displayed features</span><strong>${featureCount}</strong></div>
+    <div class="card"><span>Displayed feature rows</span><strong>${rowCount}</strong></div>
+    <div class="card"><span>Max positive genomes</span><strong>${positive}</strong></div>
+    <div class="card"><span>Databases represented</span><strong>${dbRows.length || new Set(active.map(r => r.database)).size}</strong></div>
+  </div>`;
+  const written = writtenRows.find(row => row.database === db) || writtenRows.find(row => row.scope === 'overall') || {};
+  document.getElementById('written').textContent = written.summary || '';
+}
+function renderFigure(active) {
+  const metric = document.getElementById('metric').value;
+  const figureRows = active.slice(0, 50);
+  const width = Math.max(900, figureRows.length * 42 + 180), height = 450;
+  const left = 110, top = 42, plotHeight = 270, plotWidth = width - left - 42;
+  const maxValue = Math.max(1, ...figureRows.map(row => num(row[metric])));
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`;
+  svg += `<rect width="100%" height="100%" fill="#f8fafc"/><text x="20" y="28" font-size="20" font-family="Arial" font-weight="700" fill="#102a43">Feature prevalence</text>`;
+  svg += `<rect x="${left}" y="${top}" width="${plotWidth}" height="${plotHeight}" fill="#fff" stroke="#bcccdc"/>`;
+  figureRows.forEach((row, idx) => {
+    const value = num(row[metric]), x = left + 14 + idx * 42;
+    const barHeight = value / maxValue * (plotHeight - 18), y = top + plotHeight - barHeight;
+    svg += `<rect x="${x}" y="${y}" width="24" height="${barHeight}" fill="#0f766e"><title>${row.database}:${row.feature_id} ${row.prevalence_display}</title></rect>`;
+    svg += `<text x="${x + 8}" y="${top + plotHeight + 14}" transform="rotate(70 ${x + 8} ${top + plotHeight + 14})" font-size="10" font-family="Arial" fill="#334e68">${(row.feature_id || '').slice(0, 24)}</text>`;
+  });
+  if (figureRows.length < active.length) svg += `<text x="20" y="${height - 18}" font-size="12" font-family="Arial" fill="#52606d">Figure capped at 50 features. Complete table and TSV preserve all rows.</text>`;
+  svg += '</svg>';
+  document.getElementById('figure').innerHTML = svg;
+}
+function renderTable(active) {
+  const fields = ['database','feature_id','feature_category','positive_genomes','total_genomes','prevalence_display','feature_rows','mean_hits_per_positive_genome','prevalence_label','warning_flags'];
+  const shown = active.slice(0, document.getElementById('view').value === 'all' ? active.length : 80);
+  let table = '<table><thead><tr>' + fields.map(field => `<th>${field}</th>`).join('') + '</tr></thead><tbody>';
+  for (const row of shown) table += '<tr>' + fields.map(field => `<td>${row[field] || ''}</td>`).join('') + '</tr>';
+  table += '</tbody></table>';
+  if (shown.length < active.length) table += `<p>Showing ${shown.length} of ${active.length} rows. Use Complete or download the full TSV.</p>`;
+  document.getElementById('table').innerHTML = table;
+}
+function render() { const active = activeRows(); renderCards(active); renderFigure(active); renderTable(active); }
+for (const id of ['database','view','metric','sort','minPrev','minPositive','coordsOnly','categoryOnly']) document.getElementById(id).addEventListener('change', render);
+render();
+</script></body></html>
+"""
+    html_path.write_text(
+        prevalence_html
+        .replace("__FEATURE_ROWS__", json.dumps(feature_rows))
+        .replace("__DATABASE_ROWS__", json.dumps(summary_by_database))
+        .replace("__WRITTEN_ROWS__", json.dumps(written_rows)),
+        encoding="utf-8",
+    )
+    outputs["important_prevalence_analysis_html"] = str(html_path)
+    table_zip = important_dir / "prevalence_tables.zip"
+    figure_zip = important_dir / "prevalence_figures.zip"
+    outputs["important_prevalence_tables_zip"] = _write_zip_bundle(
+        table_zip,
+        [feature_prevalence_path, top_path, summary_db_path, core_path, burden_path, written_path],
+        important_dir,
+    )
+    outputs["important_prevalence_figures_zip"] = _write_zip_bundle(figure_zip, figure_files + [html_path], important_dir)
     return outputs
 
 
@@ -7584,7 +8075,10 @@ def write_important_results_report(
     card_html = "".join(f"<div class='card'><span>{html.escape(label)}</span><strong>{html.escape(value)}</strong></div>" for label, value in cards)
     db_badges = " ".join(f"<span class='badge'>{html.escape(db)}</span>" for db in databases)
     qc_steps = read_table(important_dir / "key_tables" / "qc_step_summary.tsv")
-    prevalence_rows = read_table(important_dir / "key_tables" / "feature_prevalence_summary.tsv")
+    prevalence_rows = read_table(important_dir / "tables" / "feature_prevalence.tsv") or read_table(important_dir / "key_tables" / "feature_prevalence_summary.tsv")
+    prevalence_database_rows = read_table(important_dir / "tables" / "prevalence_summary_by_database.tsv")
+    prevalence_core_rows = read_table(important_dir / "tables" / "prevalence_core_accessory_rare_summary.tsv")
+    prevalence_written_rows = read_table(important_dir / "tables" / "prevalence_written_summaries.tsv")
     variation_rows = read_table(important_dir / "key_tables" / "feature_variation_summary.tsv")
     variation_database_rows = read_table(important_dir / "key_tables" / "feature_variation_database_summary.tsv")
     temporal_rows = read_table(important_dir / "key_tables" / "temporal_trend_summary.tsv")
@@ -7621,7 +8115,7 @@ def write_important_results_report(
         key=lambda row: (-abs(_float_or_none(row.get("burden_range_median", "")) or 0.0), row.get("database", ""), row.get("metadata_column", "")),
     )[:20]
     qc_table_html = _html_table(qc_steps, ["step_order", "qc_step", "tool", "enabled", "pass", "warning", "fail", "skipped", "status", "notes"], max_rows=20)
-    prevalence_table_html = _html_table(top_prevalence, ["database", "feature_id", "positive_genomes", "sample_count", "prevalence_percent", "feature_rows"], max_rows=20)
+    prevalence_table_html = _html_table(top_prevalence, ["database", "feature_id", "feature_category", "positive_genomes", "total_genomes", "prevalence_display", "feature_rows", "mean_hits_per_positive_genome", "prevalence_label", "warning_flags"], max_rows=20)
     variation_table_html = _html_table(top_variation, ["database", "feature_id", "total_hits", "positive_genomes", "mean_hits_per_positive_genome", "median_identity", "iqr_identity", "median_coverage", "iqr_coverage", "variation_label", "warning_flags"], max_rows=20)
     temporal_table_html = _html_table(top_temporal, ["database", "feature_id", "first_year", "last_year", "first_year_prevalence_percent", "last_year_prevalence_percent", "change_percent_points", "correlation", "trend_label", "support_label", "warning_flags"], max_rows=20)
     cooccurrence_table_html = _html_table(top_cooccurrence, ["feature_a_database", "feature_a_id", "feature_b_database", "feature_b_id", "n_total", "n_both_present", "phi_correlation", "q_value", "direction", "significance_label", "warning_flags"], max_rows=20)
@@ -7629,14 +8123,51 @@ def write_important_results_report(
     metadata_feature_table_html = _html_table(top_metadata_features, ["database", "feature_id", "metadata_column", "metadata_group", "group_n", "positive_in_group", "prevalence_in_group", "prevalence_difference", "odds_ratio", "q_value", "effect_size_label", "support_label", "interpretation_label", "warning_flags"], max_rows=20)
     metadata_burden_table_html = _html_table(top_metadata_burden, ["database", "metadata_column", "metadata_group", "group_n", "median_burden_group", "median_burden_outside", "burden_difference", "q_value", "support_label", "interpretation_label", "warning_flags"], max_rows=20)
     metadata_omnibus_table_html = _html_table(top_metadata_omnibus, ["database", "feature_category", "metadata_column", "groups_tested", "samples_tested", "burden_range_median", "test_name", "test_statistic", "q_value", "support_label", "interpretation_label", "warning_flags"], max_rows=20)
+    prevalence_total_rows = sum(int(_float_or_none(row.get("feature_rows", "")) or 0) for row in prevalence_rows)
+    prevalence_unique_features = len(prevalence_rows)
+    prevalence_databases = len({row.get("database", "") for row in prevalence_rows if row.get("database", "")})
+    prevalence_core_features = sum(int(_float_or_none(row.get("core_features", "")) or 0) for row in prevalence_core_rows)
+    prevalence_common_features = sum(int(_float_or_none(row.get("common_features", "")) or 0) for row in prevalence_core_rows)
+    prevalence_accessory_features = sum(int(_float_or_none(row.get("accessory_features", "")) or 0) for row in prevalence_core_rows)
+    prevalence_rare_features = sum(int(_float_or_none(row.get("rare_features", "")) or 0) for row in prevalence_core_rows)
+    prevalence_cards_html = (
+        "<div class='cards'>"
+        f"<div class='card'><span>Unique features</span><strong>{prevalence_unique_features}</strong></div>"
+        f"<div class='card'><span>Feature rows</span><strong>{prevalence_total_rows}</strong></div>"
+        f"<div class='card'><span>Databases</span><strong>{prevalence_databases}</strong></div>"
+        f"<div class='card'><span>Core / common</span><strong>{prevalence_core_features} / {prevalence_common_features}</strong></div>"
+        f"<div class='card'><span>Accessory / rare</span><strong>{prevalence_accessory_features} / {prevalence_rare_features}</strong></div>"
+        "</div>"
+    )
+    prevalence_written_html = "".join(f"<p>{html.escape(row.get('summary', ''))}</p>" for row in prevalence_written_rows[:2]) or "<p>No prevalence written summary was generated.</p>"
+    prevalence_database_table_html = _html_table(
+        prevalence_database_rows,
+        ["database", "total_feature_rows", "unique_features", "positive_genomes", "total_genomes", "genomes_positive_percent", "median_features_per_genome", "top_feature_id", "top_feature_prevalence_percent"],
+        max_rows=20,
+    )
+    prevalence_figure_items = []
+    for figure_name, title in [
+        ("prevalence_feature_counts_by_database", "Feature counts by database"),
+        ("prevalence_genomes_positive_by_database", "Genomes positive by database"),
+        ("prevalence_core_accessory_rare_by_database", "Core/common/accessory/rare features"),
+        ("prevalence_database_burden_by_sample", "Database burden by sample"),
+    ]:
+        svg_path = important_dir / "figures" / f"{figure_name}.svg"
+        if not svg_path.exists():
+            continue
+        prevalence_figure_items.append(
+            f"<div><h3>{html.escape(title)}</h3><img src='figures/{html.escape(svg_path.name)}' alt='{html.escape(title)}'>"
+            f"<p><a href='figures/{html.escape(figure_name)}.png'>PNG</a> | <a href='figures/{html.escape(figure_name)}.svg'>SVG</a> | <a href='figures/{html.escape(figure_name)}.pdf'>PDF</a> | <a href='figures/{html.escape(figure_name)}.data.tsv'>Data TSV</a></p></div>"
+        )
     prevalence_figures = []
-    for path in sorted((important_dir / "figures").glob("prevalence_*_top20.svg")):
-        database = path.name.replace("prevalence_", "").replace("_top20.svg", "")
+    for path in sorted((important_dir / "figures").glob("prevalence_top_features_*.svg")):
+        database = path.name.replace("prevalence_top_features_", "").replace(".svg", "")
+        stem = path.stem
         prevalence_figures.append(
             f"<div><h3>{html.escape(database)} prevalence</h3><img src='figures/{html.escape(path.name)}' alt='{html.escape(database)} prevalence'>"
-            f"<p><a href='figures/{html.escape(path.with_suffix('.png').name)}'>PNG</a> | <a href='figures/{html.escape(path.name)}'>SVG</a> | <a href='figures/{html.escape(path.name.replace('.svg', '.data.tsv'))}'>Data TSV</a></p></div>"
+            f"<p><a href='figures/{html.escape(stem)}.png'>PNG</a> | <a href='figures/{html.escape(path.name)}'>SVG</a> | <a href='figures/{html.escape(stem)}.pdf'>PDF</a> | <a href='figures/{html.escape(stem)}.data.tsv'>Data TSV</a></p></div>"
         )
-    prevalence_figures_html = "<div class='figure-row'>" + "".join(prevalence_figures[:6]) + "</div>" if prevalence_figures else "<p>No prevalence figures were generated because no feature rows were available.</p>"
+    prevalence_figures_html = "<div class='figure-row'>" + "".join((prevalence_figure_items + prevalence_figures)[:8]) + "</div>" if (prevalence_figure_items or prevalence_figures) else "<p>No prevalence figures were generated because no feature rows were available.</p>"
     variation_unique_features = len(variation_rows)
     variation_total_hits = sum(int(_float_or_none(row.get("total_hits", "")) or 0) for row in variation_rows)
     variation_high_features = sum(1 for row in variation_rows if row.get("variation_label") == "high_variation")
@@ -7816,10 +8347,17 @@ th {{ background: #f0f4f8; }}
 <div class="figure-row"><div><h3>QC Funnel</h3><img src="figures/qc_funnel.svg" alt="QC funnel"></div><div><h3>QC Status</h3><img src="figures/qc_status_overview.svg" alt="QC status overview"></div></div>
 {qc_table_html}
 <div class="downloads"><a href="key_tables/qc_step_summary.tsv">Download QC step summary</a><a href="key_tables/qc_by_genome.tsv">Download per-genome QC table</a><a href="figures/qc_funnel.png">Download funnel PNG</a><a href="figures/qc_funnel.svg">Download funnel SVG</a><a href="figures/qc_funnel.data.tsv">Download funnel data</a></div></section>
-<section id="prevalence"><h2>Prevalence</h2><p>Feature prevalence is summarized by database. Top plots are capped for readability; the complete prevalence table is downloadable.</p>
+<section id="prevalence"><h2>Prevalence</h2><p>This section summarizes how frequently each detected feature appears across analyzed genomes. Prevalence uses positive genome count; feature rows can be higher when a feature appears multiple times in one genome.</p>
+<div class="warning">Prevalence reflects the analyzed dataset, not global prevalence. This section is descriptive and does not test association or causality.</div>
+{prevalence_cards_html}
+{prevalence_written_html}
+<iframe src="figures/prevalence_analysis.html" title="Feature prevalence interactive report"></iframe>
 {prevalence_figures_html}
+<h3>Database summary</h3>
+{prevalence_database_table_html}
+<h3>Top feature prevalence</h3>
 {prevalence_table_html}
-<div class="downloads"><a href="key_tables/feature_prevalence_summary.tsv">Download complete prevalence table</a></div></section>
+<div class="downloads"><a href="figures/prevalence_analysis.html">Open interactive prevalence report</a><a href="prevalence_tables.zip">Download prevalence tables ZIP</a><a href="prevalence_figures.zip">Download prevalence figures ZIP</a><a href="tables/feature_prevalence.tsv">Download full feature prevalence</a><a href="tables/feature_prevalence_top.tsv">Download top feature prevalence</a><a href="tables/prevalence_summary_by_database.tsv">Download database summary</a><a href="tables/prevalence_core_accessory_rare_summary.tsv">Download core/common/accessory/rare summary</a><a href="tables/prevalence_database_burden_by_sample.tsv">Download database burden by sample</a></div></section>
 <section id="geography"><h2>Geographic Distribution</h2><div class="warning">Geographic patterns reflect the analyzed dataset only. They are not global prevalence estimates and can be affected by BioProject, lineage, country, and year sampling bias.</div>
 <iframe src="figures/geographic_distribution_map.html" title="Geographic distribution map"></iframe>
 <div class="downloads"><a href="figures/geographic_distribution_map.html">Open map</a><a href="figures/geographic_distribution_map.png">Download initial PNG</a><a href="figures/geographic_distribution_map.svg">Download initial SVG</a><a href="figures/geographic_distribution.data.tsv">Download data TSV</a></div></section>
@@ -7865,7 +8403,9 @@ th {{ background: #f0f4f8; }}
 <section id="files"><h2>Important Files</h2><ul>
 <li><a href="../basic/enriched_genome_dataset.csv">Enriched genome dataset CSV</a></li>
 <li><a href="key_tables/qc_step_summary.tsv">QC step summary</a></li>
-<li><a href="key_tables/feature_prevalence_summary.tsv">Feature prevalence summary</a></li>
+<li><a href="tables/feature_prevalence.tsv">Feature prevalence table</a></li>
+<li><a href="tables/prevalence_summary_by_database.tsv">Prevalence database summary</a></li>
+<li><a href="figures/prevalence_analysis.html">Interactive prevalence report</a></li>
 <li><a href="key_tables/geographic_distribution.tsv">Geographic distribution table</a></li>
 <li><a href="key_tables/feature_variation_summary.tsv">Feature variation summary</a></li>
 <li><a href="key_tables/feature_variation_database_summary.tsv">Feature variation database summary</a></li>

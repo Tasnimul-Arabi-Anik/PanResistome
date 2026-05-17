@@ -12,7 +12,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from normalize_fetchm2_output import normalize_fetchm2_output
 from export_panr2_inputs import parse_version_line
-from panr2_contract import export_contract, _kruskal_wallis
+from panr2_contract import export_contract, _kruskal_wallis, write_important_prevalence_outputs
 from check_genomad_readiness import resolve_database_dir
 from check_container_readiness import as_list as container_as_list
 from check_container_readiness import image_exec_command
@@ -21,6 +21,48 @@ from check_comprehensive_validation_outputs import check_sample_dir
 
 
 class FetchM2AdapterTests(unittest.TestCase):
+    def test_important_prevalence_counts_unique_genomes_and_duplicate_rows(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            sample_dir = root / "Sample"
+            basic_dir = sample_dir / "basic"
+            features_dir = root / "panr2_inputs" / "features"
+            basic_dir.mkdir(parents=True)
+            features_dir.mkdir(parents=True)
+            pd.DataFrame(
+                [
+                    {"assembly_accession": "G1", "sample_id": "s1"},
+                    {"assembly_accession": "G2", "sample_id": "s2"},
+                    {"assembly_accession": "G3", "sample_id": "s3"},
+                ]
+            ).to_csv(basic_dir / "enriched_genome_dataset.csv", index=False)
+            pd.DataFrame(
+                [
+                    {"assembly_accession": "G1", "sample_id": "s1", "database": "amr", "feature_id": "blaA", "feature_name": "blaA", "feature_category": "beta_lactam", "feature_subcategory": "", "presence": "1", "identity": "99", "coverage": "100", "contig": "c1", "start": "1", "end": "100", "tool": "abricate", "database_version": "v1"},
+                    {"assembly_accession": "G1", "sample_id": "s1", "database": "amr", "feature_id": "blaA", "feature_name": "blaA", "feature_category": "beta_lactam", "feature_subcategory": "", "presence": "1", "identity": "98", "coverage": "95", "contig": "c2", "start": "1", "end": "90", "tool": "abricate", "database_version": "v1"},
+                    {"assembly_accession": "G2", "sample_id": "s2", "database": "amr", "feature_id": "blaA", "feature_name": "blaA", "feature_category": "beta_lactam", "feature_subcategory": "", "presence": "1", "identity": "97", "coverage": "90", "contig": "c1", "start": "1", "end": "80", "tool": "abricate", "database_version": "v1"},
+                    {"assembly_accession": "G3", "sample_id": "s3", "database": "vfdb", "feature_id": "fimH", "feature_name": "fimH", "feature_category": "adhesion", "feature_subcategory": "", "presence": "1", "identity": "96", "coverage": "88", "contig": "", "start": "", "end": "", "tool": "abricate", "database_version": "v2"},
+                ]
+            ).to_csv(features_dir / "all_features.tsv", sep="\t", index=False)
+
+            outputs = write_important_prevalence_outputs(sample_dir, root / "panr2_inputs", sample_dir / "important", top_n=2)
+            self.assertTrue(Path(outputs["important_feature_prevalence"]).exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "prevalence_analysis.html").exists())
+
+            prevalence = pd.read_csv(sample_dir / "important" / "tables" / "feature_prevalence.tsv", sep="\t")
+            bla = prevalence.loc[prevalence["feature_id"] == "blaA"].iloc[0]
+            self.assertEqual(int(bla["positive_genomes"]), 2)
+            self.assertEqual(int(bla["feature_rows"]), 3)
+            self.assertAlmostEqual(float(bla["prevalence_percent"]), 66.7, places=1)
+            self.assertAlmostEqual(float(bla["mean_hits_per_positive_genome"]), 1.5, places=2)
+            self.assertIn("duplicate_feature_rows_detected", str(bla["warning_flags"]))
+
+            summary = pd.read_csv(sample_dir / "important" / "tables" / "prevalence_summary_by_database.tsv", sep="\t")
+            self.assertTrue({"total_feature_rows", "unique_features", "median_features_per_genome", "top_feature_id"}.issubset(summary.columns))
+            html = (sample_dir / "important" / "figures" / "prevalence_analysis.html").read_text(encoding="utf-8")
+            for control in ["Database", "Top 20", "Complete", "Genome prevalence %", "Positive genome count", "Feature row count", "Minimum prevalence %"]:
+                self.assertIn(control, html)
+
     def test_kruskal_wallis_detects_multi_group_burden_difference(self):
         result = _kruskal_wallis([[1, 1, 2, 2], [5, 5, 6, 6], [9, 9, 10, 10]])
         self.assertIsNotNone(result)
@@ -208,6 +250,18 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue((sample_dir / "important" / "figures" / "qc_funnel.png").exists())
             self.assertTrue((sample_dir / "important" / "figures" / "qc_status_overview.svg").exists())
             self.assertTrue((sample_dir / "important" / "key_tables" / "feature_prevalence_summary.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "feature_prevalence.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "feature_prevalence_top.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "prevalence_summary_by_database.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "prevalence_core_accessory_rare_summary.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "prevalence_database_burden_by_sample.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "prevalence_analysis.html").exists())
+            self.assertTrue((sample_dir / "important" / "prevalence_tables.zip").exists())
+            self.assertTrue((sample_dir / "important" / "prevalence_figures.zip").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "prevalence_feature_counts_by_database.svg").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "prevalence_genomes_positive_by_database.png").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "prevalence_core_accessory_rare_by_database.data.tsv").exists())
+            self.assertTrue(any((sample_dir / "important" / "figures").glob("prevalence_top_features_*.pdf")))
             self.assertTrue((sample_dir / "important" / "key_tables" / "feature_variation_summary.tsv").exists())
             self.assertTrue((sample_dir / "important" / "key_tables" / "feature_variation_hits.tsv").exists())
             self.assertTrue((sample_dir / "important" / "key_tables" / "feature_variation_database_summary.tsv").exists())
@@ -254,6 +308,11 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue(any((sample_dir / "important" / "figures").glob("metadata_burden_boxplot_*_*.png")))
             temporal_summary = pd.read_csv(sample_dir / "important" / "key_tables" / "temporal_trend_summary.tsv", sep="\t")
             self.assertTrue({"trend_label", "support_label", "temporal_pattern_label", "warning_flags"}.issubset(temporal_summary.columns))
+            prevalence = pd.read_csv(sample_dir / "important" / "tables" / "feature_prevalence.tsv", sep="\t")
+            self.assertTrue({"positive_genomes", "total_genomes", "prevalence_percent", "feature_rows", "mean_hits_per_positive_genome", "prevalence_label", "warning_flags"}.issubset(prevalence.columns))
+            prevalence_html = (sample_dir / "important" / "figures" / "prevalence_analysis.html").read_text(encoding="utf-8")
+            for control in ["Database", "Top 10", "Top 20", "Top 50", "Complete", "Genome prevalence %", "Minimum positive genomes"]:
+                self.assertIn(control, prevalence_html)
             variation_summary = pd.read_csv(sample_dir / "important" / "key_tables" / "feature_variation_summary.tsv", sep="\t")
             self.assertTrue({"feature_name", "prevalence_percent", "mean_hits_per_positive_genome", "median_alignment_length", "iqr_alignment_length", "variation_score"}.issubset(variation_summary.columns))
             variation_hits = pd.read_csv(sample_dir / "important" / "key_tables" / "feature_variation_hits.tsv", sep="\t")
