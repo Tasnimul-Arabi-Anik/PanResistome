@@ -195,6 +195,25 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue((sample_dir / "important" / "figures" / "geographic_distribution_map.html").exists())
             self.assertTrue((sample_dir / "important" / "figures" / "geographic_distribution_map.png").exists())
             self.assertTrue((sample_dir / "important" / "key_tables" / "geographic_distribution.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "key_tables" / "qc_step_summary.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "key_tables" / "qc_by_genome.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "qc_funnel.png").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "qc_status_overview.svg").exists())
+            self.assertTrue((sample_dir / "important" / "key_tables" / "feature_prevalence_summary.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "key_tables" / "feature_variation_summary.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "key_tables" / "feature_variation_hits.tsv").exists())
+            report_html = (sample_dir / "important" / "results.html").read_text(encoding="utf-8")
+            for section in [
+                "Featured Results",
+                "Run Overview",
+                "QC Summary",
+                "Prevalence",
+                "Geographic Distribution",
+                "Variations",
+                "Warnings And Limitations",
+                "Important Files",
+            ]:
+                self.assertIn(section, report_html)
 
     def test_optional_table_inputs_export_contract_features(self):
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -3826,11 +3826,377 @@ updateYears(); render();
     }
 
 
+def _write_bar_svg(path: Path, rows: list[dict[str, str]], title: str, label_field: str, value_field: str, x_label: str = "") -> None:
+    width = 960
+    row_height = 28
+    top = 58
+    left = 250
+    plot_width = 620
+    height = max(180, top + row_height * max(len(rows), 1) + 30)
+    values = [_float_or_none(row.get(value_field, "")) or 0.0 for row in rows]
+    max_value = max(values) if values else 1.0
+    if max_value <= 0:
+        max_value = 1.0
+    parts = [
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
+        "<rect width='100%' height='100%' fill='#f8fafc'/>",
+        f"<text x='20' y='30' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
+    ]
+    for idx, row in enumerate(rows):
+        y = top + idx * row_height
+        value = _float_or_none(row.get(value_field, "")) or 0.0
+        bar_width = value / max_value * plot_width
+        label = row.get(label_field, "")
+        if len(label) > 38:
+            label = label[:35] + "..."
+        parts.append(f"<text x='20' y='{y + 17}' font-family='Arial' font-size='12' fill='#1f2933'>{html.escape(label)}</text>")
+        parts.append(f"<rect x='{left}' y='{y}' width='{bar_width:.1f}' height='18' fill='#0f766e'/>")
+        parts.append(f"<text x='{left + bar_width + 8:.1f}' y='{y + 14}' font-family='Arial' font-size='12' fill='#1f2933'>{html.escape(row.get(value_field, ''))}</text>")
+    if x_label:
+        parts.append(f"<text x='{left}' y='{height - 10}' font-family='Arial' font-size='12' fill='#52606d'>{html.escape(x_label)}</text>")
+    parts.append("</svg>\n")
+    path.write_text("".join(parts), encoding="utf-8")
+
+
+def _write_bar_png(path: Path, rows: list[dict[str, str]], value_field: str) -> None:
+    width = 960
+    row_height = 28
+    top = 58
+    left = 250
+    plot_width = 620
+    height = max(180, top + row_height * max(len(rows), 1) + 30)
+    pixels = [bytearray([248, 250, 252] * width) for _ in range(height)]
+
+    def rect(x0: int, y0: int, x1: int, y1: int, color: tuple[int, int, int]) -> None:
+        for y in range(max(0, y0), min(height, y1)):
+            row_pixels = pixels[y]
+            for x in range(max(0, x0), min(width, x1)):
+                idx = x * 3
+                row_pixels[idx:idx + 3] = bytes(color)
+
+    values = [_float_or_none(row.get(value_field, "")) or 0.0 for row in rows]
+    max_value = max(values) if values else 1.0
+    if max_value <= 0:
+        max_value = 1.0
+    for idx, value in enumerate(values):
+        y = top + idx * row_height
+        bar_width = int(value / max_value * plot_width)
+        rect(left, y, left + bar_width, y + 18, (15, 118, 110))
+    _write_png(path, width, height, pixels)
+
+
+def _write_line_svg(path: Path, rows: list[dict[str, str]], title: str, label_field: str, value_field: str) -> None:
+    width, height = 960, 420
+    left, top, plot_width, plot_height = 70, 60, 820, 280
+    values = [_float_or_none(row.get(value_field, "")) or 0.0 for row in rows]
+    max_value = max(values) if values else 1.0
+    if max_value <= 0:
+        max_value = 1.0
+    points = []
+    denom = max(len(values) - 1, 1)
+    for idx, value in enumerate(values):
+        x = left + idx / denom * plot_width
+        y = top + plot_height - value / max_value * plot_height
+        points.append((x, y, value))
+    point_text = " ".join(f"{x:.1f},{y:.1f}" for x, y, _ in points)
+    circles = "".join(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='4' fill='#0f766e'><title>{value:g}</title></circle>" for x, y, value in points)
+    path.write_text(
+        f"""<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>
+<rect width='100%' height='100%' fill='#f8fafc'/>
+<text x='20' y='30' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>
+<line x1='{left}' y1='{top + plot_height}' x2='{left + plot_width}' y2='{top + plot_height}' stroke='#9fb3c8'/>
+<line x1='{left}' y1='{top}' x2='{left}' y2='{top + plot_height}' stroke='#9fb3c8'/>
+<polyline points='{point_text}' fill='none' stroke='#0f766e' stroke-width='3'/>
+{circles}
+<text x='{left}' y='{height - 30}' font-family='Arial' font-size='12' fill='#52606d'>{html.escape(label_field)}</text>
+</svg>
+""",
+        encoding="utf-8",
+    )
+
+
+def _write_line_png(path: Path, rows: list[dict[str, str]], value_field: str) -> None:
+    width, height = 960, 420
+    left, top, plot_width, plot_height = 70, 60, 820, 280
+    pixels = [bytearray([248, 250, 252] * width) for _ in range(height)]
+
+    def set_pixel(x: int, y: int, color: tuple[int, int, int]) -> None:
+        if 0 <= x < width and 0 <= y < height:
+            idx = x * 3
+            pixels[y][idx:idx + 3] = bytes(color)
+
+    def line(x0: float, y0: float, x1: float, y1: float, color: tuple[int, int, int]) -> None:
+        steps = int(max(abs(x1 - x0), abs(y1 - y0), 1))
+        for i in range(steps + 1):
+            t = i / steps
+            set_pixel(int(x0 + (x1 - x0) * t), int(y0 + (y1 - y0) * t), color)
+
+    values = [_float_or_none(row.get(value_field, "")) or 0.0 for row in rows]
+    max_value = max(values) if values else 1.0
+    if max_value <= 0:
+        max_value = 1.0
+    points = []
+    denom = max(len(values) - 1, 1)
+    for idx, value in enumerate(values):
+        x = left + idx / denom * plot_width
+        y = top + plot_height - value / max_value * plot_height
+        points.append((x, y))
+    for a, b in zip(points, points[1:]):
+        line(a[0], a[1], b[0], b[1], (15, 118, 110))
+    _write_png(path, width, height, pixels)
+
+
+def write_important_qc_outputs(sample_dir: Path, out_dir: Path, important_dir: Path) -> dict[str, str]:
+    key_tables = important_dir / "key_tables"
+    figures = important_dir / "figures"
+    key_tables.mkdir(parents=True, exist_ok=True)
+    figures.mkdir(parents=True, exist_ok=True)
+    dataset_rows = read_table(sample_dir / "basic" / "enriched_genome_dataset.csv")
+    total = len(dataset_rows)
+    qc_pass = sum(1 for row in dataset_rows if row.get("qc_pass") == "true")
+    qc_fail = sum(1 for row in dataset_rows if row.get("qc_pass") == "false" and row.get("qc_status"))
+    qc_unknown = total - qc_pass - qc_fail
+
+    def enabled_from_column(column: str) -> bool:
+        return any(row.get(column) for row in dataset_rows)
+
+    step_rows = [
+        {"step_order": "1", "qc_step": "Genome download", "tool": "FetchM2", "enabled": "yes", "input_genomes": str(total), "pass": str(total), "warning": "0", "fail": "0", "skipped": "0", "output_genomes": str(total), "main_threshold": "downloaded FASTA present", "status": "PASS" if total else "WARNING_EMPTY", "notes": "Post-download metadata rows present in enriched dataset."},
+        {"step_order": "2", "qc_step": "Sequence basic QC", "tool": "internal", "enabled": "yes", "input_genomes": str(total), "pass": str(qc_pass), "warning": str(qc_unknown), "fail": str(qc_fail), "skipped": "0", "output_genomes": str(qc_pass), "main_threshold": "FASTA statistics available", "status": "PASS" if qc_fail == 0 else "WARNING", "notes": "Combined QC status summarized per genome."},
+        {"step_order": "3", "qc_step": "Assembly metrics", "tool": "QUAST", "enabled": "yes" if enabled_from_column("quast_status") else "no", "input_genomes": str(total), "pass": str(total if enabled_from_column("quast_status") else 0), "warning": "0", "fail": "0", "skipped": "0" if enabled_from_column("quast_status") else str(total), "output_genomes": str(total), "main_threshold": "assembly structure metrics", "status": "PASS" if enabled_from_column("quast_status") else "SKIPPED", "notes": "Enabled when QUAST output exists."},
+        {"step_order": "4", "qc_step": "Completeness/contamination", "tool": "CheckM2", "enabled": "yes" if enabled_from_column("checkm2_completeness") else "no", "input_genomes": str(total), "pass": str(total if enabled_from_column("checkm2_completeness") else 0), "warning": "0", "fail": "0", "skipped": "0" if enabled_from_column("checkm2_completeness") else str(total), "output_genomes": str(total), "main_threshold": "completeness/contamination", "status": "PASS" if enabled_from_column("checkm2_completeness") else "SKIPPED", "notes": "Enabled when CheckM2 output exists."},
+        {"step_order": "5", "qc_step": "ANI relatedness", "tool": "FastANI/skani", "enabled": "yes" if enabled_from_column("ani_status") else "no", "input_genomes": str(total), "pass": str(total if enabled_from_column("ani_status") else 0), "warning": "0", "fail": "0", "skipped": "0" if enabled_from_column("ani_status") else str(total), "output_genomes": str(total), "main_threshold": "species/cluster context", "status": "PASS" if enabled_from_column("ani_status") else "SKIPPED", "notes": "Skipped for one-genome or disabled runs."},
+        {"step_order": "6", "qc_step": "Mash relatedness", "tool": "Mash", "enabled": "yes" if enabled_from_column("mash_status") else "no", "input_genomes": str(total), "pass": str(total if enabled_from_column("mash_status") else 0), "warning": "0", "fail": "0", "skipped": "0" if enabled_from_column("mash_status") else str(total), "output_genomes": str(total), "main_threshold": "sketch distance context", "status": "PASS" if enabled_from_column("mash_status") else "SKIPPED", "notes": "Skipped for one-genome or disabled runs."},
+        {"step_order": "7", "qc_step": "Combined QC decision", "tool": "PanResistome", "enabled": "yes", "input_genomes": str(total), "pass": str(qc_pass), "warning": str(qc_unknown), "fail": str(qc_fail), "skipped": "0", "output_genomes": str(qc_pass), "main_threshold": "combined rules", "status": "PASS" if qc_fail == 0 else "WARNING", "notes": "Genomes passing combined QC are sent to annotation when filtering is enabled."},
+    ]
+    step_fields = ["step_order", "qc_step", "tool", "enabled", "input_genomes", "pass", "warning", "fail", "skipped", "output_genomes", "main_threshold", "status", "notes"]
+    step_path = key_tables / "qc_step_summary.tsv"
+    write_rows(step_path, step_rows, step_fields)
+
+    qc_by_genome_fields = [
+        "assembly_accession", "sample_id", "organism_name", "qc_status", "qc_pass", "qc_fail_reasons",
+        "quast_status", "checkm2_completeness", "checkm2_contamination", "ani_status", "mash_status",
+        "genome_size", "contig_count", "n50", "gc_percent", "ani_cluster", "mash_cluster",
+    ]
+    qc_by_genome = [{field: row.get(field, "") for field in qc_by_genome_fields} for row in dataset_rows]
+    qc_by_genome_path = key_tables / "qc_by_genome.tsv"
+    write_rows(qc_by_genome_path, qc_by_genome, qc_by_genome_fields)
+
+    funnel_rows = [
+        {"step": row["qc_step"], "genomes": row["output_genomes"], "status": row["status"]}
+        for row in step_rows
+    ]
+    funnel_path = figures / "qc_funnel.data.tsv"
+    write_rows(funnel_path, funnel_rows, ["step", "genomes", "status"])
+    _write_bar_svg(figures / "qc_funnel.svg", funnel_rows, "QC Funnel", "step", "genomes", "Genomes")
+    _write_bar_png(figures / "qc_funnel.png", funnel_rows, "genomes")
+
+    status_rows = []
+    for row in step_rows:
+        for status_field in ["pass", "warning", "fail", "skipped"]:
+            status_rows.append({"qc_step": row["qc_step"], "status": status_field.upper(), "count": row[status_field]})
+    status_path = figures / "qc_status_overview.data.tsv"
+    write_rows(status_path, status_rows, ["qc_step", "status", "count"])
+    compact_status = [{"label": f"{row['qc_step']} {row['status']}", "count": row["count"]} for row in status_rows if row["count"] != "0"]
+    _write_bar_svg(figures / "qc_status_overview.svg", compact_status, "QC Status Overview", "label", "count", "Genomes")
+    _write_bar_png(figures / "qc_status_overview.png", compact_status, "count")
+
+    outputs = {
+        "important_qc_step_summary": str(step_path),
+        "important_qc_by_genome": str(qc_by_genome_path),
+        "important_qc_funnel_svg": str(figures / "qc_funnel.svg"),
+        "important_qc_funnel_png": str(figures / "qc_funnel.png"),
+        "important_qc_funnel_data": str(funnel_path),
+        "important_qc_status_svg": str(figures / "qc_status_overview.svg"),
+        "important_qc_status_png": str(figures / "qc_status_overview.png"),
+        "important_qc_status_data": str(status_path),
+    }
+
+    checkm2_rows = [
+        {
+            "assembly_accession": row.get("assembly_accession", ""),
+            "completeness": row.get("checkm2_completeness", ""),
+            "contamination": row.get("checkm2_contamination", ""),
+        }
+        for row in dataset_rows
+        if row.get("checkm2_completeness") or row.get("checkm2_contamination")
+    ]
+    if checkm2_rows:
+        checkm2_path = figures / "checkm2_completeness_contamination.data.tsv"
+        write_rows(checkm2_path, checkm2_rows, ["assembly_accession", "completeness", "contamination"])
+        outputs["important_checkm2_data"] = str(checkm2_path)
+    return outputs
+
+
+def write_important_prevalence_outputs(sample_dir: Path, out_dir: Path, important_dir: Path, top_n: int = 20) -> dict[str, str]:
+    key_tables = important_dir / "key_tables"
+    figures = important_dir / "figures"
+    key_tables.mkdir(parents=True, exist_ok=True)
+    figures.mkdir(parents=True, exist_ok=True)
+    metadata_rows = read_table(sample_dir / "basic" / "enriched_genome_dataset.csv")
+    sample_count = len(metadata_rows)
+    features = [row for row in read_table(out_dir / "features" / "all_features.tsv") if row.get("presence", "1") != "0"]
+    by_feature: dict[tuple[str, str], set[str]] = defaultdict(set)
+    rows_by_feature: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
+    for row in features:
+        key = (row.get("database", ""), row.get("feature_id", ""))
+        sample = row.get("assembly_accession", "") or row.get("sample_id", "")
+        if key[0] and key[1] and sample:
+            by_feature[key].add(sample)
+            rows_by_feature[key].append(row)
+
+    summary_rows = []
+    for (database, feature_id), samples in sorted(by_feature.items()):
+        feature_rows = rows_by_feature[(database, feature_id)]
+        category = first_value(feature_rows[0], ["feature_category"], "")
+        prevalence = len(samples) / sample_count if sample_count else 0.0
+        summary_rows.append({
+            "database": database,
+            "feature_id": feature_id,
+            "feature_category": category,
+            "feature_rows": str(len(feature_rows)),
+            "positive_genomes": str(len(samples)),
+            "sample_count": str(sample_count),
+            "prevalence": f"{prevalence:.4f}",
+            "prevalence_percent": f"{prevalence * 100:.1f}",
+        })
+    summary_rows.sort(key=lambda row: (row["database"], -int(row["positive_genomes"]), row["feature_id"]))
+    summary_path = key_tables / "feature_prevalence_summary.tsv"
+    summary_fields = ["database", "feature_id", "feature_category", "feature_rows", "positive_genomes", "sample_count", "prevalence", "prevalence_percent"]
+    write_rows(summary_path, summary_rows, summary_fields)
+
+    outputs = {"important_feature_prevalence_summary": str(summary_path)}
+    for database in sorted({row["database"] for row in summary_rows}):
+        db_rows = [row for row in summary_rows if row["database"] == database][:top_n]
+        if not db_rows:
+            continue
+        data_path = figures / f"prevalence_{database}_top20.data.tsv"
+        svg_path = figures / f"prevalence_{database}_top20.svg"
+        png_path = figures / f"prevalence_{database}_top20.png"
+        write_rows(data_path, db_rows, summary_fields)
+        _write_bar_svg(svg_path, db_rows, f"{database} Prevalence Top {top_n}", "feature_id", "prevalence_percent", "Prevalence (%)")
+        _write_bar_png(png_path, db_rows, "prevalence_percent")
+        outputs[f"important_prevalence_{database}_data"] = str(data_path)
+        outputs[f"important_prevalence_{database}_svg"] = str(svg_path)
+        outputs[f"important_prevalence_{database}_png"] = str(png_path)
+    return outputs
+
+
+def _summary_stats(values: list[float]) -> dict[str, str]:
+    if not values:
+        return {"median": "", "min": "", "max": "", "iqr": ""}
+    values = sorted(values)
+    mid = len(values) // 2
+    median = values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2
+    q1 = values[len(values) // 4]
+    q3 = values[(len(values) * 3) // 4]
+    return {"median": f"{median:.2f}", "min": f"{values[0]:.2f}", "max": f"{values[-1]:.2f}", "iqr": f"{q3 - q1:.2f}"}
+
+
+def write_important_variation_outputs(sample_dir: Path, out_dir: Path, important_dir: Path, top_n: int = 20) -> dict[str, str]:
+    key_tables = important_dir / "key_tables"
+    figures = important_dir / "figures"
+    key_tables.mkdir(parents=True, exist_ok=True)
+    figures.mkdir(parents=True, exist_ok=True)
+    features = [row for row in read_table(out_dir / "features" / "all_features.tsv") if row.get("presence", "1") != "0"]
+    grouped: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
+    hit_rows = []
+    for row in features:
+        database = row.get("database", "")
+        feature_id = row.get("feature_id", "")
+        if not database or not feature_id:
+            continue
+        grouped[(database, feature_id)].append(row)
+        hit_rows.append({
+            "database": database,
+            "feature_id": feature_id,
+            "assembly_accession": row.get("assembly_accession", ""),
+            "sample_id": row.get("sample_id", ""),
+            "identity": row.get("identity", ""),
+            "coverage": row.get("coverage", ""),
+            "contig": row.get("contig", ""),
+            "start": row.get("start", ""),
+            "end": row.get("end", ""),
+            "tool": row.get("tool", ""),
+            "source_file": row.get("source_file", ""),
+        })
+
+    summary_rows = []
+    for (database, feature_id), rows in sorted(grouped.items()):
+        identities = [_float_or_none(row.get("identity", "")) for row in rows]
+        coverages = [_float_or_none(row.get("coverage", "")) for row in rows]
+        identities = [value for value in identities if value is not None]
+        coverages = [value for value in coverages if value is not None]
+        identity_stats = _summary_stats(identities)
+        coverage_stats = _summary_stats(coverages)
+        samples = {row.get("assembly_accession", "") or row.get("sample_id", "") for row in rows}
+        low_identity = sum(1 for value in identities if value < 90)
+        low_coverage = sum(1 for value in coverages if value < 80)
+        warnings = []
+        if low_identity:
+            warnings.append("low_identity")
+        if low_coverage:
+            warnings.append("low_coverage")
+        iqr_identity = _float_or_none(identity_stats["iqr"]) or 0.0
+        label = "high_variation" if iqr_identity >= 10 else ("moderate_variation" if iqr_identity >= 3 else "low_variation")
+        summary_rows.append({
+            "database": database,
+            "feature_id": feature_id,
+            "total_hits": str(len(rows)),
+            "positive_genomes": str(len(samples)),
+            "median_identity": identity_stats["median"],
+            "min_identity": identity_stats["min"],
+            "max_identity": identity_stats["max"],
+            "iqr_identity": identity_stats["iqr"],
+            "median_coverage": coverage_stats["median"],
+            "min_coverage": coverage_stats["min"],
+            "max_coverage": coverage_stats["max"],
+            "iqr_coverage": coverage_stats["iqr"],
+            "low_identity_hits": str(low_identity),
+            "low_coverage_hits": str(low_coverage),
+            "variation_label": label,
+            "warning_flags": ";".join(warnings),
+        })
+    summary_rows.sort(key=lambda row: (row["database"], -(_float_or_none(row["iqr_identity"]) or 0.0), row["feature_id"]))
+    summary_fields = [
+        "database", "feature_id", "total_hits", "positive_genomes",
+        "median_identity", "min_identity", "max_identity", "iqr_identity",
+        "median_coverage", "min_coverage", "max_coverage", "iqr_coverage",
+        "low_identity_hits", "low_coverage_hits", "variation_label", "warning_flags",
+    ]
+    summary_path = key_tables / "feature_variation_summary.tsv"
+    hits_path = key_tables / "feature_variation_hits.tsv"
+    write_rows(summary_path, summary_rows, summary_fields)
+    write_rows(hits_path, hit_rows, ["database", "feature_id", "assembly_accession", "sample_id", "identity", "coverage", "contig", "start", "end", "tool", "source_file"])
+
+    outputs = {
+        "important_feature_variation_summary": str(summary_path),
+        "important_feature_variation_hits": str(hits_path),
+    }
+    for database in sorted({row["database"] for row in summary_rows}):
+        db_rows = [row for row in summary_rows if row["database"] == database][:top_n]
+        if not db_rows:
+            continue
+        data_path = figures / f"variation_identity_{database}_top20.data.tsv"
+        svg_path = figures / f"variation_identity_{database}_top20.svg"
+        png_path = figures / f"variation_identity_{database}_top20.png"
+        write_rows(data_path, db_rows, summary_fields)
+        _write_bar_svg(svg_path, db_rows, f"{database} Identity Variation Top {top_n}", "feature_id", "iqr_identity", "Identity IQR")
+        _write_bar_png(png_path, db_rows, "iqr_identity")
+        outputs[f"important_variation_{database}_data"] = str(data_path)
+        outputs[f"important_variation_{database}_svg"] = str(svg_path)
+        outputs[f"important_variation_{database}_png"] = str(png_path)
+    return outputs
+
+
 def write_important_results_report(
     sample_dir: Path,
     out_dir: Path,
     important_dir: Path,
     geographic_outputs: dict[str, str],
+    qc_outputs: dict[str, str],
+    prevalence_outputs: dict[str, str],
+    variation_outputs: dict[str, str],
 ) -> dict[str, str]:
     important_dir.mkdir(parents=True, exist_ok=True)
     basic_csv = sample_dir / "basic" / "enriched_genome_dataset.csv"
@@ -3851,6 +4217,30 @@ def write_important_results_report(
     ]
     card_html = "".join(f"<div class='card'><span>{html.escape(label)}</span><strong>{html.escape(value)}</strong></div>" for label, value in cards)
     db_badges = " ".join(f"<span class='badge'>{html.escape(db)}</span>" for db in databases)
+    qc_steps = read_table(important_dir / "key_tables" / "qc_step_summary.tsv")
+    prevalence_rows = read_table(important_dir / "key_tables" / "feature_prevalence_summary.tsv")
+    variation_rows = read_table(important_dir / "key_tables" / "feature_variation_summary.tsv")
+    top_prevalence = sorted(prevalence_rows, key=lambda row: (row.get("database", ""), -(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("feature_id", "")))[:20]
+    top_variation = sorted(variation_rows, key=lambda row: (-(_float_or_none(row.get("iqr_identity", "")) or 0.0), row.get("database", ""), row.get("feature_id", "")))[:20]
+    qc_table_html = _html_table(qc_steps, ["step_order", "qc_step", "tool", "enabled", "pass", "warning", "fail", "skipped", "status", "notes"], max_rows=20)
+    prevalence_table_html = _html_table(top_prevalence, ["database", "feature_id", "positive_genomes", "sample_count", "prevalence_percent", "feature_rows"], max_rows=20)
+    variation_table_html = _html_table(top_variation, ["database", "feature_id", "total_hits", "positive_genomes", "median_identity", "iqr_identity", "median_coverage", "iqr_coverage", "variation_label", "warning_flags"], max_rows=20)
+    prevalence_figures = []
+    for path in sorted((important_dir / "figures").glob("prevalence_*_top20.svg")):
+        database = path.name.replace("prevalence_", "").replace("_top20.svg", "")
+        prevalence_figures.append(
+            f"<div><h3>{html.escape(database)} prevalence</h3><img src='figures/{html.escape(path.name)}' alt='{html.escape(database)} prevalence'>"
+            f"<p><a href='figures/{html.escape(path.with_suffix('.png').name)}'>PNG</a> | <a href='figures/{html.escape(path.name)}'>SVG</a> | <a href='figures/{html.escape(path.name.replace('.svg', '.data.tsv'))}'>Data TSV</a></p></div>"
+        )
+    prevalence_figures_html = "<div class='figure-row'>" + "".join(prevalence_figures[:6]) + "</div>" if prevalence_figures else "<p>No prevalence figures were generated because no feature rows were available.</p>"
+    variation_figures = []
+    for path in sorted((important_dir / "figures").glob("variation_identity_*_top20.svg")):
+        database = path.name.replace("variation_identity_", "").replace("_top20.svg", "")
+        variation_figures.append(
+            f"<div><h3>{html.escape(database)} identity variation</h3><img src='figures/{html.escape(path.name)}' alt='{html.escape(database)} identity variation'>"
+            f"<p><a href='figures/{html.escape(path.with_suffix('.png').name)}'>PNG</a> | <a href='figures/{html.escape(path.name)}'>SVG</a> | <a href='figures/{html.escape(path.name.replace('.svg', '.data.tsv'))}'>Data TSV</a></p></div>"
+        )
+    variation_figures_html = "<div class='figure-row'>" + "".join(variation_figures[:6]) + "</div>" if variation_figures else "<p>No variation figures were generated because no identity/coverage feature rows were available.</p>"
     report_path = important_dir / "results.html"
     report_path.write_text(
         f"""<!doctype html>
@@ -3869,13 +4259,21 @@ section {{ background: white; border: 1px solid #d9e2ec; border-radius: 6px; pad
 .downloads a {{ display: inline-block; margin: 0.25rem 0.5rem 0.25rem 0; padding: 0.45rem 0.7rem; background: #0f766e; color: white; text-decoration: none; border-radius: 4px; }}
 .warning {{ background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; }}
 iframe {{ width: 100%; height: 680px; border: 1px solid #d9e2ec; }}
+table {{ border-collapse: collapse; width: 100%; margin: 0.75rem 0; font-size: 0.9rem; }}
+th, td {{ border: 1px solid #d9e2ec; padding: 0.4rem; text-align: left; vertical-align: top; }}
+th {{ background: #f0f4f8; }}
+.figure-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; }}
+.figure-row img {{ max-width: 100%; border: 1px solid #d9e2ec; background: white; }}
 </style></head>
 <body>
 <nav>
 <h2>Results</h2>
 <a href="#featured">Featured Results</a>
 <a href="#overview">Run Overview</a>
+<a href="#qc">QC Summary</a>
+<a href="#prevalence">Prevalence</a>
 <a href="#geography">Geographic Distribution</a>
+<a href="#variations">Variations</a>
 <a href="#files">Important Files</a>
 <a href="#warnings">Warnings</a>
 </nav>
@@ -3883,12 +4281,27 @@ iframe {{ width: 100%; height: 680px; border: 1px solid #d9e2ec; }}
 <section id="featured"><h1>Featured Results</h1><div class="cards">{card_html}</div><p>{db_badges}</p></section>
 <section id="overview"><h2>Run Overview</h2><p>This curated report summarizes the key outputs while preserving complete advanced outputs in the full PanResistome bundle.</p>
 <div class="downloads"><a href="../basic/enriched_genome_dataset.csv">Download enriched dataset CSV</a><a href="../basic/enriched_genome_dataset.tsv">Download enriched dataset TSV</a><a href="../panr2_inputs/report/panr2_handoff_index.html">Open complete PanR2 handoff report</a></div></section>
+<section id="qc"><h2>QC Summary</h2><p>This section shows which QC steps were enabled, skipped, or passed before annotation.</p>
+<div class="figure-row"><div><h3>QC Funnel</h3><img src="figures/qc_funnel.svg" alt="QC funnel"></div><div><h3>QC Status</h3><img src="figures/qc_status_overview.svg" alt="QC status overview"></div></div>
+{qc_table_html}
+<div class="downloads"><a href="key_tables/qc_step_summary.tsv">Download QC step summary</a><a href="key_tables/qc_by_genome.tsv">Download per-genome QC table</a><a href="figures/qc_funnel.png">Download funnel PNG</a><a href="figures/qc_funnel.svg">Download funnel SVG</a><a href="figures/qc_funnel.data.tsv">Download funnel data</a></div></section>
+<section id="prevalence"><h2>Prevalence</h2><p>Feature prevalence is summarized by database. Top plots are capped for readability; the complete prevalence table is downloadable.</p>
+{prevalence_figures_html}
+{prevalence_table_html}
+<div class="downloads"><a href="key_tables/feature_prevalence_summary.tsv">Download complete prevalence table</a></div></section>
 <section id="geography"><h2>Geographic Distribution</h2><div class="warning">Geographic patterns reflect the analyzed dataset only. They are not global prevalence estimates and can be affected by BioProject, lineage, country, and year sampling bias.</div>
 <iframe src="figures/geographic_distribution_map.html" title="Geographic distribution map"></iframe>
 <div class="downloads"><a href="figures/geographic_distribution_map.html">Open map</a><a href="figures/geographic_distribution_map.png">Download initial PNG</a><a href="figures/geographic_distribution_map.svg">Download initial SVG</a><a href="figures/geographic_distribution.data.tsv">Download data TSV</a></div></section>
+<section id="variations"><h2>Variations</h2><p>Variation summaries use identity and coverage values when available. Low identity, low coverage, and high variation are review flags, not automatic failures.</p>
+{variation_figures_html}
+{variation_table_html}
+<div class="downloads"><a href="key_tables/feature_variation_summary.tsv">Download variation summary</a><a href="key_tables/feature_variation_hits.tsv">Download hit-level variation table</a></div></section>
 <section id="files"><h2>Important Files</h2><ul>
 <li><a href="../basic/enriched_genome_dataset.csv">Enriched genome dataset CSV</a></li>
+<li><a href="key_tables/qc_step_summary.tsv">QC step summary</a></li>
+<li><a href="key_tables/feature_prevalence_summary.tsv">Feature prevalence summary</a></li>
 <li><a href="key_tables/geographic_distribution.tsv">Geographic distribution table</a></li>
+<li><a href="key_tables/feature_variation_summary.tsv">Feature variation summary</a></li>
 <li><a href="../panr2_inputs/features/all_features.tsv">Complete standardized feature table</a></li>
 <li><a href="../panr2_inputs/manifest/schema_validation_summary.txt">Feature-contract validation summary</a></li>
 </ul></section>
@@ -3897,7 +4310,7 @@ iframe {{ width: 100%; height: 680px; border: 1px solid #d9e2ec; }}
 """,
         encoding="utf-8",
     )
-    return {"important_results_html": str(report_path), **geographic_outputs}
+    return {"important_results_html": str(report_path), **geographic_outputs, **qc_outputs, **prevalence_outputs, **variation_outputs}
 
 
 def write_user_output_bundles(
@@ -3916,8 +4329,11 @@ def write_user_output_bundles(
         important_dir = sample_dir / "important"
         manifest_dir = important_dir / "manifest"
         manifest_dir.mkdir(parents=True, exist_ok=True)
+        qc_outputs = write_important_qc_outputs(sample_dir, out_dir, important_dir)
+        prevalence_outputs = write_important_prevalence_outputs(sample_dir, out_dir, important_dir)
         geographic_outputs = write_important_geographic_outputs(sample_dir, out_dir, important_dir)
-        outputs.update(write_important_results_report(sample_dir, out_dir, important_dir, geographic_outputs))
+        variation_outputs = write_important_variation_outputs(sample_dir, out_dir, important_dir)
+        outputs.update(write_important_results_report(sample_dir, out_dir, important_dir, geographic_outputs, qc_outputs, prevalence_outputs, variation_outputs))
         write_rows(
             manifest_dir / "important_output_manifest.tsv",
             [
