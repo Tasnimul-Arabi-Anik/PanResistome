@@ -4191,6 +4191,351 @@ def _write_temporal_slope_png(path: Path, rows: list[dict[str, str]]) -> None:
     _write_png(path, width, height, pixels)
 
 
+def _safe_filename(value: str) -> str:
+    text = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value or "").strip())
+    return text.strip("_") or "unknown"
+
+
+def _cooccurrence_direction(phi: float, q_value: float | None, min_abs_phi: float = 0.2, q_threshold: float = 0.05) -> tuple[str, str]:
+    if q_value is None or q_value > q_threshold or abs(phi) < min_abs_phi:
+        return "not_significant", "not_significant"
+    if phi > 0:
+        return "positive", "significant_positive"
+    if phi < 0:
+        return "negative", "significant_negative"
+    return "not_significant", "not_significant"
+
+
+def _context_evidence_label(value: str) -> str:
+    text = str(value or "").lower()
+    if "overlap" in text or "adjacent" in text or "level_4" in text:
+        return "overlap_or_adjacent"
+    if "within_10kb" in text or "level_3" in text:
+        return "within_10kb"
+    if "within_50kb" in text:
+        return "within_50kb"
+    if "same_contig" in text or "level_2" in text:
+        return "same_contig"
+    if "same_genome" in text:
+        return "same_genome"
+    return "unknown"
+
+
+def _database_color(database: str) -> str:
+    palette = {
+        "amr": "#dc2626",
+        "amrfinderplus": "#ef4444",
+        "vfdb": "#16a34a",
+        "plasmidfinder": "#7c3aed",
+        "integronfinder": "#ea580c",
+        "mlst": "#2563eb",
+        "prophage": "#0891b2",
+        "genomad": "#0891b2",
+        "mobsuite": "#9333ea",
+        "isfinder": "#ca8a04",
+        "mobileelementfinder": "#ca8a04",
+        "defensefinder": "#475569",
+    }
+    return palette.get(str(database or "").lower(), "#64748b")
+
+
+def _cooccurrence_cell_color(row: dict[str, str]) -> str:
+    label = row.get("significance_label", "")
+    phi = _float_or_none(row.get("phi_correlation", "")) or 0.0
+    intensity = min(abs(phi), 1.0)
+    if label != "significant_positive" and label != "significant_negative":
+        return "#f1f5f9"
+    if label == "significant_positive":
+        red = 254
+        green = int(226 - 140 * intensity)
+        blue = int(226 - 140 * intensity)
+        return f"rgb({red},{green},{blue})"
+    red = int(219 - 150 * intensity)
+    green = int(234 - 120 * intensity)
+    blue = 254
+    return f"rgb({red},{green},{blue})"
+
+
+def _write_cooccurrence_heatmap_svg(path: Path, rows: list[dict[str, str]], title: str) -> None:
+    x_features = list(dict.fromkeys(row.get("feature_a_id", "") for row in rows if row.get("feature_a_id")))
+    y_features = list(dict.fromkeys(row.get("feature_b_id", "") for row in rows if row.get("feature_b_id")))
+    cell = 34
+    left = 230
+    top = 170
+    width = max(820, left + cell * max(len(x_features), 1) + 70)
+    height = max(320, top + cell * max(len(y_features), 1) + 50)
+    by_pair = {(row.get("feature_a_id", ""), row.get("feature_b_id", "")): row for row in rows}
+    parts = [
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
+        "<rect width='100%' height='100%' fill='#f8fafc'/>",
+        f"<text x='20' y='32' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
+        "<text x='20' y='60' font-family='Arial' font-size='12' fill='#52606d'>Red = significant positive association; blue = significant negative association; gray = not significant or below support threshold.</text>",
+    ]
+    for x_idx, feature in enumerate(x_features):
+        x = left + x_idx * cell + 18
+        label = feature if len(feature) <= 22 else feature[:19] + "..."
+        parts.append(f"<text x='{x}' y='{top - 8}' font-family='Arial' font-size='10' fill='#1f2933' transform='rotate(-60 {x} {top - 8})'>{html.escape(label)}</text>")
+    for y_idx, feature in enumerate(y_features):
+        y = top + y_idx * cell + 22
+        label = feature if len(feature) <= 28 else feature[:25] + "..."
+        parts.append(f"<text x='20' y='{y}' font-family='Arial' font-size='10' fill='#1f2933'>{html.escape(label)}</text>")
+    for y_idx, y_feature in enumerate(y_features):
+        for x_idx, x_feature in enumerate(x_features):
+            row = by_pair.get((x_feature, y_feature), {})
+            x = left + x_idx * cell
+            y = top + y_idx * cell
+            fill = _cooccurrence_cell_color(row)
+            phi = _float_or_none(row.get("phi_correlation", "")) if row else None
+            label = "" if phi is None or row.get("significance_label") not in {"significant_positive", "significant_negative"} else f"{phi:.2f}"
+            tip = (
+                f"{x_feature} vs {y_feature}; phi={row.get('phi_correlation', '')}; q={row.get('q_value', '')}; "
+                f"both={row.get('n_both_present', '')}/{row.get('n_total', '')}; {row.get('significance_label', '')}"
+            ) if row else f"{x_feature} vs {y_feature}: no pair"
+            parts.append(f"<rect x='{x}' y='{y}' width='{cell - 2}' height='{cell - 2}' fill='{fill}' stroke='#cbd5e1'><title>{html.escape(tip)}</title></rect>")
+            if label:
+                parts.append(f"<text x='{x + 4}' y='{y + 20}' font-family='Arial' font-size='10' fill='#111827'>{html.escape(label)}</text>")
+    parts.append("</svg>\n")
+    path.write_text("".join(parts), encoding="utf-8")
+
+
+def _write_cooccurrence_heatmap_png(path: Path, rows: list[dict[str, str]]) -> None:
+    x_features = list(dict.fromkeys(row.get("feature_a_id", "") for row in rows if row.get("feature_a_id")))
+    y_features = list(dict.fromkeys(row.get("feature_b_id", "") for row in rows if row.get("feature_b_id")))
+    cell = 34
+    left = 230
+    top = 170
+    width = max(820, left + cell * max(len(x_features), 1) + 70)
+    height = max(320, top + cell * max(len(y_features), 1) + 50)
+    pixels = [bytearray([248, 250, 252] * width) for _ in range(height)]
+    by_pair = {(row.get("feature_a_id", ""), row.get("feature_b_id", "")): row for row in rows}
+
+    def rect(x0: int, y0: int, x1: int, y1: int, color: tuple[int, int, int]) -> None:
+        for y in range(max(0, y0), min(height, y1)):
+            row_pixels = pixels[y]
+            for x in range(max(0, x0), min(width, x1)):
+                idx = x * 3
+                row_pixels[idx:idx + 3] = bytes(color)
+
+    def parse_color(row: dict[str, str]) -> tuple[int, int, int]:
+        label = row.get("significance_label", "")
+        phi = abs(_float_or_none(row.get("phi_correlation", "")) or 0.0)
+        intensity = min(phi, 1.0)
+        if label == "significant_positive":
+            return (254, int(226 - 140 * intensity), int(226 - 140 * intensity))
+        if label == "significant_negative":
+            return (int(219 - 150 * intensity), int(234 - 120 * intensity), 254)
+        return (241, 245, 249)
+
+    for y_idx, y_feature in enumerate(y_features):
+        for x_idx, x_feature in enumerate(x_features):
+            x = left + x_idx * cell
+            y = top + y_idx * cell
+            rect(x, y, x + cell - 2, y + cell - 2, parse_color(by_pair.get((x_feature, y_feature), {})))
+    _write_png(path, width, height, pixels)
+
+
+def _write_cooccurrence_network_svg(path: Path, nodes: list[dict[str, str]], edges: list[dict[str, str]], title: str) -> None:
+    width, height = 920, 620
+    cx, cy = width / 2, height / 2 + 20
+    radius = 230
+    positions: dict[str, tuple[float, float]] = {}
+    node_ids = [row.get("node_id", "") for row in nodes if row.get("node_id")]
+    for idx, node_id in enumerate(node_ids):
+        angle = 2 * math.pi * idx / max(len(node_ids), 1)
+        positions[node_id] = (cx + math.cos(angle) * radius, cy + math.sin(angle) * radius)
+    parts = [
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
+        "<rect width='100%' height='100%' fill='#f8fafc'/>",
+        f"<text x='20' y='32' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
+        "<text x='20' y='56' font-family='Arial' font-size='12' fill='#52606d'>Edges show significant sample-level co-occurrence unless stronger evidence is listed in the edge table.</text>",
+    ]
+    for edge in edges:
+        source = edge.get("source_feature", "")
+        target = edge.get("target_feature", "")
+        if source not in positions or target not in positions:
+            continue
+        x1, y1 = positions[source]
+        x2, y2 = positions[target]
+        phi = abs(_float_or_none(edge.get("phi_correlation", "")) or 0.0)
+        color = "#dc2626" if edge.get("direction") == "positive" else "#2563eb"
+        width_px = 1.0 + 5.0 * min(phi, 1.0)
+        dash = " stroke-dasharray='5 4'" if edge.get("evidence_level") == "same_genome" else ""
+        tip = f"{source} - {target}; phi={edge.get('phi_correlation', '')}; q={edge.get('q_value', '')}; both={edge.get('n_both_present', '')}"
+        parts.append(f"<line x1='{x1:.1f}' y1='{y1:.1f}' x2='{x2:.1f}' y2='{y2:.1f}' stroke='{color}' stroke-width='{width_px:.1f}' opacity='0.72'{dash}><title>{html.escape(tip)}</title></line>")
+    for node in nodes:
+        node_id = node.get("node_id", "")
+        if node_id not in positions:
+            continue
+        x, y = positions[node_id]
+        prevalence = _float_or_none(node.get("prevalence", "")) or 0.0
+        node_radius = max(6, min(24, 6 + prevalence * 22))
+        color = _database_color(node.get("database", ""))
+        label = node.get("node_label", node_id)
+        label = label if len(label) <= 22 else label[:19] + "..."
+        parts.append(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='{node_radius:.1f}' fill='{color}' fill-opacity='0.85' stroke='#1f2933'><title>{html.escape(node_id)} prevalence={prevalence:.3f}</title></circle>")
+        parts.append(f"<text x='{x + node_radius + 3:.1f}' y='{y + 4:.1f}' font-family='Arial' font-size='10' fill='#1f2933'>{html.escape(label)}</text>")
+    parts.append("</svg>\n")
+    path.write_text("".join(parts), encoding="utf-8")
+
+
+def _write_cooccurrence_network_png(path: Path, nodes: list[dict[str, str]], edges: list[dict[str, str]]) -> None:
+    width, height = 920, 620
+    cx, cy = width / 2, height / 2 + 20
+    radius = 230
+    pixels = [bytearray([248, 250, 252] * width) for _ in range(height)]
+    node_ids = [row.get("node_id", "") for row in nodes if row.get("node_id")]
+    positions: dict[str, tuple[float, float]] = {}
+    for idx, node_id in enumerate(node_ids):
+        angle = 2 * math.pi * idx / max(len(node_ids), 1)
+        positions[node_id] = (cx + math.cos(angle) * radius, cy + math.sin(angle) * radius)
+
+    def set_pixel(x: int, y: int, color: tuple[int, int, int]) -> None:
+        if 0 <= x < width and 0 <= y < height:
+            idx = x * 3
+            pixels[y][idx:idx + 3] = bytes(color)
+
+    def line(x0: float, y0: float, x1: float, y1: float, color: tuple[int, int, int]) -> None:
+        steps = int(max(abs(x1 - x0), abs(y1 - y0), 1))
+        for i in range(steps + 1):
+            t = i / steps
+            set_pixel(int(x0 + (x1 - x0) * t), int(y0 + (y1 - y0) * t), color)
+
+    def circle(cx0: float, cy0: float, r: float, color: tuple[int, int, int]) -> None:
+        r2 = r * r
+        for y in range(int(cy0 - r) - 1, int(cy0 + r) + 2):
+            for x in range(int(cx0 - r) - 1, int(cx0 + r) + 2):
+                if (x - cx0) ** 2 + (y - cy0) ** 2 <= r2:
+                    set_pixel(x, y, color)
+
+    for edge in edges:
+        source = edge.get("source_feature", "")
+        target = edge.get("target_feature", "")
+        if source in positions and target in positions:
+            line(*positions[source], *positions[target], (220, 38, 38) if edge.get("direction") == "positive" else (37, 99, 235))
+    for node in nodes:
+        node_id = node.get("node_id", "")
+        if node_id in positions:
+            circle(*positions[node_id], 9, (15, 118, 110))
+    _write_png(path, width, height, pixels)
+
+
+def _write_context_ladder_svg(path: Path, rows: list[dict[str, str]], title: str) -> None:
+    ladder = [
+        ("same_genome", "Same genome"),
+        ("same_contig", "Same contig"),
+        ("within_50kb", "Within 50 kb"),
+        ("within_10kb", "Within 10 kb"),
+        ("overlap_or_adjacent", "Overlap / adjacent"),
+    ]
+    values = {row.get("evidence_level", ""): _float_or_none(row.get("count", "")) or 0.0 for row in rows}
+    plot_rows = [{"label": label, "count": f"{values.get(key, 0):.0f}"} for key, label in ladder]
+    _write_bar_svg(path, plot_rows, title, "label", "count", "Feature-pair evidence count")
+
+
+def _write_context_ladder_png(path: Path, rows: list[dict[str, str]]) -> None:
+    _write_bar_png(path, rows, "count")
+
+
+def _write_contig_neighborhood_svg(path: Path, rows: list[dict[str, str]], title: str) -> None:
+    width = 1040
+    height = max(220, 110 + 38 * max(len(rows), 1))
+    intervals = []
+    for row in rows:
+        start = _as_int(row.get("start", ""))
+        end = _as_int(row.get("end", ""))
+        if start is None or end is None:
+            continue
+        if start > end:
+            start, end = end, start
+        intervals.append((start, end, row))
+    if not intervals:
+        Path(path).write_text(
+            f"""<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='180' viewBox='0 0 {width} 180'>
+<rect width='100%' height='100%' fill='#f8fafc'/>
+<text x='20' y='32' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>
+<text x='20' y='76' font-family='Arial' font-size='13' fill='#52606d'>No coordinate-complete feature rows were available for a neighborhood diagram.</text>
+</svg>
+""",
+            encoding="utf-8",
+        )
+        return
+    min_pos = min(start for start, _, _ in intervals)
+    max_pos = max(end for _, end, _ in intervals)
+    if min_pos == max_pos:
+        max_pos = min_pos + 1
+    left, right = 110, 950
+    parts = [
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
+        "<rect width='100%' height='100%' fill='#f8fafc'/>",
+        f"<text x='20' y='32' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
+        f"<line x1='{left}' y1='78' x2='{right}' y2='78' stroke='#94a3b8' stroke-width='3'/>",
+        f"<text x='{left}' y='100' font-family='Arial' font-size='11' fill='#52606d'>{min_pos} bp</text>",
+        f"<text x='{right - 70}' y='100' font-family='Arial' font-size='11' fill='#52606d'>{max_pos} bp</text>",
+    ]
+    for idx, (start, end, row) in enumerate(sorted(intervals, key=lambda item: (item[0], item[1]))):
+        x1 = left + (start - min_pos) / (max_pos - min_pos) * (right - left)
+        x2 = left + (end - min_pos) / (max_pos - min_pos) * (right - left)
+        if x2 - x1 < 8:
+            x2 = x1 + 8
+        y = 120 + idx * 34
+        color = _database_color(row.get("database", ""))
+        label = f"{row.get('database', '')}:{row.get('feature_id', '')}"
+        short = label if len(label) <= 44 else label[:41] + "..."
+        tip = f"{label}; {start}-{end}; identity={row.get('identity', '')}; coverage={row.get('coverage', '')}"
+        parts.append(f"<rect x='{x1:.1f}' y='{y}' width='{x2 - x1:.1f}' height='18' rx='2' fill='{color}'><title>{html.escape(tip)}</title></rect>")
+        parts.append(f"<text x='20' y='{y + 14}' font-family='Arial' font-size='11' fill='#1f2933'>{html.escape(short)}</text>")
+    parts.append("</svg>\n")
+    path.write_text("".join(parts), encoding="utf-8")
+
+
+def _write_contig_neighborhood_png(path: Path, rows: list[dict[str, str]]) -> None:
+    width = 1040
+    height = max(220, 110 + 38 * max(len(rows), 1))
+    pixels = [bytearray([248, 250, 252] * width) for _ in range(height)]
+    intervals = []
+    for row in rows:
+        start = _as_int(row.get("start", ""))
+        end = _as_int(row.get("end", ""))
+        if start is None or end is None:
+            continue
+        if start > end:
+            start, end = end, start
+        intervals.append((start, end, row))
+    if not intervals:
+        _write_png(path, width, height, pixels)
+        return
+    min_pos = min(start for start, _, _ in intervals)
+    max_pos = max(end for _, end, _ in intervals)
+    if min_pos == max_pos:
+        max_pos = min_pos + 1
+    left, right = 110, 950
+
+    def rect(x0: int, y0: int, x1: int, y1: int, color: tuple[int, int, int]) -> None:
+        for y in range(max(0, y0), min(height, y1)):
+            row_pixels = pixels[y]
+            for x in range(max(0, x0), min(width, x1)):
+                idx = x * 3
+                row_pixels[idx:idx + 3] = bytes(color)
+
+    color_map = {
+        "amr": (220, 38, 38),
+        "amrfinderplus": (239, 68, 68),
+        "vfdb": (22, 163, 74),
+        "plasmidfinder": (124, 58, 237),
+        "integronfinder": (234, 88, 12),
+        "isfinder": (202, 138, 4),
+        "mobileelementfinder": (202, 138, 4),
+    }
+    rect(left, 76, right, 80, (148, 163, 184))
+    for idx, (start, end, row) in enumerate(sorted(intervals, key=lambda item: (item[0], item[1]))):
+        x1 = int(left + (start - min_pos) / (max_pos - min_pos) * (right - left))
+        x2 = int(left + (end - min_pos) / (max_pos - min_pos) * (right - left))
+        if x2 - x1 < 8:
+            x2 = x1 + 8
+        y = 120 + idx * 34
+        rect(x1, y, x2, y + 18, color_map.get(row.get("database", ""), (100, 116, 139)))
+    _write_png(path, width, height, pixels)
+
 def _extract_year(value: str) -> int | None:
     match = re.search(r"(19|20)\d{2}", str(value or ""))
     if not match:
@@ -4934,6 +5279,475 @@ featureSelect.addEventListener('change', () => {{ renderLine(); }});
     return outputs
 
 
+def write_important_cooccurrence_context_outputs(sample_dir: Path, out_dir: Path, important_dir: Path, top_n: int = 20, min_support: int = 30) -> dict[str, str]:
+    tables = important_dir / "tables"
+    figures = important_dir / "figures"
+    tables.mkdir(parents=True, exist_ok=True)
+    figures.mkdir(parents=True, exist_ok=True)
+
+    features = [row for row in read_table(out_dir / "features" / "all_features.tsv") if row.get("presence", "1") != "0"]
+    presence = feature_presence(features)
+    sample_ids = sorted({row.get("assembly_accession", "") or row.get("sample_id", "") for row in features if row.get("assembly_accession", "") or row.get("sample_id", "")})
+    sample_count = len(sample_ids)
+    cooccurrence_source = read_table(out_dir / "cross_database" / "feature_cooccurrence.tsv")
+    proximity_source = read_table(out_dir / "cross_database" / "feature_proximity_all.tsv") or read_table(out_dir / "cross_database" / "feature_proximity.tsv")
+
+    pair_rows = []
+    feature_category: dict[tuple[str, str], str] = {}
+    feature_prevalence: dict[tuple[str, str], tuple[int, float]] = {}
+    for row in features:
+        key = (row.get("database", ""), row.get("feature_id", ""))
+        if key[0] and key[1] and key not in feature_category:
+            feature_category[key] = row.get("feature_category", "")
+    for key, samples in presence.items():
+        prevalence_value = len(samples) / sample_count if sample_count else 0.0
+        feature_prevalence[key] = (len(samples), prevalence_value)
+
+    for row in cooccurrence_source:
+        n_total = int(_float_or_none(row.get("n_total", "")) or sample_count)
+        n_both = int(_float_or_none(row.get("n_both_present", "")) or 0)
+        n_a_only = int(_float_or_none(row.get("n_a_only", "")) or 0)
+        n_b_only = int(_float_or_none(row.get("n_b_only", "")) or 0)
+        n_neither = int(_float_or_none(row.get("n_neither", "")) or 0)
+        phi = _float_or_none(row.get("phi", row.get("phi_correlation", ""))) or 0.0
+        p_value = _float_or_none(row.get("p_value", ""))
+        q_value = _float_or_none(row.get("q_value", ""))
+        feature_a = (row.get("feature_a_database", ""), row.get("feature_a_id", ""))
+        feature_b = (row.get("feature_b_database", ""), row.get("feature_b_id", ""))
+        a_count = len(presence.get(feature_a, set()))
+        b_count = len(presence.get(feature_b, set()))
+        prevalence_a = a_count / sample_count if sample_count else 0.0
+        prevalence_b = b_count / sample_count if sample_count else 0.0
+        direction, significance = _cooccurrence_direction(phi, q_value)
+        warnings = ["multiple_testing", "same_genome_only", "exploratory_only"]
+        support_label = "supported"
+        if n_total < min_support:
+            support_label = "low_sample_support"
+            significance = "insufficient_support"
+            warnings.append("low_sample_support")
+        if prevalence_a < 0.01 or prevalence_b < 0.01:
+            warnings.append("low_feature_prevalence")
+        pair_rows.append({
+            "feature_a_database": feature_a[0],
+            "feature_a_id": feature_a[1],
+            "feature_b_database": feature_b[0],
+            "feature_b_id": feature_b[1],
+            "n_total": str(n_total),
+            "n_both_present": str(n_both),
+            "n_a_only": str(n_a_only),
+            "n_b_only": str(n_b_only),
+            "n_neither": str(n_neither),
+            "prevalence_a": f"{prevalence_a:.4f}",
+            "prevalence_b": f"{prevalence_b:.4f}",
+            "cooccurrence_prevalence": f"{(n_both / n_total if n_total else 0.0):.4f}",
+            "phi_correlation": f"{phi:.4f}",
+            "odds_ratio": row.get("odds_ratio", ""),
+            "p_value": "" if p_value is None else f"{p_value:.6g}",
+            "q_value": "" if q_value is None else f"{q_value:.6g}",
+            "direction": direction,
+            "significance_label": significance,
+            "support_label": support_label,
+            "evidence_level": "same_genome",
+            "warning_flags": ";".join(dict.fromkeys(warnings)),
+        })
+
+    pair_fields = [
+        "feature_a_database", "feature_a_id", "feature_b_database", "feature_b_id",
+        "n_total", "n_both_present", "n_a_only", "n_b_only", "n_neither",
+        "prevalence_a", "prevalence_b", "cooccurrence_prevalence",
+        "phi_correlation", "odds_ratio", "p_value", "q_value", "direction",
+        "significance_label", "support_label", "evidence_level", "warning_flags",
+    ]
+    pair_summary_path = tables / "cooccurrence_pair_summary.tsv"
+    write_rows(pair_summary_path, pair_rows, pair_fields)
+
+    databases = sorted({key[0] for key in presence})
+    x_database = "amr" if "amr" in databases else (databases[0] if databases else "all")
+    y_database = "plasmidfinder" if "plasmidfinder" in databases else (next((db for db in databases if db != x_database), x_database) if databases else "all")
+    if not any(row["feature_a_database"] == x_database and row["feature_b_database"] == y_database for row in pair_rows):
+        if any(row["feature_b_database"] == x_database and row["feature_a_database"] == y_database for row in pair_rows):
+            x_database, y_database = y_database, x_database
+        elif pair_rows:
+            x_database = pair_rows[0]["feature_a_database"]
+            y_database = pair_rows[0]["feature_b_database"]
+
+    x_features = [
+        feature for feature, (_count, _prev) in sorted(
+            feature_prevalence.items(),
+            key=lambda item: (-item[1][0], item[0][0], item[0][1]),
+        )
+        if feature[0] == x_database
+    ][:top_n]
+    y_features = [
+        feature for feature, (_count, _prev) in sorted(
+            feature_prevalence.items(),
+            key=lambda item: (-item[1][0], item[0][0], item[0][1]),
+        )
+        if feature[0] == y_database
+    ][:top_n]
+    by_pair = {}
+    for row in pair_rows:
+        key = ((row["feature_a_database"], row["feature_a_id"]), (row["feature_b_database"], row["feature_b_id"]))
+        by_pair[key] = row
+        reverse = ((row["feature_b_database"], row["feature_b_id"]), (row["feature_a_database"], row["feature_a_id"]))
+        by_pair[reverse] = {
+            **row,
+            "feature_a_database": row["feature_b_database"],
+            "feature_a_id": row["feature_b_id"],
+            "feature_b_database": row["feature_a_database"],
+            "feature_b_id": row["feature_a_id"],
+            "n_a_only": row["n_b_only"],
+            "n_b_only": row["n_a_only"],
+            "prevalence_a": row["prevalence_b"],
+            "prevalence_b": row["prevalence_a"],
+        }
+
+    heatmap_rows = []
+    for feature_b in y_features:
+        for feature_a in x_features:
+            row = by_pair.get((feature_a, feature_b))
+            if row:
+                heatmap_rows.append(row)
+            else:
+                heatmap_rows.append({
+                    "feature_a_database": feature_a[0],
+                    "feature_a_id": feature_a[1],
+                    "feature_b_database": feature_b[0],
+                    "feature_b_id": feature_b[1],
+                    "n_total": str(sample_count),
+                    "n_both_present": "0",
+                    "n_a_only": "0",
+                    "n_b_only": "0",
+                    "n_neither": str(sample_count),
+                    "prevalence_a": f"{feature_prevalence.get(feature_a, (0, 0.0))[1]:.4f}",
+                    "prevalence_b": f"{feature_prevalence.get(feature_b, (0, 0.0))[1]:.4f}",
+                    "cooccurrence_prevalence": "0.0000",
+                    "phi_correlation": "0.0000",
+                    "odds_ratio": "",
+                    "p_value": "",
+                    "q_value": "",
+                    "direction": "not_significant",
+                    "significance_label": "insufficient_support" if sample_count < min_support else "not_significant",
+                    "support_label": "low_sample_support" if sample_count < min_support else "supported",
+                    "evidence_level": "same_genome",
+                    "warning_flags": "low_sample_support;same_genome_only;exploratory_only" if sample_count < min_support else "same_genome_only;exploratory_only",
+                })
+    heatmap_fields = pair_fields + ["heatmap_color_rule"]
+    for row in heatmap_rows:
+        row["heatmap_color_rule"] = "colored" if row["significance_label"] in {"significant_positive", "significant_negative"} else "uncolored"
+    heatmap_matrix_path = tables / "cooccurrence_heatmap_matrix.tsv"
+    write_rows(heatmap_matrix_path, heatmap_rows, heatmap_fields)
+
+    heatmap_base = f"cooccurrence_heatmap_{_safe_filename(x_database)}_vs_{_safe_filename(y_database)}"
+    heatmap_data = figures / f"{heatmap_base}.data.tsv"
+    heatmap_svg = figures / f"{heatmap_base}.svg"
+    heatmap_png = figures / f"{heatmap_base}.png"
+    write_rows(heatmap_data, heatmap_rows, heatmap_fields)
+    _write_cooccurrence_heatmap_svg(heatmap_svg, heatmap_rows, f"{x_database} vs {y_database} Co-occurrence")
+    _write_cooccurrence_heatmap_png(heatmap_png, heatmap_rows)
+
+    network_edges = [
+        {
+            "source_feature": f"{row['feature_a_database']}:{row['feature_a_id']}",
+            "source_database": row["feature_a_database"],
+            "target_feature": f"{row['feature_b_database']}:{row['feature_b_id']}",
+            "target_database": row["feature_b_database"],
+            "edge_weight": f"{abs(_float_or_none(row['phi_correlation']) or 0.0):.4f}",
+            "phi_correlation": row["phi_correlation"],
+            "q_value": row["q_value"],
+            "direction": row["direction"],
+            "evidence_level": row["evidence_level"],
+            "n_both_present": row["n_both_present"],
+        }
+        for row in sorted(pair_rows, key=lambda item: -abs(_float_or_none(item.get("phi_correlation", "")) or 0.0))
+        if row["significance_label"] in {"significant_positive", "significant_negative"}
+    ][:100]
+    node_ids = set()
+    for edge in network_edges:
+        node_ids.add(edge["source_feature"])
+        node_ids.add(edge["target_feature"])
+    node_rows = []
+    for node_id in sorted(node_ids):
+        database, feature_id = node_id.split(":", 1)
+        positive_genomes, prevalence_value = feature_prevalence.get((database, feature_id), (0, 0.0))
+        node_rows.append({
+            "node_id": node_id,
+            "feature_id": feature_id,
+            "database": database,
+            "feature_category": feature_category.get((database, feature_id), ""),
+            "prevalence": f"{prevalence_value:.4f}",
+            "positive_genomes": str(positive_genomes),
+            "node_size": f"{max(4, 4 + prevalence_value * 24):.1f}",
+            "node_label": feature_id,
+        })
+    edge_path = tables / "cooccurrence_network_edges.tsv"
+    node_path = tables / "cooccurrence_network_nodes.tsv"
+    edge_fields = ["source_feature", "source_database", "target_feature", "target_database", "edge_weight", "phi_correlation", "q_value", "direction", "evidence_level", "n_both_present"]
+    node_fields = ["node_id", "feature_id", "database", "feature_category", "prevalence", "positive_genomes", "node_size", "node_label"]
+    write_rows(edge_path, network_edges, edge_fields)
+    write_rows(node_path, node_rows, node_fields)
+    network_base = f"cooccurrence_network_{_safe_filename(x_database)}_vs_{_safe_filename(y_database)}"
+    network_data = figures / f"{network_base}.data.tsv"
+    network_svg = figures / f"{network_base}.svg"
+    network_png = figures / f"{network_base}.png"
+    write_rows(network_data, network_edges, edge_fields)
+    _write_cooccurrence_network_svg(network_svg, node_rows[:50], network_edges[:100], f"{x_database} vs {y_database} Co-occurrence Network")
+    _write_cooccurrence_network_png(network_png, node_rows[:50], network_edges[:100])
+
+    feature_lookup = {}
+    feature_lookup_fallback = {}
+    for row in features:
+        sample = row.get("assembly_accession", "") or row.get("sample_id", "")
+        key = (sample, row.get("contig", ""), row.get("database", ""), row.get("feature_id", ""), row.get("start", ""), row.get("end", ""))
+        feature_lookup[key] = row
+        feature_lookup_fallback[(sample, row.get("database", ""), row.get("feature_id", ""))] = row
+
+    context_rows = []
+    for row in proximity_source:
+        sample = row.get("assembly_accession", "")
+        a_key = (sample, row.get("contig", ""), row.get("feature_a_database", ""), row.get("feature_a_id", ""), row.get("feature_a_start", ""), row.get("feature_a_end", ""))
+        b_key = (sample, row.get("contig", ""), row.get("feature_b_database", ""), row.get("feature_b_id", ""), row.get("feature_b_start", ""), row.get("feature_b_end", ""))
+        a_feature = feature_lookup.get(a_key) or feature_lookup_fallback.get((sample, row.get("feature_a_database", ""), row.get("feature_a_id", "")), {})
+        b_feature = feature_lookup.get(b_key) or feature_lookup_fallback.get((sample, row.get("feature_b_database", ""), row.get("feature_b_id", "")), {})
+        evidence = _context_evidence_label(row.get("evidence_level", "") or row.get("interpretation_level", ""))
+        warnings = ["exploratory_only"]
+        if evidence == "same_contig":
+            warnings.append("same_genome_only" if not row.get("distance_bp") else "same_contig_context")
+        if not row.get("feature_a_start") or not row.get("feature_b_start"):
+            warnings.append("missing_coordinates")
+        context_rows.append({
+            "selected_database": row.get("feature_a_database", ""),
+            "selected_feature": row.get("feature_a_id", ""),
+            "context_database": row.get("feature_b_database", ""),
+            "context_feature": row.get("feature_b_id", ""),
+            "sample_id": sample,
+            "assembly_accession": sample,
+            "contig": row.get("contig", ""),
+            "selected_start": row.get("feature_a_start", ""),
+            "selected_end": row.get("feature_a_end", ""),
+            "context_start": row.get("feature_b_start", ""),
+            "context_end": row.get("feature_b_end", ""),
+            "distance_bp": row.get("distance_bp", ""),
+            "evidence_level": evidence,
+            "identity_selected": a_feature.get("identity", ""),
+            "coverage_selected": a_feature.get("coverage", ""),
+            "identity_context": b_feature.get("identity", ""),
+            "coverage_context": b_feature.get("coverage", ""),
+            "interpretation_warning": row.get("interpretation_warning", "Same-contig/proximity evidence does not prove transfer, expression, phenotype, or plasmid localization."),
+            "warning_flags": ";".join(dict.fromkeys(warnings)),
+        })
+    context_fields = [
+        "selected_database", "selected_feature", "context_database", "context_feature",
+        "sample_id", "assembly_accession", "contig", "selected_start", "selected_end",
+        "context_start", "context_end", "distance_bp", "evidence_level",
+        "identity_selected", "coverage_selected", "identity_context", "coverage_context",
+        "interpretation_warning", "warning_flags",
+    ]
+    context_path = tables / "genomic_context_evidence.tsv"
+    write_rows(context_path, context_rows, context_fields)
+
+    selected_feature_key = None
+    for row in context_rows:
+        if row["selected_database"] in {"amr", "amrfinderplus"}:
+            selected_feature_key = (row["selected_database"], row["selected_feature"])
+            break
+    if selected_feature_key is None and pair_rows:
+        selected_feature_key = (pair_rows[0]["feature_a_database"], pair_rows[0]["feature_a_id"])
+    selected_database, selected_feature = selected_feature_key if selected_feature_key else ("", "")
+
+    same_genome_count = sum(
+        1 for row in pair_rows
+        if row["n_both_present"] != "0"
+        and ((row["feature_a_database"], row["feature_a_id"]) == selected_feature_key or (row["feature_b_database"], row["feature_b_id"]) == selected_feature_key)
+    )
+    ladder_counts = Counter(row["evidence_level"] for row in context_rows if (row["selected_database"], row["selected_feature"]) == selected_feature_key)
+    ladder_rows = [
+        {"evidence_level": "same_genome", "count": str(same_genome_count)},
+        {"evidence_level": "same_contig", "count": str(ladder_counts.get("same_contig", 0) + ladder_counts.get("within_10kb", 0) + ladder_counts.get("overlap_or_adjacent", 0))},
+        {"evidence_level": "within_50kb", "count": str(ladder_counts.get("within_50kb", 0) + ladder_counts.get("within_10kb", 0) + ladder_counts.get("overlap_or_adjacent", 0))},
+        {"evidence_level": "within_10kb", "count": str(ladder_counts.get("within_10kb", 0) + ladder_counts.get("overlap_or_adjacent", 0))},
+        {"evidence_level": "overlap_or_adjacent", "count": str(ladder_counts.get("overlap_or_adjacent", 0))},
+    ]
+    ladder_base = f"genomic_context_evidence_ladder_{_safe_filename(selected_database)}_{_safe_filename(selected_feature)}"
+    ladder_data = figures / f"{ladder_base}.data.tsv"
+    ladder_svg = figures / f"{ladder_base}.svg"
+    ladder_png = figures / f"{ladder_base}.png"
+    write_rows(ladder_data, ladder_rows, ["evidence_level", "count"])
+    _write_context_ladder_svg(ladder_svg, ladder_rows, f"{selected_database}:{selected_feature} Context Evidence")
+    _write_context_ladder_png(ladder_png, ladder_rows)
+
+    context_counter = Counter()
+    for row in context_rows:
+        if (row["selected_database"], row["selected_feature"]) == selected_feature_key:
+            context_counter[(row["context_database"], row["context_feature"], row["evidence_level"])] += 1
+    top_context_rows = [
+        {
+            "context_database": database,
+            "context_feature": feature_id,
+            "evidence_level": evidence,
+            "count": str(count),
+            "feature_label": f"{database}:{feature_id}",
+        }
+        for (database, feature_id, evidence), count in context_counter.most_common(top_n)
+    ]
+    top_context_base = f"top_context_features_{_safe_filename(selected_database)}_{_safe_filename(selected_feature)}"
+    top_context_data = figures / f"{top_context_base}.data.tsv"
+    top_context_svg = figures / f"{top_context_base}.svg"
+    top_context_png = figures / f"{top_context_base}.png"
+    write_rows(top_context_data, top_context_rows, ["context_database", "context_feature", "evidence_level", "count", "feature_label"])
+    _write_bar_svg(top_context_svg, top_context_rows, f"Top Context Features For {selected_feature}", "feature_label", "count", "Context evidence count")
+    _write_bar_png(top_context_png, top_context_rows, "count")
+
+    neighborhood_rows = []
+    neighborhood_sample = ""
+    neighborhood_contig = ""
+    selected_context = next((row for row in context_rows if row.get("contig") and row.get("selected_start") and row.get("context_start")), None)
+    if selected_context:
+        neighborhood_sample = selected_context["assembly_accession"]
+        neighborhood_contig = selected_context["contig"]
+        for row in features:
+            sample = row.get("assembly_accession", "") or row.get("sample_id", "")
+            if sample == neighborhood_sample and row.get("contig", "") == neighborhood_contig:
+                neighborhood_rows.append({
+                    "assembly_accession": sample,
+                    "contig": row.get("contig", ""),
+                    "database": row.get("database", ""),
+                    "feature_id": row.get("feature_id", ""),
+                    "start": row.get("start", ""),
+                    "end": row.get("end", ""),
+                    "strand": row.get("strand", ""),
+                    "identity": row.get("identity", ""),
+                    "coverage": row.get("coverage", ""),
+                })
+    neighborhood_path = tables / "contig_neighborhoods.tsv"
+    neighborhood_fields = ["assembly_accession", "contig", "database", "feature_id", "start", "end", "strand", "identity", "coverage"]
+    write_rows(neighborhood_path, neighborhood_rows, neighborhood_fields)
+    neighborhood_base = f"contig_neighborhood_{_safe_filename(neighborhood_sample)}_{_safe_filename(neighborhood_contig)}" if neighborhood_rows else "contig_neighborhood_unavailable"
+    neighborhood_data = figures / f"{neighborhood_base}.data.tsv"
+    neighborhood_svg = figures / f"{neighborhood_base}.svg"
+    neighborhood_png = figures / f"{neighborhood_base}.png"
+    write_rows(neighborhood_data, neighborhood_rows, neighborhood_fields)
+    _write_contig_neighborhood_svg(neighborhood_svg, neighborhood_rows, f"{neighborhood_sample} {neighborhood_contig} Neighborhood")
+    _write_contig_neighborhood_png(neighborhood_png, neighborhood_rows)
+
+    same_contig_count = sum(1 for row in context_rows if row["evidence_level"] in {"same_contig", "within_10kb", "overlap_or_adjacent"})
+    within_10kb_count = sum(1 for row in context_rows if row["evidence_level"] in {"within_10kb", "overlap_or_adjacent"})
+    overlap_count = sum(1 for row in context_rows if row["evidence_level"] == "overlap_or_adjacent")
+    significant_positive = sum(1 for row in pair_rows if row["significance_label"] == "significant_positive")
+    significant_negative = sum(1 for row in pair_rows if row["significance_label"] == "significant_negative")
+    summary_rows = [{
+        "tested_pairs": str(len(pair_rows)),
+        "significant_positive_pairs": str(significant_positive),
+        "significant_negative_pairs": str(significant_negative),
+        "same_contig_context_pairs": str(same_contig_count),
+        "within_10kb_context_pairs": str(within_10kb_count),
+        "overlap_or_adjacent_context_pairs": str(overlap_count),
+        "selected_default_x_database": x_database,
+        "selected_default_y_database": y_database,
+        "message": "Co-occurrence is sample-level exploratory evidence. Same-contig/proximity evidence is stronger but does not prove transfer, expression, phenotype, or plasmid localization.",
+    }]
+    summary_path = tables / "cooccurrence_context_summary.tsv"
+    write_rows(summary_path, summary_rows, ["tested_pairs", "significant_positive_pairs", "significant_negative_pairs", "same_contig_context_pairs", "within_10kb_context_pairs", "overlap_or_adjacent_context_pairs", "selected_default_x_database", "selected_default_y_database", "message"])
+
+    interactive_html = figures / "cooccurrence_context.html"
+    interactive_html.write_text(
+        f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>Co-occurrence / Genomic Context</title>
+<style>
+body {{ font-family: Arial, sans-serif; color: #1f2933; margin: 1.5rem; }}
+label {{ font-weight: 700; margin-right: 0.35rem; }}
+select {{ margin: 0 1rem 0.75rem 0; padding: 0.35rem; }}
+.warning {{ background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; margin: 0.75rem 0; }}
+.heatmap-box {{ max-width: 100%; max-height: 700px; overflow: auto; border: 1px solid #d9e2ec; background: white; }}
+table {{ border-collapse: collapse; width: 100%; font-size: 0.88rem; }}
+th, td {{ border: 1px solid #d9e2ec; padding: 0.35rem; text-align: left; }}
+th {{ background: #f0f4f8; }}
+</style></head><body>
+<h1>Co-occurrence / Genomic Context</h1>
+<div class="warning">Sample-level co-occurrence does not prove physical linkage. Same-contig/proximity evidence is stronger, but still does not prove transfer, expression, phenotype, or plasmid localization.</div>
+<label for="xDatabase">X database</label><select id="xDatabase"></select>
+<label for="yDatabase">Y database</label><select id="yDatabase"></select>
+<label for="featureSet">Feature set</label><select id="featureSet"><option value="10">Top 10</option><option value="20" selected>Top 20</option><option value="50">Top 50</option><option value="99999">Complete</option></select>
+<label for="support">Minimum sample support</label><select id="support"><option value="0">All</option><option value="10">n >= 10</option><option value="20">n >= 20</option><option value="30" selected>n >= 30</option></select>
+<label for="effect">Effect size</label><select id="effect"><option value="0">Any</option><option value="0.2" selected>|phi| >= 0.2</option><option value="0.4">|phi| >= 0.4</option><option value="0.6">|phi| >= 0.6</option></select>
+<div id="summary"></div>
+<div class="heatmap-box" id="heatmap"></div>
+<h2>Top Pair Table</h2><div id="pairTable"></div>
+<p><a href="{html.escape(heatmap_base)}.png">Download default heatmap PNG</a> | <a href="{html.escape(heatmap_base)}.svg">Download default heatmap SVG</a> | <a href="{html.escape(heatmap_base)}.data.tsv">Download default heatmap data</a> | <a href="../tables/cooccurrence_pair_summary.tsv">Download full pair table</a></p>
+<script>
+const pairs = {json.dumps(pair_rows)};
+function num(value) {{ const n = Number(value); return Number.isFinite(n) ? n : 0; }}
+const xSelect = document.getElementById('xDatabase'), ySelect = document.getElementById('yDatabase'), featureSet = document.getElementById('featureSet'), support = document.getElementById('support'), effect = document.getElementById('effect');
+const databases = Array.from(new Set(pairs.flatMap(r => [r.feature_a_database, r.feature_b_database]))).filter(Boolean).sort();
+function fillSelect(select, preferred) {{ select.innerHTML = databases.map(db => `<option value="${{db}}">${{db}}</option>`).join(''); if (databases.includes(preferred)) select.value = preferred; }}
+fillSelect(xSelect, '{html.escape(x_database)}'); fillSelect(ySelect, '{html.escape(y_database)}');
+function label(row, side) {{ return side === 'a' ? row.feature_a_database + ':' + row.feature_a_id : row.feature_b_database + ':' + row.feature_b_id; }}
+function render() {{
+  const minSupport = Number(support.value), minEffect = Number(effect.value), limit = Number(featureSet.value);
+  let active = pairs.filter(r => r.feature_a_database === xSelect.value && r.feature_b_database === ySelect.value);
+  if (!active.length) active = pairs.filter(r => r.feature_b_database === xSelect.value && r.feature_a_database === ySelect.value).map(r => Object.assign({{}}, r, {{feature_a_database: r.feature_b_database, feature_a_id: r.feature_b_id, feature_b_database: r.feature_a_database, feature_b_id: r.feature_a_id}}));
+  const xFeatures = Array.from(new Set(active.map(r => r.feature_a_id))).slice(0, limit);
+  const yFeatures = Array.from(new Set(active.map(r => r.feature_b_id))).slice(0, limit);
+  const byPair = new Map(active.map(r => [r.feature_a_id + '||' + r.feature_b_id, r]));
+  let html = '<table><thead><tr><th></th>' + xFeatures.map(f => `<th>${{f}}</th>`).join('') + '</tr></thead><tbody>';
+  for (const y of yFeatures) {{
+    html += `<tr><th>${{y}}</th>`;
+    for (const x of xFeatures) {{
+      const r = byPair.get(x + '||' + y);
+      let color = '#f1f5f9', text = '';
+      if (r && num(r.n_total) >= minSupport && Math.abs(num(r.phi_correlation)) >= minEffect && (r.significance_label === 'significant_positive' || r.significance_label === 'significant_negative')) {{
+        const intensity = Math.min(Math.abs(num(r.phi_correlation)), 1);
+        color = r.significance_label === 'significant_positive' ? `rgb(254,${{Math.round(226 - 140 * intensity)}},${{Math.round(226 - 140 * intensity)}})` : `rgb(${{Math.round(219 - 150 * intensity)}},${{Math.round(234 - 120 * intensity)}},254)`;
+        text = num(r.phi_correlation).toFixed(2);
+      }}
+      const tip = r ? `phi=${{r.phi_correlation}}; q=${{r.q_value}}; both=${{r.n_both_present}}/${{r.n_total}}; ${{r.significance_label}}` : 'No pair';
+      html += `<td style="background:${{color}}" title="${{tip}}">${{text}}</td>`;
+    }}
+    html += '</tr>';
+  }}
+  html += '</tbody></table>';
+  document.getElementById('heatmap').innerHTML = html;
+  const significant = active.filter(r => r.significance_label === 'significant_positive' || r.significance_label === 'significant_negative');
+  document.getElementById('summary').innerHTML = `<p>${{active.length}} tested pairs for ${{xSelect.value}} vs ${{ySelect.value}}; ${{significant.length}} significant pairs before current display filters. Gray cells are not significant or below support/effect thresholds.</p>`;
+  const top = active.slice().sort((a,b) => Math.abs(num(b.phi_correlation)) - Math.abs(num(a.phi_correlation))).slice(0, 50);
+  const cols = ['feature_a_database','feature_a_id','feature_b_database','feature_b_id','n_total','n_both_present','phi_correlation','q_value','significance_label','warning_flags'];
+  document.getElementById('pairTable').innerHTML = '<table><thead><tr>' + cols.map(c => `<th>${{c}}</th>`).join('') + '</tr></thead><tbody>' + top.map(r => '<tr>' + cols.map(c => `<td>${{r[c] || ''}}</td>`).join('') + '</tr>').join('') + '</tbody></table>';
+}}
+[xSelect, ySelect, featureSet, support, effect].forEach(el => el.addEventListener('change', render));
+render();
+</script></body></html>
+""",
+        encoding="utf-8",
+    )
+
+    outputs = {
+        "important_cooccurrence_pair_summary": str(pair_summary_path),
+        "important_cooccurrence_heatmap_matrix": str(heatmap_matrix_path),
+        "important_cooccurrence_network_edges": str(edge_path),
+        "important_cooccurrence_network_nodes": str(node_path),
+        "important_genomic_context_evidence": str(context_path),
+        "important_contig_neighborhoods": str(neighborhood_path),
+        "important_cooccurrence_context_summary": str(summary_path),
+        "important_cooccurrence_heatmap_svg": str(heatmap_svg),
+        "important_cooccurrence_heatmap_png": str(heatmap_png),
+        "important_cooccurrence_heatmap_data": str(heatmap_data),
+        "important_cooccurrence_network_svg": str(network_svg),
+        "important_cooccurrence_network_png": str(network_png),
+        "important_cooccurrence_network_data": str(network_data),
+        "important_context_ladder_svg": str(ladder_svg),
+        "important_context_ladder_png": str(ladder_png),
+        "important_context_ladder_data": str(ladder_data),
+        "important_top_context_features_svg": str(top_context_svg),
+        "important_top_context_features_png": str(top_context_png),
+        "important_top_context_features_data": str(top_context_data),
+        "important_contig_neighborhood_svg": str(neighborhood_svg),
+        "important_contig_neighborhood_png": str(neighborhood_png),
+        "important_contig_neighborhood_data": str(neighborhood_data),
+        "important_cooccurrence_context_html": str(interactive_html),
+    }
+    return outputs
+
+
 def write_important_results_report(
     sample_dir: Path,
     out_dir: Path,
@@ -4943,6 +5757,7 @@ def write_important_results_report(
     prevalence_outputs: dict[str, str],
     variation_outputs: dict[str, str],
     temporal_outputs: dict[str, str],
+    cooccurrence_outputs: dict[str, str],
 ) -> dict[str, str]:
     important_dir.mkdir(parents=True, exist_ok=True)
     basic_csv = sample_dir / "basic" / "enriched_genome_dataset.csv"
@@ -4967,13 +5782,20 @@ def write_important_results_report(
     prevalence_rows = read_table(important_dir / "key_tables" / "feature_prevalence_summary.tsv")
     variation_rows = read_table(important_dir / "key_tables" / "feature_variation_summary.tsv")
     temporal_rows = read_table(important_dir / "key_tables" / "temporal_trend_summary.tsv")
+    cooccurrence_rows = read_table(important_dir / "tables" / "cooccurrence_pair_summary.tsv")
+    cooccurrence_summary_rows = read_table(important_dir / "tables" / "cooccurrence_context_summary.tsv")
+    context_rows = read_table(important_dir / "tables" / "genomic_context_evidence.tsv")
     top_prevalence = sorted(prevalence_rows, key=lambda row: (row.get("database", ""), -(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("feature_id", "")))[:20]
     top_variation = sorted(variation_rows, key=lambda row: (-(_float_or_none(row.get("iqr_identity", "")) or 0.0), row.get("database", ""), row.get("feature_id", "")))[:20]
     top_temporal = sorted(temporal_rows, key=lambda row: (-abs(_float_or_none(row.get("change_percent_points", "")) or 0.0), row.get("database", ""), row.get("feature_id", "")))[:20]
+    top_cooccurrence = sorted(cooccurrence_rows, key=lambda row: (-abs(_float_or_none(row.get("phi_correlation", "")) or 0.0), row.get("feature_a_database", ""), row.get("feature_a_id", "")))[:20]
+    top_context = context_rows[:20]
     qc_table_html = _html_table(qc_steps, ["step_order", "qc_step", "tool", "enabled", "pass", "warning", "fail", "skipped", "status", "notes"], max_rows=20)
     prevalence_table_html = _html_table(top_prevalence, ["database", "feature_id", "positive_genomes", "sample_count", "prevalence_percent", "feature_rows"], max_rows=20)
     variation_table_html = _html_table(top_variation, ["database", "feature_id", "total_hits", "positive_genomes", "median_identity", "iqr_identity", "median_coverage", "iqr_coverage", "variation_label", "warning_flags"], max_rows=20)
     temporal_table_html = _html_table(top_temporal, ["database", "feature_id", "first_year", "last_year", "first_year_prevalence_percent", "last_year_prevalence_percent", "change_percent_points", "correlation", "trend_label", "support_label", "warning_flags"], max_rows=20)
+    cooccurrence_table_html = _html_table(top_cooccurrence, ["feature_a_database", "feature_a_id", "feature_b_database", "feature_b_id", "n_total", "n_both_present", "phi_correlation", "q_value", "direction", "significance_label", "warning_flags"], max_rows=20)
+    context_table_html = _html_table(top_context, ["selected_database", "selected_feature", "context_database", "context_feature", "assembly_accession", "contig", "distance_bp", "evidence_level", "warning_flags"], max_rows=20)
     prevalence_figures = []
     for path in sorted((important_dir / "figures").glob("prevalence_*_top20.svg")):
         database = path.name.replace("prevalence_", "").replace("_top20.svg", "")
@@ -5007,6 +5829,35 @@ def write_important_results_report(
             f"<p><a href='figures/{html.escape(figure_name)}.png'>PNG</a> | <a href='figures/{html.escape(figure_name)}.svg'>SVG</a> | <a href='figures/{html.escape(figure_name)}.data.tsv'>Data TSV</a></p></div>"
         )
     temporal_figures_html = "<div class='figure-row'>" + "".join(temporal_figure_items) + "</div>" if temporal_figure_items else "<p>No temporal figures were generated because collection-year metadata or feature rows were unavailable.</p>"
+    cooccurrence_summary = cooccurrence_summary_rows[0] if cooccurrence_summary_rows else {}
+    cooccurrence_summary_html = (
+        "<p>"
+        f"Co-occurrence analysis tested {html.escape(cooccurrence_summary.get('tested_pairs', '0'))} feature pairs, "
+        f"including {html.escape(cooccurrence_summary.get('significant_positive_pairs', '0'))} significant positive pairs and "
+        f"{html.escape(cooccurrence_summary.get('significant_negative_pairs', '0'))} significant negative pairs. "
+        f"Same-contig/proximity evidence rows: {html.escape(cooccurrence_summary.get('same_contig_context_pairs', '0'))}; "
+        f"within 10 kb: {html.escape(cooccurrence_summary.get('within_10kb_context_pairs', '0'))}."
+        "</p>"
+    )
+    cooccurrence_figure_items = []
+    for key, title in [
+        ("important_cooccurrence_heatmap_svg", "Co-occurrence heatmap"),
+        ("important_cooccurrence_network_svg", "Co-occurrence network"),
+        ("important_context_ladder_svg", "Context evidence ladder"),
+        ("important_top_context_features_svg", "Top context features"),
+        ("important_contig_neighborhood_svg", "Contig neighborhood"),
+    ]:
+        figure_path = Path(cooccurrence_outputs.get(key, ""))
+        if not figure_path.exists():
+            continue
+        stem = figure_path.stem
+        png_name = figure_path.with_suffix(".png").name
+        data_name = f"{stem}.data.tsv"
+        cooccurrence_figure_items.append(
+            f"<div><h3>{html.escape(title)}</h3><img src='figures/{html.escape(figure_path.name)}' alt='{html.escape(title)}'>"
+            f"<p><a href='figures/{html.escape(png_name)}'>PNG</a> | <a href='figures/{html.escape(figure_path.name)}'>SVG</a> | <a href='figures/{html.escape(data_name)}'>Data TSV</a></p></div>"
+        )
+    cooccurrence_figures_html = "<div class='figure-row'>" + "".join(cooccurrence_figure_items) + "</div>" if cooccurrence_figure_items else "<p>No co-occurrence/context figures were generated because feature-pair data were unavailable.</p>"
     report_path = important_dir / "results.html"
     report_path.write_text(
         f"""<!doctype html>
@@ -5041,6 +5892,7 @@ th {{ background: #f0f4f8; }}
 <a href="#geography">Geographic Distribution</a>
 <a href="#variations">Variations</a>
 <a href="#temporal">Temporal Trends</a>
+<a href="#cooccurrence">Co-occurrence / Genomic Context</a>
 <a href="#files">Important Files</a>
 <a href="#warnings">Warnings</a>
 </nav>
@@ -5069,6 +5921,15 @@ th {{ background: #f0f4f8; }}
 {temporal_figures_html}
 {temporal_table_html}
 <div class="downloads"><a href="figures/temporal_trends.html">Open interactive temporal report</a><a href="key_tables/temporal_database_burden.tsv">Download database burden by year</a><a href="key_tables/temporal_feature_prevalence.tsv">Download yearly feature prevalence</a><a href="key_tables/temporal_trend_summary.tsv">Download temporal trend summary</a><a href="key_tables/temporal_increasing_features.tsv">Download increasing features</a><a href="key_tables/temporal_decreasing_features.tsv">Download decreasing features</a></div></section>
+<section id="cooccurrence"><h2>Co-occurrence / Genomic Context</h2><div class="warning">Sample-level co-occurrence does not prove physical linkage. Same-contig and proximity evidence are stronger context signals, but do not prove transfer, expression, phenotype, or plasmid localization.</div>
+{cooccurrence_summary_html}
+<iframe src="figures/cooccurrence_context.html" title="Co-occurrence and genomic context interactive report"></iframe>
+{cooccurrence_figures_html}
+<h3>Top co-occurrence pairs</h3>
+{cooccurrence_table_html}
+<h3>Genomic context evidence</h3>
+{context_table_html}
+<div class="downloads"><a href="figures/cooccurrence_context.html">Open interactive co-occurrence report</a><a href="tables/cooccurrence_pair_summary.tsv">Download pair summary</a><a href="tables/cooccurrence_heatmap_matrix.tsv">Download heatmap matrix</a><a href="tables/cooccurrence_network_edges.tsv">Download network edges</a><a href="tables/cooccurrence_network_nodes.tsv">Download network nodes</a><a href="tables/genomic_context_evidence.tsv">Download genomic context evidence</a><a href="tables/contig_neighborhoods.tsv">Download contig neighborhoods</a></div></section>
 <section id="files"><h2>Important Files</h2><ul>
 <li><a href="../basic/enriched_genome_dataset.csv">Enriched genome dataset CSV</a></li>
 <li><a href="key_tables/qc_step_summary.tsv">QC step summary</a></li>
@@ -5076,6 +5937,8 @@ th {{ background: #f0f4f8; }}
 <li><a href="key_tables/geographic_distribution.tsv">Geographic distribution table</a></li>
 <li><a href="key_tables/feature_variation_summary.tsv">Feature variation summary</a></li>
 <li><a href="key_tables/temporal_trend_summary.tsv">Temporal trend summary</a></li>
+<li><a href="tables/cooccurrence_pair_summary.tsv">Co-occurrence pair summary</a></li>
+<li><a href="tables/genomic_context_evidence.tsv">Genomic context evidence</a></li>
 <li><a href="../panr2_inputs/features/all_features.tsv">Complete standardized feature table</a></li>
 <li><a href="../panr2_inputs/manifest/schema_validation_summary.txt">Feature-contract validation summary</a></li>
 </ul></section>
@@ -5084,7 +5947,7 @@ th {{ background: #f0f4f8; }}
 """,
         encoding="utf-8",
     )
-    return {"important_results_html": str(report_path), **geographic_outputs, **qc_outputs, **prevalence_outputs, **variation_outputs, **temporal_outputs}
+    return {"important_results_html": str(report_path), **geographic_outputs, **qc_outputs, **prevalence_outputs, **variation_outputs, **temporal_outputs, **cooccurrence_outputs}
 
 
 def write_user_output_bundles(
@@ -5108,7 +5971,8 @@ def write_user_output_bundles(
         geographic_outputs = write_important_geographic_outputs(sample_dir, out_dir, important_dir)
         variation_outputs = write_important_variation_outputs(sample_dir, out_dir, important_dir)
         temporal_outputs = write_important_temporal_outputs(sample_dir, out_dir, important_dir)
-        outputs.update(write_important_results_report(sample_dir, out_dir, important_dir, geographic_outputs, qc_outputs, prevalence_outputs, variation_outputs, temporal_outputs))
+        cooccurrence_outputs = write_important_cooccurrence_context_outputs(sample_dir, out_dir, important_dir)
+        outputs.update(write_important_results_report(sample_dir, out_dir, important_dir, geographic_outputs, qc_outputs, prevalence_outputs, variation_outputs, temporal_outputs, cooccurrence_outputs))
         write_rows(
             manifest_dir / "important_output_manifest.tsv",
             [

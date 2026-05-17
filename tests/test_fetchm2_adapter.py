@@ -213,11 +213,25 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue((sample_dir / "important" / "figures" / "temporal_trends.html").exists())
             self.assertTrue((sample_dir / "important" / "figures" / "temporal_selected_feature_prevalence.svg").exists())
             self.assertTrue((sample_dir / "important" / "figures" / "temporal_slope_top40.png").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "cooccurrence_pair_summary.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "cooccurrence_heatmap_matrix.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "cooccurrence_network_edges.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "cooccurrence_network_nodes.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "genomic_context_evidence.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "contig_neighborhoods.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "cooccurrence_context.html").exists())
+            self.assertTrue(any((sample_dir / "important" / "figures").glob("cooccurrence_heatmap_*_vs_*.svg")))
+            self.assertTrue(any((sample_dir / "important" / "figures").glob("cooccurrence_network_*_vs_*.png")))
             temporal_summary = pd.read_csv(sample_dir / "important" / "key_tables" / "temporal_trend_summary.tsv", sep="\t")
             self.assertTrue({"trend_label", "support_label", "temporal_pattern_label", "warning_flags"}.issubset(temporal_summary.columns))
             temporal_html = (sample_dir / "important" / "figures" / "temporal_trends.html").read_text(encoding="utf-8")
             for control in ["Database", "Trend", "Support", "Feature", "Selected Feature Prevalence", "First-to-Last Year Slope"]:
                 self.assertIn(control, temporal_html)
+            cooccurrence_html = (sample_dir / "important" / "figures" / "cooccurrence_context.html").read_text(encoding="utf-8")
+            for control in ["X database", "Y database", "Feature set", "Minimum sample support", "Effect size"]:
+                self.assertIn(control, cooccurrence_html)
+            cooccurrence_pairs = pd.read_csv(sample_dir / "important" / "tables" / "cooccurrence_pair_summary.tsv", sep="\t")
+            self.assertTrue({"phi_correlation", "q_value", "significance_label", "evidence_level", "warning_flags"}.issubset(cooccurrence_pairs.columns))
             report_html = (sample_dir / "important" / "results.html").read_text(encoding="utf-8")
             for section in [
                 "Featured Results",
@@ -227,6 +241,7 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "Geographic Distribution",
                 "Variations",
                 "Temporal Trends",
+                "Co-occurrence / Genomic Context",
                 "Warnings And Limitations",
                 "Important Files",
             ]:
@@ -674,6 +689,13 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertEqual(context.loc[0, "same_contig_evidence"], "yes")
             self.assertTrue(Path(outputs["cross_database_interpretation_html"]).exists())
             self.assertTrue(Path(outputs["top_findings_html"]).exists())
+            important_context = pd.read_csv(sample_dir / "important" / "tables" / "genomic_context_evidence.tsv", sep="\t")
+            self.assertFalse(important_context.empty)
+            self.assertIn("within_10kb", set(important_context["evidence_level"]))
+            neighborhoods = pd.read_csv(sample_dir / "important" / "tables" / "contig_neighborhoods.tsv", sep="\t")
+            self.assertFalse(neighborhoods.empty)
+            self.assertTrue((sample_dir / "important" / "figures" / "cooccurrence_context.html").exists())
+            self.assertTrue(any((sample_dir / "important" / "figures").glob("genomic_context_evidence_ladder_*.svg")))
 
     def test_bioproject_bias_and_amrfinder_abricate_concordance_outputs(self):
         with tempfile.TemporaryDirectory() as tmpdir:
