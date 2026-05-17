@@ -229,6 +229,7 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue((sample_dir / "important" / "tables" / "metadata_burden_associations.tsv").exists())
             self.assertTrue((sample_dir / "important" / "tables" / "metadata_category_enrichment.tsv").exists())
             self.assertTrue((sample_dir / "important" / "tables" / "metadata_association_summary.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "metadata_usability_summary.tsv").exists())
             self.assertTrue((sample_dir / "important" / "figures" / "metadata_associations.html").exists())
             self.assertTrue((sample_dir / "important" / "metadata_association_tables.zip").exists())
             self.assertTrue((sample_dir / "important" / "metadata_association_figures.zip").exists())
@@ -262,6 +263,8 @@ class FetchM2AdapterTests(unittest.TestCase):
                 self.assertIn(control, metadata_html)
             metadata_enrichment = pd.read_csv(sample_dir / "important" / "tables" / "metadata_feature_enrichment.tsv", sep="\t")
             self.assertTrue({"odds_ratio", "p_value", "q_value", "support_label", "interpretation_label", "warning_flags"}.issubset(metadata_enrichment.columns))
+            metadata_usability = pd.read_csv(sample_dir / "important" / "tables" / "metadata_usability_summary.tsv", sep="\t")
+            self.assertTrue({"metadata_column", "non_missing_count", "missing_fraction", "eligible_for_testing", "recommended_use"}.issubset(metadata_usability.columns))
             report_html = (sample_dir / "important" / "results.html").read_text(encoding="utf-8")
             for section in [
                 "Featured Results",

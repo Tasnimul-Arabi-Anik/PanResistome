@@ -696,6 +696,7 @@ results/
     │   ├── tables/metadata_burden_associations.tsv
     │   ├── tables/metadata_category_enrichment.tsv
     │   ├── tables/metadata_association_summary.tsv
+    │   ├── tables/metadata_usability_summary.tsv
     │   ├── cooccurrence_tables.zip
     │   ├── cooccurrence_figures.zip
     │   ├── metadata_association_tables.zip

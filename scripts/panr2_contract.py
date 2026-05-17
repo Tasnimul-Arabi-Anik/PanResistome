@@ -6247,17 +6247,136 @@ def write_important_metadata_association_outputs(
         "country",
         "continent",
         "subcontinent",
+        "region",
         "host",
         "host_group",
         "sample_type",
         "environment_medium",
         "collection_year",
         "bioproject",
+        "biosample",
+        "mlst_ST",
+        "ani_cluster",
+        "mash_cluster",
+        "dominant_lineage_label",
         "assembly_level",
     ]
+    excluded_metadata_columns = {
+        "assembly_accession",
+        "sample_id",
+        "organism_name",
+        "taxid",
+        "ftp_path_refseq",
+        "ftp_path_genbank",
+        "qc_status",
+        "qc_pass",
+        "qc_fail_reasons",
+        "quast_status",
+        "ani_status",
+        "ani_species_match",
+        "mash_status",
+        "genome_size",
+        "contig_count",
+        "n50",
+        "gc_percent",
+        "checkm2_completeness",
+        "checkm2_contamination",
+        "amr_genes",
+        "amrfinderplus_genes",
+        "drug_classes",
+        "resistance_mechanisms",
+        "vfdb_genes",
+        "vfdb_categories",
+        "plasmid_replicons",
+        "integron_features",
+        "mobsuite_plasmid_types",
+        "genomad_regions",
+        "defense_systems",
+        "mobile_elements",
+        "features_detected_databases",
+        "modules_run",
+        "modules_failed",
+        "modules_warning",
+        "panresistome_version",
+        "feature_contract_version",
+    }
+
+    def metadata_candidate_columns() -> list[str]:
+        all_columns = sorted({column for row in metadata_rows for column in row})
+        candidates = []
+        for column in [*preferred_columns, *all_columns]:
+            if column in candidates or column in excluded_metadata_columns:
+                continue
+            if column.endswith("_count") or column.endswith("_feature_count") or column.endswith("_gene_count"):
+                continue
+            candidates.append(column)
+        return candidates
+
+    usability_rows = []
+    for column in metadata_candidate_columns():
+        values = [row.get(column, "") for row in metadata_rows]
+        non_missing_values = [value for value in values if value and not is_missing_value(value)]
+        counts = Counter(non_missing_values)
+        largest_group, largest_group_count = ("", 0)
+        if counts:
+            largest_group, largest_group_count = max(counts.items(), key=lambda item: (item[1], item[0]))
+        non_missing_count = len(non_missing_values)
+        missing_count = max(len(values) - non_missing_count, 0)
+        missing_fraction = (missing_count / len(values)) if values else 1.0
+        unique_values = len(counts)
+        largest_group_fraction = (largest_group_count / non_missing_count) if non_missing_count else 0.0
+        eligible = unique_values >= 2 and non_missing_count >= 2
+        reasons = []
+        if not non_missing_count:
+            reasons.append("all_missing")
+        if unique_values < 2:
+            reasons.append("fewer_than_two_groups")
+        if non_missing_count < 10:
+            reasons.append("small_non_missing_count")
+        if missing_fraction >= 0.50:
+            reasons.append("high_missingness")
+        if largest_group_fraction >= 0.80 and unique_values >= 2:
+            reasons.append("dominant_group")
+        if not reasons:
+            reasons.append("usable")
+        if not eligible:
+            recommended_use = "exclude"
+        elif non_missing_count < 10 or missing_fraction >= 0.50 or largest_group_fraction >= 0.80:
+            recommended_use = "descriptive_or_bias_check"
+        else:
+            recommended_use = "association_testing"
+        usability_rows.append({
+            "metadata_column": column,
+            "non_missing_count": str(non_missing_count),
+            "missing_count": str(missing_count),
+            "missing_fraction": f"{missing_fraction:.4f}",
+            "unique_values": str(unique_values),
+            "largest_group": largest_group,
+            "largest_group_count": str(largest_group_count),
+            "largest_group_fraction": f"{largest_group_fraction:.4f}",
+            "eligible_for_testing": "true" if eligible else "false",
+            "reason": ";".join(reasons),
+            "recommended_use": recommended_use,
+        })
+    usability_path = tables / "metadata_usability_summary.tsv"
+    usability_fields = [
+        "metadata_column",
+        "non_missing_count",
+        "missing_count",
+        "missing_fraction",
+        "unique_values",
+        "largest_group",
+        "largest_group_count",
+        "largest_group_fraction",
+        "eligible_for_testing",
+        "reason",
+        "recommended_use",
+    ]
+    write_rows(usability_path, usability_rows, usability_fields)
+
     metadata_columns = []
     missing_fraction_by_column = {}
-    for column in preferred_columns:
+    for column in metadata_candidate_columns():
         values = [row.get(column, "") for row in metadata_rows]
         non_missing = [value for value in values if value and not is_missing_value(value)]
         if len(set(non_missing)) >= 2:
@@ -6645,9 +6764,15 @@ def write_important_metadata_association_outputs(
     exploratory_features = sum(1 for row in feature_rows if row.get("interpretation_label") == "exploratory")
     strong_burdens = sum(1 for row in burden_rows if row.get("interpretation_label") == "strong_supported")
     warning_count = sum(1 for row in feature_rows + burden_rows + category_rows if row.get("warning_flags"))
+    usable_metadata_columns = sum(1 for row in usability_rows if row.get("recommended_use") == "association_testing")
+    sparse_metadata_columns = sum(1 for row in usability_rows if row.get("recommended_use") == "descriptive_or_bias_check")
+    excluded_metadata_columns_count = sum(1 for row in usability_rows if row.get("recommended_use") == "exclude")
     summary_rows = [
         {"metric": "samples", "value": str(sample_count), "message": "Samples represented in the important metadata association screen."},
         {"metric": "metadata_columns_screened", "value": str(len(metadata_columns)), "message": "Metadata columns with at least two non-missing groups."},
+        {"metric": "metadata_columns_usable", "value": str(usable_metadata_columns), "message": "Metadata columns recommended for association testing in the usability summary."},
+        {"metric": "metadata_columns_sparse_or_biased", "value": str(sparse_metadata_columns), "message": "Metadata columns recommended only for descriptive review or bias checks."},
+        {"metric": "metadata_columns_excluded", "value": str(excluded_metadata_columns_count), "message": "Metadata columns excluded from testing because they lack usable group structure."},
         {"metric": "feature_enrichment_rows", "value": str(len(feature_rows)), "message": "Feature-by-group comparisons in the report-facing metadata enrichment table."},
         {"metric": "strong_feature_associations", "value": str(strong_features), "message": "Feature rows with strong_supported interpretation labels."},
         {"metric": "moderate_feature_associations", "value": str(moderate_features), "message": "Feature rows with moderate_supported interpretation labels."},
@@ -6663,7 +6788,7 @@ def write_important_metadata_association_outputs(
 
     metadata_tables_zip = important_dir / "metadata_association_tables.zip"
     metadata_figures_zip = important_dir / "metadata_association_figures.zip"
-    _write_zip_bundle(metadata_tables_zip, [feature_path, burden_path, category_path, summary_path], important_dir)
+    _write_zip_bundle(metadata_tables_zip, [usability_path, feature_path, burden_path, category_path, summary_path], important_dir)
     _write_zip_bundle(
         metadata_figures_zip,
         [
@@ -6708,7 +6833,7 @@ th {{ background: #f0f4f8; }}
 <div><h3>Category enrichment</h3><img src="{html.escape(category_base)}.svg" alt="Metadata category enrichment"><p><a href="{html.escape(category_base)}.png">PNG</a> | <a href="{html.escape(category_base)}.svg">SVG</a> | <a href="{html.escape(category_base)}.pdf">PDF</a> | <a href="{html.escape(category_base)}.data.tsv">Data TSV</a></p></div>
 </div></div>
 <h2>Filtered Results</h2><div id="table"></div>
-<p><a href="../tables/metadata_feature_enrichment.tsv">Download feature enrichment table</a> | <a href="../tables/metadata_burden_associations.tsv">Download burden associations</a> | <a href="../tables/metadata_category_enrichment.tsv">Download category enrichment</a> | <a href="../metadata_association_tables.zip">Download all metadata association tables ZIP</a> | <a href="../metadata_association_figures.zip">Download all metadata association figures ZIP</a></p>
+<p><a href="../tables/metadata_usability_summary.tsv">Download metadata usability summary</a> | <a href="../tables/metadata_feature_enrichment.tsv">Download feature enrichment table</a> | <a href="../tables/metadata_burden_associations.tsv">Download burden associations</a> | <a href="../tables/metadata_category_enrichment.tsv">Download category enrichment</a> | <a href="../metadata_association_tables.zip">Download all metadata association tables ZIP</a> | <a href="../metadata_association_figures.zip">Download all metadata association figures ZIP</a></p>
 <script>
 const featureRows = {json.dumps(feature_rows[:4000])};
 const burdenRows = {json.dumps(burden_rows[:3000])};
@@ -6760,6 +6885,7 @@ refreshControls(); render();
     )
 
     return {
+        "important_metadata_usability_summary": str(usability_path),
         "important_metadata_feature_enrichment": str(feature_path),
         "important_metadata_burden_associations": str(burden_path),
         "important_metadata_category_enrichment": str(category_path),
@@ -6828,6 +6954,7 @@ def write_important_results_report(
     metadata_burden_rows = read_table(important_dir / "tables" / "metadata_burden_associations.tsv")
     metadata_category_rows = read_table(important_dir / "tables" / "metadata_category_enrichment.tsv")
     metadata_summary_rows = read_table(important_dir / "tables" / "metadata_association_summary.tsv")
+    metadata_usability_rows = read_table(important_dir / "tables" / "metadata_usability_summary.tsv")
     top_prevalence = sorted(prevalence_rows, key=lambda row: (row.get("database", ""), -(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("feature_id", "")))[:20]
     top_variation = sorted(variation_rows, key=lambda row: (-(_float_or_none(row.get("iqr_identity", "")) or 0.0), row.get("database", ""), row.get("feature_id", "")))[:20]
     top_temporal = sorted(temporal_rows, key=lambda row: (-abs(_float_or_none(row.get("change_percent_points", "")) or 0.0), row.get("database", ""), row.get("feature_id", "")))[:20]
@@ -6918,6 +7045,9 @@ def write_important_results_report(
         )
     cooccurrence_figures_html = "<div class='figure-row'>" + "".join(cooccurrence_figure_items) + "</div>" if cooccurrence_figure_items else "<p>No co-occurrence/context figures were generated because feature-pair data were unavailable.</p>"
     metadata_summary = {row.get("metric", ""): row.get("value", "") for row in metadata_summary_rows}
+    metadata_usable = metadata_summary.get("metadata_columns_usable", "0")
+    metadata_sparse = metadata_summary.get("metadata_columns_sparse_or_biased", "0")
+    metadata_excluded = metadata_summary.get("metadata_columns_excluded", "0")
     metadata_summary_html = (
         "<p>"
         f"Metadata association screening evaluated {html.escape(metadata_summary.get('metadata_columns_screened', '0'))} metadata columns, "
@@ -6927,6 +7057,18 @@ def write_important_results_report(
         f"moderate feature associations: {html.escape(metadata_summary.get('moderate_feature_associations', '0'))}; "
         f"warning rows: {html.escape(metadata_summary.get('warning_rows', '0'))}."
         "</p>"
+    )
+    metadata_usability_cards = (
+        "<div class='cards'>"
+        f"<div class='card'><span>Usable metadata columns</span><strong>{html.escape(metadata_usable)}</strong></div>"
+        f"<div class='card'><span>Sparse or biased columns</span><strong>{html.escape(metadata_sparse)}</strong></div>"
+        f"<div class='card'><span>Columns excluded</span><strong>{html.escape(metadata_excluded)}</strong></div>"
+        "</div>"
+    )
+    metadata_usability_table_html = _html_table(
+        metadata_usability_rows,
+        ["metadata_column", "non_missing_count", "missing_fraction", "unique_values", "largest_group", "largest_group_fraction", "eligible_for_testing", "recommended_use", "reason"],
+        max_rows=20,
     )
     metadata_figure_items = []
     for key, title in [
@@ -7019,13 +7161,16 @@ th {{ background: #f0f4f8; }}
 <div class="downloads"><a href="figures/cooccurrence_context.html">Open interactive co-occurrence report</a><a href="cooccurrence_tables.zip">Download all co-occurrence tables ZIP</a><a href="cooccurrence_figures.zip">Download all co-occurrence figures ZIP</a><a href="tables/cooccurrence_pair_summary.tsv">Download pair summary</a><a href="tables/cooccurrence_heatmap_matrix.tsv">Download heatmap matrix</a><a href="tables/cooccurrence_network_edges.tsv">Download network edges</a><a href="tables/cooccurrence_network_nodes.tsv">Download network nodes</a><a href="tables/genomic_context_evidence.tsv">Download genomic context evidence</a><a href="tables/contig_neighborhoods.tsv">Download contig neighborhoods</a></div></section>
 <section id="metadata-associations"><h2>Metadata Associations</h2><div class="warning">Metadata associations are exploratory enrichment-style screens. They may reflect sampling, BioProject structure, lineage composition, geography, collection year, or missing metadata and should not be interpreted as causal.</div>
 {metadata_summary_html}
+<h3>Metadata usability</h3>
+{metadata_usability_cards}
+{metadata_usability_table_html}
 <iframe src="figures/metadata_associations.html" title="Metadata associations interactive report"></iframe>
 {metadata_figures_html}
 <h3>Top feature associations</h3>
 {metadata_feature_table_html}
 <h3>Top database-burden associations</h3>
 {metadata_burden_table_html}
-<div class="downloads"><a href="figures/metadata_associations.html">Open interactive metadata association report</a><a href="metadata_association_tables.zip">Download all metadata association tables ZIP</a><a href="metadata_association_figures.zip">Download all metadata association figures ZIP</a><a href="tables/metadata_feature_enrichment.tsv">Download feature enrichment</a><a href="tables/metadata_burden_associations.tsv">Download burden associations</a><a href="tables/metadata_category_enrichment.tsv">Download category enrichment</a><a href="tables/metadata_association_summary.tsv">Download metadata association summary</a></div></section>
+<div class="downloads"><a href="figures/metadata_associations.html">Open interactive metadata association report</a><a href="metadata_association_tables.zip">Download all metadata association tables ZIP</a><a href="metadata_association_figures.zip">Download all metadata association figures ZIP</a><a href="tables/metadata_usability_summary.tsv">Download metadata usability summary</a><a href="tables/metadata_feature_enrichment.tsv">Download feature enrichment</a><a href="tables/metadata_burden_associations.tsv">Download burden associations</a><a href="tables/metadata_category_enrichment.tsv">Download category enrichment</a><a href="tables/metadata_association_summary.tsv">Download metadata association summary</a></div></section>
 <section id="files"><h2>Important Files</h2><ul>
 <li><a href="../basic/enriched_genome_dataset.csv">Enriched genome dataset CSV</a></li>
 <li><a href="key_tables/qc_step_summary.tsv">QC step summary</a></li>
@@ -7037,6 +7182,7 @@ th {{ background: #f0f4f8; }}
 <li><a href="tables/genomic_context_evidence.tsv">Genomic context evidence</a></li>
 <li><a href="tables/metadata_feature_enrichment.tsv">Metadata feature enrichment</a></li>
 <li><a href="tables/metadata_burden_associations.tsv">Metadata burden associations</a></li>
+<li><a href="tables/metadata_usability_summary.tsv">Metadata usability summary</a></li>
 <li><a href="../panr2_inputs/features/all_features.tsv">Complete standardized feature table</a></li>
 <li><a href="../panr2_inputs/manifest/schema_validation_summary.txt">Feature-contract validation summary</a></li>
 </ul></section>
