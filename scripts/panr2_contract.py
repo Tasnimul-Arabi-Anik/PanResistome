@@ -3250,6 +3250,65 @@ COUNTRY_COORDS = {
 }
 
 
+COUNTRY_REGIONS = {
+    "argentina": ("South America", "South America"),
+    "australia": ("Oceania", "Australia and New Zealand"),
+    "austria": ("Europe", "Western Europe"),
+    "bangladesh": ("Asia", "South Asia"),
+    "belgium": ("Europe", "Western Europe"),
+    "brazil": ("South America", "South America"),
+    "canada": ("North America", "Northern America"),
+    "chile": ("South America", "South America"),
+    "china": ("Asia", "East Asia"),
+    "colombia": ("South America", "South America"),
+    "denmark": ("Europe", "Northern Europe"),
+    "egypt": ("Africa", "Northern Africa"),
+    "finland": ("Europe", "Northern Europe"),
+    "france": ("Europe", "Western Europe"),
+    "germany": ("Europe", "Western Europe"),
+    "ghana": ("Africa", "Western Africa"),
+    "greece": ("Europe", "Southern Europe"),
+    "india": ("Asia", "South Asia"),
+    "indonesia": ("Asia", "Southeast Asia"),
+    "iran": ("Asia", "Western Asia"),
+    "iraq": ("Asia", "Western Asia"),
+    "ireland": ("Europe", "Northern Europe"),
+    "israel": ("Asia", "Western Asia"),
+    "italy": ("Europe", "Southern Europe"),
+    "japan": ("Asia", "East Asia"),
+    "kenya": ("Africa", "Eastern Africa"),
+    "malaysia": ("Asia", "Southeast Asia"),
+    "mexico": ("North America", "Central America"),
+    "nepal": ("Asia", "South Asia"),
+    "netherlands": ("Europe", "Western Europe"),
+    "new zealand": ("Oceania", "Australia and New Zealand"),
+    "nigeria": ("Africa", "Western Africa"),
+    "norway": ("Europe", "Northern Europe"),
+    "pakistan": ("Asia", "South Asia"),
+    "peru": ("South America", "South America"),
+    "philippines": ("Asia", "Southeast Asia"),
+    "poland": ("Europe", "Eastern Europe"),
+    "portugal": ("Europe", "Southern Europe"),
+    "russia": ("Europe", "Eastern Europe"),
+    "saudi arabia": ("Asia", "Western Asia"),
+    "singapore": ("Asia", "Southeast Asia"),
+    "south africa": ("Africa", "Southern Africa"),
+    "south korea": ("Asia", "East Asia"),
+    "spain": ("Europe", "Southern Europe"),
+    "sri lanka": ("Asia", "South Asia"),
+    "sweden": ("Europe", "Northern Europe"),
+    "switzerland": ("Europe", "Western Europe"),
+    "taiwan": ("Asia", "East Asia"),
+    "thailand": ("Asia", "Southeast Asia"),
+    "turkey": ("Asia", "Western Asia"),
+    "united kingdom": ("Europe", "Northern Europe"),
+    "uk": ("Europe", "Northern Europe"),
+    "united states": ("North America", "Northern America"),
+    "usa": ("North America", "Northern America"),
+    "vietnam": ("Asia", "Southeast Asia"),
+}
+
+
 BASIC_DATASET_FIELDS = [
     "assembly_accession",
     "sample_id",
@@ -3549,6 +3608,39 @@ def _country_xy(country: str, width: int, height: int) -> tuple[float, float] | 
     return x, y
 
 
+def _country_region(country: str) -> tuple[str, str]:
+    return COUNTRY_REGIONS.get(_clean_country(country).lower(), ("", ""))
+
+
+def _geo_group_size_label(total: int) -> str:
+    if total < 3:
+        return "very_small_group"
+    if total < 5:
+        return "small_group"
+    if total < 10:
+        return "limited_group"
+    if total < 30:
+        return "exploratory_group"
+    return "standard_group"
+
+
+def _geo_percent_display(percent: float, positive: int, total: int) -> str:
+    return f"{percent:.1f}% ({positive}/{total})"
+
+
+def _geo_metric_value(row: dict[str, str], metric: str) -> float:
+    field = {
+        "prevalence_percent": "prevalence_percent",
+        "positive_genomes": "positive_genomes",
+        "total_genomes": "total_genomes",
+        "mean_feature_burden_per_genome": "mean_feature_burden_per_genome",
+        "median_feature_burden_per_genome": "median_feature_burden_per_genome",
+        "feature_rows": "feature_rows",
+        "total_feature_rows": "total_feature_rows",
+    }.get(metric, "prevalence_percent")
+    return _float_or_none(row.get(field, "")) or 0.0
+
+
 def _svg_geographic_map(rows: list[dict[str, str]], title: str) -> str:
     width, height = 960, 480
     points = []
@@ -3556,13 +3648,16 @@ def _svg_geographic_map(rows: list[dict[str, str]], title: str) -> str:
         xy = _country_xy(row.get("country", ""), width, height)
         if not xy:
             continue
-        prevalence = _float_or_none(row.get("prevalence", "")) or 0.0
+        prevalence = (_float_or_none(row.get("prevalence_percent", "")) or 0.0) / 100.0
+        if row.get("prevalence_percent", "") == "":
+            prevalence = _float_or_none(row.get("prevalence", "")) or 0.0
         total = int(_float_or_none(row.get("total_genomes", "")) or 0)
         radius = max(5, min(28, 4 + math.sqrt(max(total, 1)) * 4))
         red = int(230 * prevalence)
         blue = int(200 * (1 - prevalence))
-        fill = f"rgb({red},80,{blue})"
-        label = f"{row.get('country', '')}: {row.get('positive_genomes', '0')}/{row.get('total_genomes', '0')} ({prevalence * 100:.1f}%)"
+        fill = "#cbd5e1" if "small_group_warning" in row.get("warning_flags", "") else f"rgb({red},80,{blue})"
+        positive = row.get("positive_genomes", "") or row.get("positive_genomes_with_database", "0")
+        label = f"{row.get('country', '')}: {positive}/{row.get('total_genomes', '0')} ({prevalence * 100:.1f}%); warnings={row.get('warning_flags', '')}"
         points.append(
             f"<circle cx='{xy[0]:.1f}' cy='{xy[1]:.1f}' r='{radius:.1f}' fill='{fill}' "
             "fill-opacity='0.75' stroke='#1f2933' stroke-width='1'>"
@@ -3695,186 +3790,646 @@ def _geographic_map_png(rows: list[dict[str, str]], path: Path) -> None:
         xy = _country_xy(row.get("country", ""), width, map_height)
         if not xy:
             continue
-        prevalence = _float_or_none(row.get("prevalence", "")) or 0.0
+        prevalence = (_float_or_none(row.get("prevalence_percent", "")) or 0.0) / 100.0
+        if row.get("prevalence_percent", "") == "":
+            prevalence = _float_or_none(row.get("prevalence", "")) or 0.0
         total = int(_float_or_none(row.get("total_genomes", "")) or 0)
         radius = max(5, min(28, 4 + math.sqrt(max(total, 1)) * 4))
-        color = (int(230 * prevalence), 80, int(200 * (1 - prevalence)))
+        color = (203, 213, 225) if "small_group_warning" in row.get("warning_flags", "") else (int(230 * prevalence), 80, int(200 * (1 - prevalence)))
         draw_circle(xy[0], xy[1] + header, radius, color)
     _write_png(path, width, height, pixels)
 
 
+GEOGRAPHIC_DATABASE_FIELDS = [
+    "database",
+    "geo_level",
+    "group_name",
+    "country",
+    "continent",
+    "subcontinent",
+    "collection_year",
+    "total_genomes",
+    "positive_genomes_with_database",
+    "positive_genomes",
+    "prevalence_percent",
+    "prevalence_display",
+    "total_feature_rows",
+    "feature_rows",
+    "mean_feature_burden_per_genome",
+    "median_feature_burden_per_genome",
+    "min_collection_year",
+    "max_collection_year",
+    "top_bioproject",
+    "largest_bioproject_fraction",
+    "dominant_lineage",
+    "dominant_lineage_fraction",
+    "group_size_label",
+    "warning_flags",
+    "interpretation_label",
+]
+
+
+GEOGRAPHIC_FEATURE_FIELDS = [
+    "database",
+    "feature_id",
+    "feature_name",
+    "geo_level",
+    "group_name",
+    "country",
+    "continent",
+    "subcontinent",
+    "collection_year",
+    "total_genomes",
+    "positive_genomes",
+    "prevalence_percent",
+    "prevalence_display",
+    "feature_rows",
+    "mean_hits_per_positive_genome",
+    "min_collection_year",
+    "max_collection_year",
+    "top_bioproject",
+    "largest_bioproject_fraction",
+    "dominant_lineage",
+    "dominant_lineage_fraction",
+    "group_size_label",
+    "warning_flags",
+    "interpretation_label",
+]
+
+
+def _write_geographic_bar_figure(
+    figures: Path,
+    stem: str,
+    rows: list[dict[str, str]],
+    title: str,
+    fields: list[str],
+    value_field: str = "prevalence_percent",
+) -> list[Path]:
+    plot_rows = []
+    for row in rows:
+        plot = dict(row)
+        plot["feature_id"] = row.get("group_name") or row.get("country") or row.get("continent") or row.get("subcontinent")
+        plot["prevalence_display"] = row.get("prevalence_display") or row.get(value_field, "")
+        plot_rows.append(plot)
+    data_path = figures / f"{stem}.data.tsv"
+    write_rows(data_path, rows, fields)
+    svg_path = figures / f"{stem}.svg"
+    png_path = figures / f"{stem}.png"
+    pdf_path = figures / f"{stem}.pdf"
+    _write_prevalence_bar_svg(svg_path, plot_rows, title, value_field)
+    _write_bar_png(png_path, plot_rows, value_field)
+    _write_simple_pdf(
+        pdf_path,
+        title,
+        [
+            f"{row.get('group_name', '')}: {row.get('prevalence_display', row.get(value_field, ''))}; warnings={row.get('warning_flags', '')}"
+            for row in rows[:30]
+        ],
+    )
+    return [data_path, svg_path, png_path, pdf_path]
+
+
+def _write_geographic_map_figure(
+    figures: Path,
+    stem: str,
+    rows: list[dict[str, str]],
+    title: str,
+    fields: list[str],
+) -> list[Path]:
+    data_path = figures / f"{stem}.data.tsv"
+    write_rows(data_path, rows, fields)
+    svg_path = figures / f"{stem}.svg"
+    png_path = figures / f"{stem}.png"
+    pdf_path = figures / f"{stem}.pdf"
+    svg_path.write_text(_svg_geographic_map(rows, title), encoding="utf-8")
+    _geographic_map_png(rows, png_path)
+    _write_simple_pdf(
+        pdf_path,
+        title,
+        [
+            f"{row.get('country', '')}: {row.get('prevalence_display', '')}; warnings={row.get('warning_flags', '')}"
+            for row in rows[:30]
+        ],
+    )
+    return [data_path, svg_path, png_path, pdf_path]
+
+
 def write_important_geographic_outputs(sample_dir: Path, out_dir: Path, important_dir: Path, top_n: int = 20) -> dict[str, str]:
     key_tables = important_dir / "key_tables"
+    tables = important_dir / "tables"
     figures = important_dir / "figures"
     key_tables.mkdir(parents=True, exist_ok=True)
+    tables.mkdir(parents=True, exist_ok=True)
     figures.mkdir(parents=True, exist_ok=True)
     metadata_rows = normalize_metadata_rows(load_metadata_rows(sample_dir))
     features = read_table(out_dir / "features" / "all_features.tsv")
-    samples = sorted({row.get("assembly_accession", "") for row in metadata_rows if row.get("assembly_accession")})
+    feature_samples = {
+        row.get("assembly_accession", "") or row.get("sample_id", "")
+        for row in features
+        if row.get("assembly_accession", "") or row.get("sample_id", "")
+    }
+    metadata_samples = {row.get("assembly_accession", "") for row in metadata_rows if row.get("assembly_accession")}
+    samples = sorted(feature_samples | metadata_samples)
     metadata_by_sample = {row["assembly_accession"]: row for row in metadata_rows if row.get("assembly_accession")}
     presence = feature_presence(features)
     database_presence: dict[str, set[str]] = defaultdict(set)
+    database_counts_by_sample: dict[tuple[str, str], int] = defaultdict(int)
+    feature_counts_by_sample: dict[tuple[str, str, str], int] = defaultdict(int)
+    feature_metadata: dict[tuple[str, str], dict[str, str]] = {}
+    lineage_by_sample: dict[str, str] = {}
     for feature in features:
-        sample = feature.get("assembly_accession", "")
+        sample = feature.get("assembly_accession", "") or feature.get("sample_id", "")
         database = feature.get("database", "")
-        if sample and database and feature.get("presence", "1") != "0":
-            database_presence[database].add(sample)
+        feature_id = feature.get("feature_id", "")
+        if not sample or not database or not feature_id or feature.get("presence", "1") == "0":
+            continue
+        database_presence[database].add(sample)
+        database_counts_by_sample[(sample, database)] += 1
+        feature_counts_by_sample[(sample, database, feature_id)] += 1
+        feature_metadata.setdefault((database, feature_id), feature)
+        if database == "mlst" and "ST-" not in feature_id:
+            category = feature.get("feature_category", "").lower()
+            if "sequence_type" in category or feature_id.lower().startswith("st") or ":st" in feature_id.lower():
+                lineage_by_sample.setdefault(sample, feature_id)
+    for sample, meta in metadata_by_sample.items():
+        lineage = first_value(meta, ["dominant_lineage_label", "mlst_ST", "lineage", "ani_cluster", "mash_cluster"], "")
+        if lineage:
+            lineage_by_sample.setdefault(sample, lineage)
 
     feature_rank = sorted(presence.items(), key=lambda item: (-len(item[1]), item[0][0], item[0][1]))
-    selected_features = feature_rank[:max(top_n, 0)]
-    rows = []
+    selected_features = feature_rank[:max(top_n * 2, top_n, 20)]
+    selected_feature_keys = {key for key, _ in selected_features}
 
-    def add_rows(mode: str, database: str, feature_id: str, present_samples: set[str]):
-        for year_mode in ["all_years", "by_year"]:
-            groups: dict[tuple[str, str], set[str]] = defaultdict(set)
-            positives: dict[tuple[str, str], set[str]] = defaultdict(set)
-            for sample in samples:
-                meta = metadata_by_sample.get(sample, {})
-                country = _clean_country(meta.get("country", ""))
-                if not country:
-                    continue
-                year = meta.get("collection_year", "") if year_mode == "by_year" else "all"
-                key = (country, year or "unknown")
-                groups[key].add(sample)
-                if sample in present_samples:
-                    positives[key].add(sample)
-            for (country, year), members in sorted(groups.items()):
-                positive = len(positives.get((country, year), set()))
+    def enriched_meta(sample: str) -> dict[str, str]:
+        meta = dict(metadata_by_sample.get(sample, {}))
+        country = _clean_country(meta.get("country", ""))
+        derived_continent, derived_subcontinent = _country_region(country)
+        meta["country"] = country
+        meta["continent"] = meta.get("continent", "") or derived_continent
+        meta["subcontinent"] = meta.get("subcontinent", "") or derived_subcontinent
+        return meta
+
+    enriched_metadata = {sample: enriched_meta(sample) for sample in samples}
+    missing_country_count = sum(1 for sample in samples if not enriched_metadata.get(sample, {}).get("country"))
+    missing_country_fraction = missing_country_count / len(samples) if samples else 0.0
+
+    grouped_samples: dict[str, dict[str, set[str]]] = {
+        "country": defaultdict(set),
+        "continent": defaultdict(set),
+        "subcontinent": defaultdict(set),
+        "country_year": defaultdict(set),
+    }
+    for sample in samples:
+        meta = enriched_metadata.get(sample, {})
+        country = meta.get("country", "")
+        continent = meta.get("continent", "")
+        subcontinent = meta.get("subcontinent", "")
+        year = meta.get("collection_year", "")
+        grouped_samples["country"][country or "missing"].add(sample)
+        grouped_samples["continent"][continent or "unknown"].add(sample)
+        grouped_samples["subcontinent"][subcontinent or "unknown"].add(sample)
+        if country and year:
+            grouped_samples["country_year"][f"{country} ({year})"].add(sample)
+        elif country:
+            grouped_samples["country_year"][f"{country} (unknown)"].add(sample)
+        else:
+            grouped_samples["country_year"]["missing (unknown)"].add(sample)
+
+    def group_context(geo_level: str, group_name: str, members: set[str]) -> dict[str, str]:
+        total = len(members)
+        metas = [enriched_metadata.get(sample, {}) for sample in members]
+        countries = [meta.get("country", "") for meta in metas if meta.get("country", "")]
+        continents = [meta.get("continent", "") for meta in metas if meta.get("continent", "")]
+        subcontinents = [meta.get("subcontinent", "") for meta in metas if meta.get("subcontinent", "")]
+        years = [meta.get("collection_year", "") for meta in metas if meta.get("collection_year", "")]
+        bioprojects = [meta.get("bioproject", "") for meta in metas if meta.get("bioproject", "")]
+        lineages = [lineage_by_sample.get(sample, "") for sample in members if lineage_by_sample.get(sample, "")]
+
+        def dominant(values: list[str]) -> tuple[str, float]:
+            if not values or not total:
+                return "", 0.0
+            label, count = Counter(values).most_common(1)[0]
+            return label, count / total
+
+        top_bioproject, top_bioproject_fraction = dominant(bioprojects)
+        dominant_lineage, dominant_lineage_fraction = dominant(lineages)
+        top_country, top_country_fraction = dominant(countries)
+        top_year, top_year_fraction = dominant(years)
+        warnings = []
+        if total < 5:
+            warnings.append("small_group_warning")
+        if geo_level in {"country", "country_year"} and (not countries or group_name.startswith("missing")):
+            warnings.append("missing_country_metadata")
+        if geo_level in {"continent", "subcontinent"} and group_name == "unknown":
+            warnings.append("missing_region_metadata")
+        if top_bioproject_fraction >= 0.8 and total >= 5:
+            warnings.append("bioproject_dominance")
+        if dominant_lineage_fraction >= 0.8 and total >= 5:
+            warnings.append("lineage_dominance")
+        if top_year_fraction >= 0.8 and total >= 5:
+            warnings.append("collection_year_bias")
+        if geo_level in {"continent", "subcontinent"} and top_country_fraction >= 0.8 and total >= 5:
+            warnings.append("single_country_dominance")
+        warnings.append("exploratory_only")
+        min_year = min(years) if years else ""
+        max_year = max(years) if years else ""
+        return {
+            "group_name": group_name,
+            "country": top_country if geo_level not in {"country", "country_year"} else (countries[0] if countries else "missing"),
+            "continent": continents[0] if len(set(continents)) == 1 else (group_name if geo_level == "continent" else (continents[0] if continents else "unknown")),
+            "subcontinent": subcontinents[0] if len(set(subcontinents)) == 1 else (group_name if geo_level == "subcontinent" else (subcontinents[0] if subcontinents else "unknown")),
+            "collection_year": top_year if geo_level == "country_year" else "",
+            "min_collection_year": min_year,
+            "max_collection_year": max_year,
+            "top_bioproject": top_bioproject,
+            "largest_bioproject_fraction": f"{top_bioproject_fraction:.3f}" if top_bioproject else "",
+            "dominant_lineage": dominant_lineage,
+            "dominant_lineage_fraction": f"{dominant_lineage_fraction:.3f}" if dominant_lineage else "",
+            "group_size_label": _geo_group_size_label(total),
+            "warning_flags": ";".join(dict.fromkeys(warnings)),
+            "interpretation_label": "exploratory",
+        }
+
+    database_rows = []
+    for database, present_samples in sorted(database_presence.items()):
+        for geo_level, groups in grouped_samples.items():
+            for group_name, members in sorted(groups.items()):
                 total = len(members)
-                meta_example = next((metadata_by_sample.get(sample, {}) for sample in members), {})
-                prevalence = positive / total if total else 0.0
-                warnings = []
-                if total < 5:
-                    warnings.append("small_sample_size")
-                if not _country_xy(country, 960, 480):
-                    warnings.append("missing_map_coordinate")
-                rows.append({
-                    "mode": mode,
+                positive = len(present_samples & members)
+                prevalence_percent = positive / total * 100 if total else 0.0
+                counts = [database_counts_by_sample.get((sample, database), 0) for sample in members]
+                total_rows = sum(counts)
+                database_rows.append({
                     "database": database,
-                    "feature_id": feature_id,
-                    "country": country,
-                    "continent": meta_example.get("continent", ""),
-                    "subcontinent": meta_example.get("subcontinent", ""),
-                    "collection_year": year,
+                    "geo_level": geo_level,
+                    **group_context(geo_level, group_name, members),
                     "total_genomes": str(total),
+                    "positive_genomes_with_database": str(positive),
                     "positive_genomes": str(positive),
-                    "prevalence": f"{prevalence:.4f}",
-                    "prevalence_percent": f"{prevalence * 100:.1f}",
-                    "warning_flags": ";".join(warnings),
+                    "prevalence_percent": f"{prevalence_percent:.1f}",
+                    "prevalence_display": _geo_percent_display(prevalence_percent, positive, total),
+                    "total_feature_rows": str(total_rows),
+                    "feature_rows": str(total_rows),
+                    "mean_feature_burden_per_genome": f"{_mean([float(value) for value in counts]):.2f}" if counts else "0.00",
+                    "median_feature_burden_per_genome": f"{_median([float(value) for value in counts]):.2f}" if counts else "0.00",
                 })
 
-    for database, present_samples in sorted(database_presence.items()):
-        add_rows("database_burden", database, "__any_feature__", present_samples)
-    for (database, feature_id), present_samples in selected_features:
-        add_rows("feature", database, feature_id, present_samples)
+    feature_rows = []
+    for (database, feature_id), present_samples in sorted(presence.items(), key=lambda item: (item[0][0], item[0][1])):
+        feature_meta = feature_metadata.get((database, feature_id), {})
+        feature_name = feature_meta.get("feature_name", "") or feature_id
+        for geo_level, groups in grouped_samples.items():
+            for group_name, members in sorted(groups.items()):
+                total = len(members)
+                positive_samples = present_samples & members
+                positive = len(positive_samples)
+                prevalence_percent = positive / total * 100 if total else 0.0
+                feature_rows_count = sum(feature_counts_by_sample.get((sample, database, feature_id), 0) for sample in members)
+                feature_rows.append({
+                    "database": database,
+                    "feature_id": feature_id,
+                    "feature_name": feature_name,
+                    "geo_level": geo_level,
+                    **group_context(geo_level, group_name, members),
+                    "total_genomes": str(total),
+                    "positive_genomes": str(positive),
+                    "prevalence_percent": f"{prevalence_percent:.1f}",
+                    "prevalence_display": _geo_percent_display(prevalence_percent, positive, total),
+                    "feature_rows": str(feature_rows_count),
+                    "mean_hits_per_positive_genome": f"{(feature_rows_count / positive):.2f}" if positive else "0.00",
+                })
 
-    fields = [
-        "mode",
-        "database",
-        "feature_id",
-        "country",
-        "continent",
-        "subcontinent",
-        "collection_year",
-        "total_genomes",
-        "positive_genomes",
-        "prevalence",
-        "prevalence_percent",
-        "warning_flags",
+    warning_rows = []
+    for geo_level, groups in grouped_samples.items():
+        for group_name, members in sorted(groups.items()):
+            context = group_context(geo_level, group_name, members)
+            warning_rows.append({
+                "geo_level": geo_level,
+                "group_name": group_name,
+                "total_genomes": str(len(members)),
+                "missing_metadata": str(sum(1 for sample in members if not enriched_metadata.get(sample, {}).get("country"))),
+                "largest_bioproject": context.get("top_bioproject", ""),
+                "largest_bioproject_fraction": context.get("largest_bioproject_fraction", ""),
+                "dominant_lineage": context.get("dominant_lineage", ""),
+                "dominant_lineage_fraction": context.get("dominant_lineage_fraction", ""),
+                "warning_flags": context.get("warning_flags", ""),
+            })
+
+    def summarize_rows(rows: list[dict[str, str]], mode: str, database: str, feature_id: str, feature_name: str, geo_level: str) -> dict[str, str]:
+        candidates = [row for row in rows if row.get("geo_level") == geo_level]
+        passing = [
+            row for row in candidates
+            if int(_float_or_none(row.get("total_genomes", "")) or 0) >= 5
+            and row.get("group_name") not in {"missing", "unknown", "missing (unknown)"}
+        ]
+        ranked = sorted(
+            passing or candidates,
+            key=lambda row: (
+                -(_float_or_none(row.get("prevalence_percent", "")) or 0.0),
+                -(_float_or_none(row.get("positive_genomes", row.get("positive_genomes_with_database", ""))) or 0.0),
+                row.get("group_name", ""),
+            ),
+        )
+        top = ranked[0] if ranked else {}
+        warning_flags = sorted({flag for row in candidates for flag in row.get("warning_flags", "").split(";") if flag})
+        return {
+            "database": database,
+            "mode": mode,
+            "feature_id": feature_id,
+            "feature_name": feature_name,
+            "geo_level": geo_level,
+            "metric": "prevalence_percent",
+            "total_geographic_groups": str(len(candidates)),
+            "groups_passing_min_n": str(len(passing)),
+            "missing_country_count": str(missing_country_count),
+            "missing_country_fraction": f"{missing_country_fraction:.3f}",
+            "top_group": top.get("group_name", ""),
+            "top_group_prevalence_percent": top.get("prevalence_percent", ""),
+            "top_group_positive_genomes": top.get("positive_genomes", top.get("positive_genomes_with_database", "")),
+            "top_group_total_genomes": top.get("total_genomes", ""),
+            "warning_flags": ";".join(warning_flags),
+        }
+
+    summary_fields = [
+        "database", "mode", "feature_id", "feature_name", "geo_level", "metric",
+        "total_geographic_groups", "groups_passing_min_n", "missing_country_count",
+        "missing_country_fraction", "top_group", "top_group_prevalence_percent",
+        "top_group_positive_genomes", "top_group_total_genomes", "warning_flags",
     ]
+    summary_rows = []
+    for database in sorted(database_presence):
+        for geo_level in ["country", "continent", "subcontinent", "country_year"]:
+            rows_for_key = [row for row in database_rows if row.get("database") == database and row.get("geo_level") == geo_level]
+            summary_rows.append(summarize_rows(rows_for_key, "database_burden", database, "__any_feature__", "", geo_level))
+    for (database, feature_id), _present_samples in selected_features:
+        feature_name = feature_metadata.get((database, feature_id), {}).get("feature_name", "") or feature_id
+        for geo_level in ["country", "continent", "subcontinent", "country_year"]:
+            rows_for_key = [row for row in feature_rows if row.get("database") == database and row.get("feature_id") == feature_id and row.get("geo_level") == geo_level]
+            summary_rows.append(summarize_rows(rows_for_key, "individual_feature", database, feature_id, feature_name, geo_level))
+
+    summary_path = tables / "geographic_distribution_summary.tsv"
+    feature_path = tables / "geographic_feature_distribution.tsv"
+    burden_path = tables / "geographic_database_burden.tsv"
+    warning_path = tables / "geographic_warning_summary.tsv"
+    write_rows(summary_path, summary_rows, summary_fields)
+    write_rows(feature_path, feature_rows, GEOGRAPHIC_FEATURE_FIELDS)
+    write_rows(burden_path, database_rows, GEOGRAPHIC_DATABASE_FIELDS)
+    write_rows(warning_path, warning_rows, ["geo_level", "group_name", "total_genomes", "missing_metadata", "largest_bioproject", "largest_bioproject_fraction", "dominant_lineage", "dominant_lineage_fraction", "warning_flags"])
+
+    legacy_fields = ["mode", "database", "feature_id", "country", "continent", "subcontinent", "collection_year", "total_genomes", "positive_genomes", "prevalence", "prevalence_percent", "warning_flags"]
+    legacy_rows = []
+    for row in database_rows:
+        legacy_rows.append({
+            "mode": "database_burden",
+            "database": row.get("database", ""),
+            "feature_id": "__any_feature__",
+            "country": row.get("country", ""),
+            "continent": row.get("continent", ""),
+            "subcontinent": row.get("subcontinent", ""),
+            "collection_year": row.get("collection_year", "") or "all",
+            "total_genomes": row.get("total_genomes", ""),
+            "positive_genomes": row.get("positive_genomes", ""),
+            "prevalence": f"{((_float_or_none(row.get('prevalence_percent', '')) or 0.0) / 100.0):.4f}",
+            "prevalence_percent": row.get("prevalence_percent", ""),
+            "warning_flags": row.get("warning_flags", ""),
+        })
+    for row in [row for row in feature_rows if (row.get("database", ""), row.get("feature_id", "")) in selected_feature_keys]:
+        legacy_rows.append({
+            "mode": "feature",
+            "database": row.get("database", ""),
+            "feature_id": row.get("feature_id", ""),
+            "country": row.get("country", ""),
+            "continent": row.get("continent", ""),
+            "subcontinent": row.get("subcontinent", ""),
+            "collection_year": row.get("collection_year", "") or "all",
+            "total_genomes": row.get("total_genomes", ""),
+            "positive_genomes": row.get("positive_genomes", ""),
+            "prevalence": f"{((_float_or_none(row.get('prevalence_percent', '')) or 0.0) / 100.0):.4f}",
+            "prevalence_percent": row.get("prevalence_percent", ""),
+            "warning_flags": row.get("warning_flags", ""),
+        })
     data_path = key_tables / "geographic_distribution.tsv"
-    write_rows(data_path, rows, fields)
+    write_rows(data_path, legacy_rows, legacy_fields)
     (figures / "geographic_distribution.data.tsv").write_text(data_path.read_text(encoding="utf-8"), encoding="utf-8")
 
-    first_key = next((row for row in rows if row["collection_year"] == "all"), None)
-    first_rows = [
-        row for row in rows
-        if first_key and row["mode"] == first_key["mode"] and row["database"] == first_key["database"] and row["feature_id"] == first_key["feature_id"] and row["collection_year"] == "all"
-    ]
-    svg_path = figures / "geographic_distribution_map.svg"
-    svg_path.write_text(_svg_geographic_map(first_rows, "Geographic Distribution"), encoding="utf-8")
-    png_path = figures / "geographic_distribution_map.png"
-    _geographic_map_png(first_rows, png_path)
+    def plot_ready(rows: list[dict[str, str]], level: str, limit: int = top_n) -> list[dict[str, str]]:
+        active = [row for row in rows if row.get("geo_level") == level and row.get("group_name") not in {"missing", "unknown", "missing (unknown)"}]
+        passing = [row for row in active if int(_float_or_none(row.get("total_genomes", "")) or 0) >= 5]
+        ranked = sorted(
+            passing or active,
+            key=lambda row: (
+                -_geo_metric_value(row, "prevalence_percent"),
+                -(_float_or_none(row.get("positive_genomes", row.get("positive_genomes_with_database", ""))) or 0.0),
+                row.get("group_name", ""),
+            ),
+        )
+        return ranked[:limit]
 
-    datasets = json.dumps(rows)
-    html_path = figures / "geographic_distribution_map.html"
-    html_path.write_text(
-        f"""<!doctype html>
+    figure_files: list[Path] = []
+    default_database = "amr" if "amr" in database_presence else (sorted(database_presence)[0] if database_presence else "")
+    if default_database:
+        default_rows = [row for row in database_rows if row.get("database") == default_database]
+        country_rows = [row for row in default_rows if row.get("geo_level") == "country" and row.get("country") not in {"", "missing"}]
+        figure_files += _write_geographic_map_figure(figures, f"geographic_map_{_safe_filename(default_database)}_burden", country_rows, f"{default_database} geographic distribution", GEOGRAPHIC_DATABASE_FIELDS)
+        figure_files += _write_geographic_bar_figure(figures, f"geographic_country_bar_{_safe_filename(default_database)}_burden", plot_ready(default_rows, "country"), f"{default_database} by country", GEOGRAPHIC_DATABASE_FIELDS)
+        figure_files += _write_geographic_bar_figure(figures, f"geographic_continent_bar_{_safe_filename(default_database)}_burden", plot_ready(default_rows, "continent"), f"{default_database} by continent", GEOGRAPHIC_DATABASE_FIELDS)
+        figure_files += _write_geographic_bar_figure(figures, f"geographic_region_bar_{_safe_filename(default_database)}_burden", plot_ready(default_rows, "subcontinent"), f"{default_database} by region", GEOGRAPHIC_DATABASE_FIELDS)
+
+    if selected_features:
+        feature_database, feature_id = selected_features[0][0]
+        feature_default_rows = [row for row in feature_rows if row.get("database") == feature_database and row.get("feature_id") == feature_id]
+        feature_stem = f"{_safe_filename(feature_database)}_{_safe_filename(feature_id)}"
+        figure_files += _write_geographic_map_figure(figures, f"geographic_map_{feature_stem}", [row for row in feature_default_rows if row.get("geo_level") == "country" and row.get("country") not in {"", "missing"}], f"{feature_database}:{feature_id} geographic distribution", GEOGRAPHIC_FEATURE_FIELDS)
+        figure_files += _write_geographic_bar_figure(figures, f"geographic_country_bar_{feature_stem}", plot_ready(feature_default_rows, "country"), f"{feature_database}:{feature_id} by country", GEOGRAPHIC_FEATURE_FIELDS)
+        figure_files += _write_geographic_bar_figure(figures, f"geographic_continent_bar_{feature_stem}", plot_ready(feature_default_rows, "continent"), f"{feature_database}:{feature_id} by continent", GEOGRAPHIC_FEATURE_FIELDS)
+        figure_files += _write_geographic_bar_figure(figures, f"geographic_region_bar_{feature_stem}", plot_ready(feature_default_rows, "subcontinent"), f"{feature_database}:{feature_id} by region", GEOGRAPHIC_FEATURE_FIELDS)
+
+    initial_rows = [row for row in database_rows if row.get("database") == default_database and row.get("geo_level") == "country" and row.get("country") not in {"", "missing"}] if default_database else []
+    svg_path = figures / "geographic_distribution_map.svg"
+    svg_path.write_text(_svg_geographic_map(initial_rows, "Geographic Distribution"), encoding="utf-8")
+    png_path = figures / "geographic_distribution_map.png"
+    _geographic_map_png(initial_rows, png_path)
+
+    report_feature_rows = [row for row in feature_rows if (row.get("database", ""), row.get("feature_id", "")) in selected_feature_keys]
+    geographic_html = """<!doctype html>
 <html><head><meta charset="utf-8"><title>Geographic Distribution</title>
 <style>
-body {{ font-family: Arial, sans-serif; color: #1f2933; margin: 1.5rem; }}
-label {{ font-weight: 700; margin-right: 0.4rem; }}
-select {{ margin: 0 1rem 1rem 0; padding: 0.35rem; }}
-#map svg {{ max-width: 100%; height: auto; border: 1px solid #d9e2ec; }}
-.warning {{ background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; margin: 1rem 0; }}
+body { font-family: Arial, sans-serif; color: #1f2933; margin: 1.5rem; }
+.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; align-items: end; }
+label { font-weight: 700; display: block; margin-bottom: 0.25rem; }
+select { width: 100%; padding: 0.35rem; box-sizing: border-box; }
+#map svg { max-width: 100%; height: auto; border: 1px solid #d9e2ec; background: white; }
+.warning { background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; margin: 1rem 0; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 0.65rem; margin: 1rem 0; }
+.card { border: 1px solid #d9e2ec; border-radius: 6px; padding: 0.7rem; background: #f8fafc; }
+.card span { display: block; color: #52606d; font-size: 0.8rem; }
+.card strong { font-size: 1.25rem; }
+.bar { display: grid; grid-template-columns: minmax(150px, 260px) 1fr 130px; gap: 0.5rem; align-items: center; margin: 0.3rem 0; }
+.bar-track { background: #e2e8f0; height: 18px; border-radius: 3px; overflow: hidden; }
+.bar-fill { background: #0f766e; height: 100%; }
+.bar.small .bar-fill { background: #94a3b8; }
+table { border-collapse: collapse; width: 100%; margin-top: 1rem; font-size: 0.9rem; }
+th, td { border: 1px solid #d9e2ec; padding: 0.35rem; text-align: left; }
+th { background: #f0f4f8; }
+a.button { display: inline-block; padding: 0.45rem 0.65rem; margin: 0.2rem 0.35rem 0.2rem 0; background: #0f766e; color: white; text-decoration: none; border-radius: 4px; }
 </style></head><body>
 <h1>Geographic Distribution</h1>
-<p>Select a database/feature and year scope. Prevalence reflects this dataset only, not global prevalence.</p>
-<div class="warning">Small country/year groups are flagged in the data table. Interpret geographic patterns with BioProject, lineage, and collection-year bias in mind.</div>
-<label for="feature">Feature</label><select id="feature"></select>
-<label for="year">Year</label><select id="year"></select>
+<p>This section summarizes where selected databases or features were detected in the analyzed dataset. Percentages always use genome-count denominators.</p>
+<div class="warning">Geographic distribution reflects the analyzed dataset and may not represent true regional or global prevalence.</div>
+<div class="controls">
+<div><label for="database">Database</label><select id="database"></select></div>
+<div><label for="mode">Mode</label><select id="mode"><option value="database_burden">Database burden / any feature</option><option value="individual_feature">Individual feature / gene</option></select></div>
+<div><label for="feature">Feature</label><select id="feature"></select></div>
+<div><label for="geo">Geographic level</label><select id="geo"><option value="country">Country</option><option value="continent">Continent</option><option value="subcontinent">Subcontinent / region</option><option value="country_year">Country + collection year</option></select></div>
+<div><label for="metric">Metric</label><select id="metric"><option value="prevalence_percent">Prevalence %</option><option value="positive_genomes">Positive genome count</option><option value="total_genomes">Total genome count</option><option value="mean_feature_burden_per_genome">Mean feature burden per genome</option><option value="median_feature_burden_per_genome">Median feature burden per genome</option><option value="feature_rows">Feature row count</option></select></div>
+<div><label for="minn">Minimum group size</label><select id="minn"><option value="5">n&gt;=5</option><option value="0">All</option><option value="3">n&gt;=3</option><option value="10">n&gt;=10</option></select></div>
+<div><label for="display">Display</label><select id="display"><option value="20">Top 20</option><option value="10">Top 10</option><option value="50">Top 50</option><option value="999999">Complete</option></select></div>
+<div><label for="warnings">Warning filter</label><select id="warnings"><option value="all">Show all</option><option value="hide_small">Hide small groups</option><option value="no_major">No major warnings</option></select></div>
+</div>
 <div id="summary"></div>
 <div id="map"></div>
-<p><a href="geographic_distribution_map.png">Download initial PNG</a> | <a href="geographic_distribution_map.svg">Download initial SVG</a> | <a href="geographic_distribution.data.tsv">Download plotted data TSV</a></p>
+<h2>Ranked groups</h2>
+<div id="bars"></div>
+<h2>Preview table</h2>
+<div id="table"></div>
+<p><a class="button" href="../geographic_tables.zip">Download geographic tables ZIP</a><a class="button" href="../geographic_figures.zip">Download geographic figures ZIP</a><a class="button" href="../tables/geographic_database_burden.tsv">Database burden table</a><a class="button" href="../tables/geographic_feature_distribution.tsv">Feature distribution table</a><a class="button" href="../tables/geographic_warning_summary.tsv">Warning summary</a></p>
 <script>
-const rows = {datasets};
-const coords = {json.dumps(COUNTRY_COORDS)};
+const databaseRows = __DATABASE_ROWS__;
+const featureRows = __FEATURE_ROWS__;
+const coords = __COUNTRY_COORDS__;
 const width = 960, height = 480;
-function cleanCountry(value) {{ return (value || '').split(':')[0].trim(); }}
-function key(row) {{ return row.mode + ' | ' + row.database + ' | ' + row.feature_id; }}
-function xy(country) {{
+function cleanCountry(value) { return (value || '').split(':')[0].trim(); }
+function xy(country) {
   const item = coords[cleanCountry(country).toLowerCase()];
   if (!item) return null;
   const lat = item[0], lon = item[1];
   return [((lon + 180) / 360) * width, ((90 - lat) / 180) * height];
-}}
+}
+const databaseSelect = document.getElementById('database');
+const modeSelect = document.getElementById('mode');
 const featureSelect = document.getElementById('feature');
-const yearSelect = document.getElementById('year');
-for (const value of [...new Set(rows.map(key))].sort()) {{
-  const opt = document.createElement('option'); opt.value = value; opt.textContent = value; featureSelect.appendChild(opt);
-}}
-function updateYears() {{
-  const selected = featureSelect.value;
-  yearSelect.innerHTML = '';
-  const years = [...new Set(rows.filter(r => key(r) === selected).map(r => r.collection_year))].sort();
-  for (const year of years) {{ const opt = document.createElement('option'); opt.value = year; opt.textContent = year; yearSelect.appendChild(opt); }}
-  if (years.includes('all')) yearSelect.value = 'all';
-}}
-function render() {{
-  const selected = featureSelect.value, year = yearSelect.value;
-  const active = rows.filter(r => key(r) === selected && r.collection_year === year);
-  const total = active.reduce((a, r) => a + Number(r.total_genomes || 0), 0);
-  const positive = active.reduce((a, r) => a + Number(r.positive_genomes || 0), 0);
-  document.getElementById('summary').innerHTML = `<p><strong>${{selected}}</strong>: ${{positive}} positive observations across ${{total}} country-level genome observations.</p>`;
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${{width}}" height="${{height + 45}}" viewBox="0 0 ${{width}} ${{height + 45}}">`;
+const geoSelect = document.getElementById('geo');
+const metricSelect = document.getElementById('metric');
+const minSelect = document.getElementById('minn');
+const displaySelect = document.getElementById('display');
+const warningSelect = document.getElementById('warnings');
+for (const value of [...new Set(databaseRows.map(r => r.database).concat(featureRows.map(r => r.database)))].sort()) {
+  const opt = document.createElement('option'); opt.value = value; opt.textContent = value; databaseSelect.appendChild(opt);
+}
+if ([...databaseSelect.options].some(o => o.value === 'amr')) databaseSelect.value = 'amr';
+function updateFeatures() {
+  const db = databaseSelect.value;
+  const current = featureSelect.value;
+  featureSelect.innerHTML = '';
+  const features = [...new Set(featureRows.filter(r => r.database === db).map(r => r.feature_id))].sort();
+  for (const value of features) { const opt = document.createElement('option'); opt.value = value; opt.textContent = value; featureSelect.appendChild(opt); }
+  if (features.includes(current)) featureSelect.value = current;
+  featureSelect.disabled = modeSelect.value !== 'individual_feature' || features.length === 0;
+}
+function rowValue(row, metric) {
+  const fallback = metric === 'feature_rows' ? row.total_feature_rows : 0;
+  return Number(row[metric] || fallback || 0);
+}
+function activeRows() {
+  const db = databaseSelect.value, mode = modeSelect.value, geo = geoSelect.value, minN = Number(minSelect.value || 0);
+  let rows = mode === 'database_burden'
+    ? databaseRows.filter(r => r.database === db && r.geo_level === geo)
+    : featureRows.filter(r => r.database === db && r.feature_id === featureSelect.value && r.geo_level === geo);
+  rows = rows.filter(r => Number(r.total_genomes || 0) >= minN || minN === 0);
+  if (warningSelect.value === 'hide_small') rows = rows.filter(r => !(r.warning_flags || '').includes('small_group_warning'));
+  if (warningSelect.value === 'no_major') rows = rows.filter(r => !/(small_group_warning|bioproject_dominance|lineage_dominance|single_country_dominance)/.test(r.warning_flags || ''));
+  rows = rows.filter(r => !['missing','unknown','missing (unknown)'].includes(r.group_name || ''));
+  const metric = metricSelect.value;
+  rows.sort((a, b) => rowValue(b, metric) - rowValue(a, metric) || (a.group_name || '').localeCompare(b.group_name || ''));
+  return rows.slice(0, Number(displaySelect.value || 20));
+}
+function renderMap(active) {
+  const geo = geoSelect.value;
+  if (geo !== 'country' && geo !== 'country_year') {
+    document.getElementById('map').innerHTML = '<p>Map view is available for country-level rows. Use the bar plots for continent and region summaries.</p>';
+    return;
+  }
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height + 45}" viewBox="0 0 ${width} ${height + 45}">`;
   svg += `<rect width="100%" height="100%" fill="#f8fafc"/><text x="20" y="28" font-size="20" font-family="Arial" font-weight="700" fill="#102a43">Geographic Distribution</text>`;
-  svg += `<g transform="translate(0,45)"><rect x="0" y="0" width="${{width}}" height="${{height}}" fill="#eff6ff" stroke="#bcccdc"/>`;
-  for (let lon = -120; lon <= 180; lon += 60) {{ const x = ((lon + 180) / 360) * width; svg += `<line x1="${{x}}" y1="0" x2="${{x}}" y2="${{height}}" stroke="#d9e2ec"/>`; }}
-  for (let lat = -60; lat <= 90; lat += 30) {{ const y = ((90 - lat) / 180) * height; svg += `<line x1="0" y1="${{y}}" x2="${{width}}" y2="${{y}}" stroke="#d9e2ec"/>`; }}
-  for (const row of active) {{
+  svg += `<g transform="translate(0,45)"><rect x="0" y="0" width="${width}" height="${height}" fill="#eff6ff" stroke="#bcccdc"/>`;
+  for (let lon = -120; lon <= 180; lon += 60) { const x = ((lon + 180) / 360) * width; svg += `<line x1="${x}" y1="0" x2="${x}" y2="${height}" stroke="#d9e2ec"/>`; }
+  for (let lat = -60; lat <= 90; lat += 30) { const y = ((90 - lat) / 180) * height; svg += `<line x1="0" y1="${y}" x2="${width}" y2="${y}" stroke="#d9e2ec"/>`; }
+  for (const row of active) {
     const point = xy(row.country); if (!point) continue;
-    const prevalence = Number(row.prevalence || 0), total = Number(row.total_genomes || 0);
+    const total = Number(row.total_genomes || 0);
     const radius = Math.max(5, Math.min(28, 4 + Math.sqrt(Math.max(total, 1)) * 4));
-    const fill = `rgb(${{Math.round(230 * prevalence)}},80,${{Math.round(200 * (1 - prevalence))}})`;
-    const label = `${{row.country}}: ${{row.positive_genomes}}/${{row.total_genomes}} (${{row.prevalence_percent}}%)`;
-    svg += `<circle cx="${{point[0].toFixed(1)}}" cy="${{point[1].toFixed(1)}}" r="${{radius.toFixed(1)}}" fill="${{fill}}" fill-opacity="0.75" stroke="#1f2933"><title>${{label}}</title></circle>`;
-    svg += `<text x="${{(point[0] + radius + 3).toFixed(1)}}" y="${{(point[1] + 4).toFixed(1)}}" font-size="11" fill="#1f2933">${{row.country}}</text>`;
-  }}
+    const p = Number(row.prevalence_percent || 0) / 100;
+    const fill = (row.warning_flags || '').includes('small_group_warning') ? '#cbd5e1' : `rgb(${Math.round(230 * p)},80,${Math.round(200 * (1 - p))})`;
+    const label = `${row.group_name}: ${row.prevalence_display}; warnings=${row.warning_flags || ''}`;
+    svg += `<circle cx="${point[0].toFixed(1)}" cy="${point[1].toFixed(1)}" r="${radius.toFixed(1)}" fill="${fill}" fill-opacity="0.75" stroke="#1f2933"><title>${label}</title></circle>`;
+    svg += `<text x="${(point[0] + radius + 3).toFixed(1)}" y="${(point[1] + 4).toFixed(1)}" font-size="11" fill="#1f2933">${row.country}</text>`;
+  }
   svg += '</g></svg>';
   document.getElementById('map').innerHTML = svg;
-}}
-featureSelect.addEventListener('change', () => {{ updateYears(); render(); }});
-yearSelect.addEventListener('change', render);
-updateYears(); render();
+}
+function renderBars(active) {
+  const metric = metricSelect.value;
+  const maxValue = Math.max(...active.map(r => rowValue(r, metric)), 1);
+  document.getElementById('bars').innerHTML = active.map(row => {
+    const value = rowValue(row, metric);
+    const width = Math.max(1, value / maxValue * 100);
+    const cls = (row.warning_flags || '').includes('small_group_warning') ? 'bar small' : 'bar';
+    const display = metric === 'prevalence_percent' ? row.prevalence_display : value.toFixed(metric.includes('burden') ? 2 : 0);
+    return `<div class="${cls}"><div>${row.group_name}</div><div class="bar-track"><div class="bar-fill" style="width:${width}%"></div></div><div>${display}</div></div>`;
+  }).join('') || '<p>No rows match the selected filters.</p>';
+}
+function renderTable(active) {
+  const headers = ['database','feature_id','geo_level','group_name','total_genomes','positive_genomes','prevalence_display','mean_feature_burden_per_genome','median_feature_burden_per_genome','warning_flags'];
+  let html = '<table><thead><tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+  for (const row of active.slice(0, 50)) html += '<tr>' + headers.map(h => `<td>${row[h] || ''}</td>`).join('') + '</tr>';
+  html += '</tbody></table>';
+  document.getElementById('table').innerHTML = html;
+}
+function render() {
+  updateFeatures();
+  const active = activeRows();
+  const db = databaseSelect.value, mode = modeSelect.value;
+  const positives = active.reduce((a, r) => a + Number(r.positive_genomes || 0), 0);
+  const total = active.reduce((a, r) => a + Number(r.total_genomes || 0), 0);
+  const top = active[0] || {};
+  document.getElementById('summary').innerHTML = `<div class="cards"><div class="card"><span>Mode</span><strong>${mode === 'database_burden' ? 'Database burden' : 'Feature'}</strong></div><div class="card"><span>Database</span><strong>${db}</strong></div><div class="card"><span>Groups shown</span><strong>${active.length}</strong></div><div class="card"><span>Top group</span><strong>${top.group_name || '-'}</strong></div><div class="card"><span>Top prevalence</span><strong>${top.prevalence_display || '-'}</strong></div></div><p>Displayed totals across shown groups: ${positives}/${total}. Interpret these summaries as dataset-specific, not global prevalence.</p>`;
+  renderMap(active);
+  renderBars(active);
+  renderTable(active);
+}
+for (const control of [databaseSelect, modeSelect, featureSelect, geoSelect, metricSelect, minSelect, displaySelect, warningSelect]) control.addEventListener('change', render);
+updateFeatures(); render();
 </script></body></html>
-""",
-        encoding="utf-8",
+"""
+    geographic_html = (
+        geographic_html
+        .replace("__DATABASE_ROWS__", json.dumps(database_rows))
+        .replace("__FEATURE_ROWS__", json.dumps(report_feature_rows))
+        .replace("__COUNTRY_COORDS__", json.dumps(COUNTRY_COORDS))
     )
+    analysis_html_path = figures / "geographic_distribution.html"
+    analysis_html_path.write_text(geographic_html, encoding="utf-8")
+    html_path = figures / "geographic_distribution_map.html"
+    html_path.write_text(geographic_html, encoding="utf-8")
+
+    table_zip = important_dir / "geographic_tables.zip"
+    figure_zip = important_dir / "geographic_figures.zip"
+    table_files = [summary_path, feature_path, burden_path, warning_path, data_path]
+    figure_files += [analysis_html_path, html_path, svg_path, png_path, figures / "geographic_distribution.data.tsv"]
+    tables_zip = _write_zip_bundle(table_zip, table_files, important_dir)
+    figures_zip = _write_zip_bundle(figure_zip, figure_files, important_dir)
     return {
         "important_geographic_distribution": str(data_path),
+        "important_geographic_summary": str(summary_path),
+        "important_geographic_feature_distribution": str(feature_path),
+        "important_geographic_database_burden": str(burden_path),
+        "important_geographic_warning_summary": str(warning_path),
+        "important_geographic_analysis_html": str(analysis_html_path),
         "important_geographic_map_html": str(html_path),
         "important_geographic_map_svg": str(svg_path),
         "important_geographic_map_png": str(png_path),
+        "important_geographic_tables_zip": tables_zip,
+        "important_geographic_figures_zip": figures_zip,
     }
 
 
@@ -8079,6 +8634,10 @@ def write_important_results_report(
     prevalence_database_rows = read_table(important_dir / "tables" / "prevalence_summary_by_database.tsv")
     prevalence_core_rows = read_table(important_dir / "tables" / "prevalence_core_accessory_rare_summary.tsv")
     prevalence_written_rows = read_table(important_dir / "tables" / "prevalence_written_summaries.tsv")
+    geographic_summary_rows = read_table(important_dir / "tables" / "geographic_distribution_summary.tsv")
+    geographic_feature_rows = read_table(important_dir / "tables" / "geographic_feature_distribution.tsv")
+    geographic_burden_rows = read_table(important_dir / "tables" / "geographic_database_burden.tsv")
+    geographic_warning_rows = read_table(important_dir / "tables" / "geographic_warning_summary.tsv")
     variation_rows = read_table(important_dir / "key_tables" / "feature_variation_summary.tsv")
     variation_database_rows = read_table(important_dir / "key_tables" / "feature_variation_database_summary.tsv")
     temporal_rows = read_table(important_dir / "key_tables" / "temporal_trend_summary.tsv")
@@ -8093,6 +8652,20 @@ def write_important_results_report(
     metadata_summary_rows = read_table(important_dir / "tables" / "metadata_association_summary.tsv")
     metadata_usability_rows = read_table(important_dir / "tables" / "metadata_usability_summary.tsv")
     top_prevalence = sorted(prevalence_rows, key=lambda row: (row.get("database", ""), -(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("feature_id", "")))[:20]
+    top_geographic_burden = sorted(
+        [
+            row for row in geographic_burden_rows
+            if row.get("geo_level") == "country" and row.get("group_name") not in {"missing", "unknown", "missing (unknown)"}
+        ],
+        key=lambda row: (-(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("database", ""), row.get("group_name", "")),
+    )[:20]
+    top_geographic_features = sorted(
+        [
+            row for row in geographic_feature_rows
+            if row.get("geo_level") == "country" and row.get("group_name") not in {"missing", "unknown", "missing (unknown)"}
+        ],
+        key=lambda row: (-(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("database", ""), row.get("feature_id", ""), row.get("group_name", "")),
+    )[:20]
     top_variation = sorted(variation_rows, key=lambda row: (-(_float_or_none(row.get("iqr_identity", "")) or 0.0), row.get("database", ""), row.get("feature_id", "")))[:20]
     top_temporal = sorted(temporal_rows, key=lambda row: (-abs(_float_or_none(row.get("change_percent_points", "")) or 0.0), row.get("database", ""), row.get("feature_id", "")))[:20]
     top_cooccurrence = sorted(cooccurrence_rows, key=lambda row: (-abs(_float_or_none(row.get("phi_correlation", "")) or 0.0), row.get("feature_a_database", ""), row.get("feature_a_id", "")))[:20]
@@ -8168,6 +8741,54 @@ def write_important_results_report(
             f"<p><a href='figures/{html.escape(stem)}.png'>PNG</a> | <a href='figures/{html.escape(path.name)}'>SVG</a> | <a href='figures/{html.escape(stem)}.pdf'>PDF</a> | <a href='figures/{html.escape(stem)}.data.tsv'>Data TSV</a></p></div>"
         )
     prevalence_figures_html = "<div class='figure-row'>" + "".join((prevalence_figure_items + prevalence_figures)[:8]) + "</div>" if (prevalence_figure_items or prevalence_figures) else "<p>No prevalence figures were generated because no feature rows were available.</p>"
+    geographic_databases = len({row.get("database", "") for row in geographic_burden_rows if row.get("database", "")})
+    geographic_country_groups = len({row.get("group_name", "") for row in geographic_burden_rows if row.get("geo_level") == "country" and row.get("group_name") not in {"", "missing", "unknown", "missing (unknown)"}})
+    geographic_missing_country = max([int(_float_or_none(row.get("missing_country_count", "")) or 0) for row in geographic_summary_rows] or [0])
+    geographic_warning_count = sum(1 for row in geographic_warning_rows if row.get("warning_flags", ""))
+    geographic_cards_html = (
+        "<div class='cards'>"
+        f"<div class='card'><span>Databases</span><strong>{geographic_databases}</strong></div>"
+        f"<div class='card'><span>Country groups</span><strong>{geographic_country_groups}</strong></div>"
+        f"<div class='card'><span>Missing country metadata</span><strong>{geographic_missing_country}</strong></div>"
+        f"<div class='card'><span>Warning groups</span><strong>{geographic_warning_count}</strong></div>"
+        "</div>"
+    )
+    best_geo = next((row for row in geographic_summary_rows if row.get("mode") == "database_burden" and row.get("geo_level") == "country" and row.get("top_group")), {})
+    geographic_summary_html = (
+        "<p>"
+        f"Geographic summaries cover {geographic_databases} detected database(s) across {geographic_country_groups} country group(s). "
+        f"The default country-level view highlights {html.escape(best_geo.get('database', 'detected features'))}; "
+        f"the top group is {html.escape(best_geo.get('top_group', 'not available'))} "
+        f"({html.escape(best_geo.get('top_group_prevalence_percent', ''))}% "
+        f"{html.escape(best_geo.get('top_group_positive_genomes', ''))}/{html.escape(best_geo.get('top_group_total_genomes', ''))}). "
+        f"Country metadata was missing for {geographic_missing_country} genome(s)."
+        "</p>"
+        if geographic_summary_rows else "<p>No geographic summaries were generated because country metadata or feature rows were unavailable.</p>"
+    )
+    geographic_burden_table_html = _html_table(
+        top_geographic_burden,
+        ["database", "geo_level", "group_name", "total_genomes", "positive_genomes", "prevalence_display", "mean_feature_burden_per_genome", "median_feature_burden_per_genome", "warning_flags"],
+        max_rows=20,
+    )
+    geographic_feature_table_html = _html_table(
+        top_geographic_features,
+        ["database", "feature_id", "geo_level", "group_name", "total_genomes", "positive_genomes", "prevalence_display", "feature_rows", "mean_hits_per_positive_genome", "warning_flags"],
+        max_rows=20,
+    )
+    geographic_figure_items = []
+    for path in sorted((important_dir / "figures").glob("geographic_*_bar_*.svg"))[:6]:
+        stem = path.stem
+        geographic_figure_items.append(
+            f"<div><h3>{html.escape(stem.replace('_', ' '))}</h3><img src='figures/{html.escape(path.name)}' alt='{html.escape(stem)}'>"
+            f"<p><a href='figures/{html.escape(stem)}.png'>PNG</a> | <a href='figures/{html.escape(path.name)}'>SVG</a> | <a href='figures/{html.escape(stem)}.pdf'>PDF</a> | <a href='figures/{html.escape(stem)}.data.tsv'>Data TSV</a></p></div>"
+        )
+    for path in sorted((important_dir / "figures").glob("geographic_map_*.svg"))[:2]:
+        stem = path.stem
+        geographic_figure_items.append(
+            f"<div><h3>{html.escape(stem.replace('_', ' '))}</h3><img src='figures/{html.escape(path.name)}' alt='{html.escape(stem)}'>"
+            f"<p><a href='figures/{html.escape(stem)}.png'>PNG</a> | <a href='figures/{html.escape(path.name)}'>SVG</a> | <a href='figures/{html.escape(stem)}.pdf'>PDF</a> | <a href='figures/{html.escape(stem)}.data.tsv'>Data TSV</a></p></div>"
+        )
+    geographic_figures_html = "<div class='figure-row'>" + "".join(geographic_figure_items[:8]) + "</div>" if geographic_figure_items else "<p>No geographic figures were generated because no mappable country groups were available.</p>"
     variation_unique_features = len(variation_rows)
     variation_total_hits = sum(int(_float_or_none(row.get("total_hits", "")) or 0) for row in variation_rows)
     variation_high_features = sum(1 for row in variation_rows if row.get("variation_label") == "high_variation")
@@ -8359,8 +8980,15 @@ th {{ background: #f0f4f8; }}
 {prevalence_table_html}
 <div class="downloads"><a href="figures/prevalence_analysis.html">Open interactive prevalence report</a><a href="prevalence_tables.zip">Download prevalence tables ZIP</a><a href="prevalence_figures.zip">Download prevalence figures ZIP</a><a href="tables/feature_prevalence.tsv">Download full feature prevalence</a><a href="tables/feature_prevalence_top.tsv">Download top feature prevalence</a><a href="tables/prevalence_summary_by_database.tsv">Download database summary</a><a href="tables/prevalence_core_accessory_rare_summary.tsv">Download core/common/accessory/rare summary</a><a href="tables/prevalence_database_burden_by_sample.tsv">Download database burden by sample</a></div></section>
 <section id="geography"><h2>Geographic Distribution</h2><div class="warning">Geographic patterns reflect the analyzed dataset only. They are not global prevalence estimates and can be affected by BioProject, lineage, country, and year sampling bias.</div>
-<iframe src="figures/geographic_distribution_map.html" title="Geographic distribution map"></iframe>
-<div class="downloads"><a href="figures/geographic_distribution_map.html">Open map</a><a href="figures/geographic_distribution_map.png">Download initial PNG</a><a href="figures/geographic_distribution_map.svg">Download initial SVG</a><a href="figures/geographic_distribution.data.tsv">Download data TSV</a></div></section>
+{geographic_cards_html}
+{geographic_summary_html}
+<iframe src="figures/geographic_distribution.html" title="Geographic distribution interactive report"></iframe>
+{geographic_figures_html}
+<h3>Top database burden by country</h3>
+{geographic_burden_table_html}
+<h3>Top feature distributions by country</h3>
+{geographic_feature_table_html}
+<div class="downloads"><a href="figures/geographic_distribution.html">Open interactive geographic report</a><a href="figures/geographic_distribution_map.html">Open compatibility map</a><a href="geographic_tables.zip">Download geographic tables ZIP</a><a href="geographic_figures.zip">Download geographic figures ZIP</a><a href="tables/geographic_distribution_summary.tsv">Download geographic summary</a><a href="tables/geographic_database_burden.tsv">Download database burden table</a><a href="tables/geographic_feature_distribution.tsv">Download feature distribution table</a><a href="tables/geographic_warning_summary.tsv">Download warning summary</a></div></section>
 <section id="variations"><h2>Variations</h2><p>Variation summaries use identity, coverage, alignment length, and hit-count values when available. Low identity, low coverage, high variation, and few-hit flags are review cues, not automatic failures.</p>
 <div class="warning">A feature can be common but conserved, common and variable, or rare with unstable estimates. Use the complete hit-level table when reviewing low-confidence or partial hits.</div>
 {variation_cards_html}
@@ -8406,7 +9034,9 @@ th {{ background: #f0f4f8; }}
 <li><a href="tables/feature_prevalence.tsv">Feature prevalence table</a></li>
 <li><a href="tables/prevalence_summary_by_database.tsv">Prevalence database summary</a></li>
 <li><a href="figures/prevalence_analysis.html">Interactive prevalence report</a></li>
-<li><a href="key_tables/geographic_distribution.tsv">Geographic distribution table</a></li>
+<li><a href="figures/geographic_distribution.html">Interactive geographic report</a></li>
+<li><a href="tables/geographic_database_burden.tsv">Geographic database burden table</a></li>
+<li><a href="tables/geographic_feature_distribution.tsv">Geographic feature distribution table</a></li>
 <li><a href="key_tables/feature_variation_summary.tsv">Feature variation summary</a></li>
 <li><a href="key_tables/feature_variation_database_summary.tsv">Feature variation database summary</a></li>
 <li><a href="figures/variation_analysis.html">Interactive variation report</a></li>

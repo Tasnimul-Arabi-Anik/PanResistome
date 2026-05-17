@@ -12,7 +12,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from normalize_fetchm2_output import normalize_fetchm2_output
 from export_panr2_inputs import parse_version_line
-from panr2_contract import export_contract, _kruskal_wallis, write_important_prevalence_outputs
+from panr2_contract import export_contract, _kruskal_wallis, write_important_geographic_outputs, write_important_prevalence_outputs
 from check_genomad_readiness import resolve_database_dir
 from check_container_readiness import as_list as container_as_list
 from check_container_readiness import image_exec_command
@@ -21,6 +21,57 @@ from check_comprehensive_validation_outputs import check_sample_dir
 
 
 class FetchM2AdapterTests(unittest.TestCase):
+    def test_important_geographic_distribution_counts_unique_genomes_and_flags_metadata(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            sample_dir = root / "Sample"
+            metadata_dir = sample_dir / "metadata_output"
+            features_dir = root / "panr2_inputs" / "features"
+            metadata_dir.mkdir(parents=True)
+            features_dir.mkdir(parents=True)
+            pd.DataFrame(
+                [
+                    {"Assembly Accession": "G1", "Country": "Bangladesh", "Collection_Year": "2020", "Assembly BioProject Accession": "PRJ1"},
+                    {"Assembly Accession": "G2", "Country": "Bangladesh", "Collection_Year": "2021", "Assembly BioProject Accession": "PRJ2"},
+                    {"Assembly Accession": "G3", "Country": "", "Collection_Year": "2021", "Assembly BioProject Accession": "PRJ3"},
+                ]
+            ).to_csv(metadata_dir / "ncbi_clean.csv", index=False)
+            pd.DataFrame(
+                [
+                    {"assembly_accession": "G1", "sample_id": "s1", "database": "amr", "feature_id": "blaA", "feature_name": "blaA", "feature_category": "beta_lactam", "presence": "1", "identity": "99", "coverage": "100", "contig": "c1", "start": "1", "end": "100", "tool": "abricate", "database_version": "v1"},
+                    {"assembly_accession": "G1", "sample_id": "s1", "database": "amr", "feature_id": "blaA", "feature_name": "blaA", "feature_category": "beta_lactam", "presence": "1", "identity": "98", "coverage": "95", "contig": "c2", "start": "1", "end": "90", "tool": "abricate", "database_version": "v1"},
+                    {"assembly_accession": "G2", "sample_id": "s2", "database": "vfdb", "feature_id": "fimH", "feature_name": "fimH", "feature_category": "adhesion", "presence": "1", "identity": "97", "coverage": "90", "contig": "c3", "start": "1", "end": "80", "tool": "abricate", "database_version": "v2"},
+                ]
+            ).to_csv(features_dir / "all_features.tsv", sep="\t", index=False)
+
+            outputs = write_important_geographic_outputs(sample_dir, root / "panr2_inputs", sample_dir / "important", top_n=2)
+            self.assertTrue(Path(outputs["important_geographic_database_burden"]).exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "geographic_distribution.html").exists())
+            self.assertTrue((sample_dir / "important" / "geographic_tables.zip").exists())
+
+            burden = pd.read_csv(sample_dir / "important" / "tables" / "geographic_database_burden.tsv", sep="\t")
+            bd = burden[(burden["database"] == "amr") & (burden["geo_level"] == "country") & (burden["group_name"] == "Bangladesh")].iloc[0]
+            self.assertEqual(int(bd["total_genomes"]), 2)
+            self.assertEqual(int(bd["positive_genomes"]), 1)
+            self.assertEqual(int(bd["total_feature_rows"]), 2)
+            self.assertAlmostEqual(float(bd["prevalence_percent"]), 50.0)
+            self.assertEqual(str(bd["continent"]), "Asia")
+            self.assertEqual(str(bd["subcontinent"]), "South Asia")
+            self.assertIn("small_group_warning", str(bd["warning_flags"]))
+
+            features = pd.read_csv(sample_dir / "important" / "tables" / "geographic_feature_distribution.tsv", sep="\t")
+            bla = features[(features["database"] == "amr") & (features["feature_id"] == "blaA") & (features["geo_level"] == "country") & (features["group_name"] == "Bangladesh")].iloc[0]
+            self.assertEqual(int(bla["positive_genomes"]), 1)
+            self.assertEqual(int(bla["feature_rows"]), 2)
+            self.assertAlmostEqual(float(bla["mean_hits_per_positive_genome"]), 2.0)
+
+            warnings = pd.read_csv(sample_dir / "important" / "tables" / "geographic_warning_summary.tsv", sep="\t")
+            missing = warnings[(warnings["geo_level"] == "country") & (warnings["group_name"] == "missing")].iloc[0]
+            self.assertIn("missing_country_metadata", str(missing["warning_flags"]))
+            html = (sample_dir / "important" / "figures" / "geographic_distribution.html").read_text(encoding="utf-8")
+            for control in ["Database", "Mode", "Feature", "Geographic level", "Minimum group size", "Warning filter"]:
+                self.assertIn(control, html)
+
     def test_important_prevalence_counts_unique_genomes_and_duplicate_rows(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -243,8 +294,17 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue((sample_dir / "basic" / "enriched_genome_dataset.tsv").exists())
             self.assertTrue((sample_dir / "important" / "results.html").exists())
             self.assertTrue((sample_dir / "important" / "figures" / "geographic_distribution_map.html").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "geographic_distribution.html").exists())
             self.assertTrue((sample_dir / "important" / "figures" / "geographic_distribution_map.png").exists())
             self.assertTrue((sample_dir / "important" / "key_tables" / "geographic_distribution.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "geographic_distribution_summary.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "geographic_feature_distribution.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "geographic_database_burden.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "geographic_warning_summary.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "geographic_tables.zip").exists())
+            self.assertTrue((sample_dir / "important" / "geographic_figures.zip").exists())
+            self.assertTrue(any((sample_dir / "important" / "figures").glob("geographic_country_bar_*.data.tsv")))
+            self.assertTrue(any((sample_dir / "important" / "figures").glob("geographic_map_*.svg")))
             self.assertTrue((sample_dir / "important" / "key_tables" / "qc_step_summary.tsv").exists())
             self.assertTrue((sample_dir / "important" / "key_tables" / "qc_by_genome.tsv").exists())
             self.assertTrue((sample_dir / "important" / "figures" / "qc_funnel.png").exists())
@@ -313,6 +373,17 @@ class FetchM2AdapterTests(unittest.TestCase):
             prevalence_html = (sample_dir / "important" / "figures" / "prevalence_analysis.html").read_text(encoding="utf-8")
             for control in ["Database", "Top 10", "Top 20", "Top 50", "Complete", "Genome prevalence %", "Minimum positive genomes"]:
                 self.assertIn(control, prevalence_html)
+            geographic_html = (sample_dir / "important" / "figures" / "geographic_distribution.html").read_text(encoding="utf-8")
+            for control in ["Database", "Mode", "Feature", "Geographic level", "Metric", "Minimum group size", "Display", "Warning filter"]:
+                self.assertIn(control, geographic_html)
+            geographic_burden = pd.read_csv(sample_dir / "important" / "tables" / "geographic_database_burden.tsv", sep="\t")
+            self.assertTrue({"database", "geo_level", "group_name", "positive_genomes", "prevalence_percent", "warning_flags"}.issubset(geographic_burden.columns))
+            country_rows = geographic_burden[(geographic_burden["database"] == "amr") & (geographic_burden["geo_level"] == "country")]
+            bd_row = country_rows[country_rows["group_name"] == "Bangladesh"].iloc[0]
+            self.assertEqual(int(bd_row["positive_genomes"]), 1)
+            self.assertEqual(int(bd_row["total_genomes"]), 1)
+            self.assertAlmostEqual(float(bd_row["prevalence_percent"]), 100.0)
+            self.assertIn("small_group_warning", str(bd_row["warning_flags"]))
             variation_summary = pd.read_csv(sample_dir / "important" / "key_tables" / "feature_variation_summary.tsv", sep="\t")
             self.assertTrue({"feature_name", "prevalence_percent", "mean_hits_per_positive_genome", "median_alignment_length", "iqr_alignment_length", "variation_score"}.issubset(variation_summary.columns))
             variation_hits = pd.read_csv(sample_dir / "important" / "key_tables" / "feature_variation_hits.tsv", sep="\t")

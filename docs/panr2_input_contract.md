@@ -188,7 +188,11 @@ dependencies. Prevalence includes an interactive HTML viewer with database,
 Top 10/20/50/Complete, metric, sort, minimum-prevalence, minimum-genome, and
 coordinate/category filters; denominator-aware top-feature plots; database
 summary tables; core/common/accessory/rare summaries; and burden-by-sample
-downloads. Variations includes an interactive HTML viewer with database,
+downloads. Geographic Distribution includes an interactive HTML viewer with
+database-burden and individual-feature modes, country/continent/subcontinent
+and country-year summaries, denominator-aware prevalence displays, minimum
+group-size filters, BioProject/lineage/missing-metadata warning flags, map/bar
+figure outputs, and complete geographic TSV downloads. Variations includes an interactive HTML viewer with database,
 metric, Top 10/20/50/Complete, and sort controls; identity and coverage
 boxplots; identity-vs-coverage scatterplots; top-variable feature plots; and
 summary/hit-level TSV downloads. Temporal Trends includes an interactive HTML
