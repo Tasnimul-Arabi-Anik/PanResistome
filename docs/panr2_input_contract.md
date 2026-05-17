@@ -214,9 +214,10 @@ exploratory and may reflect sampling, BioProject, lineage, geography,
 collection-year, or missing-metadata bias. Lineage / Clonal Structure adds an
 interactive report with MLST ST, ANI cluster, BioProject, and combined-lineage
 views; metadata-lineage overlap; feature burden and feature enrichment by
-lineage; selected-feature lineage prevalence; and lineage-adjusted top-finding
-warnings. `all` preserves the full advanced output tree and includes both
-user-facing bundles.
+lineage; selected-feature lineage prevalence; custom lineage-size filtering;
+feature search; burden boxplots; enrichment volcano-style plots; auto-written
+lineage summaries; and lineage-adjusted top-finding warnings. `all` preserves
+the full advanced output tree and includes both user-facing bundles.
 
 `manifest/report_controls.tsv` records report density settings such as `large_dataset`, `report_mode`, feature caps for handoff matrices/co-occurrence/proximity summaries, metadata row caps for HTML pages, and whether heavy interactive plots were skipped or deprioritized. Complete feature TSVs remain available even when large-dataset safeguards cap report-facing summaries.
 

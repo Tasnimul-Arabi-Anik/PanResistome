@@ -140,6 +140,7 @@ class FetchM2AdapterTests(unittest.TestCase):
 
             outputs = write_important_lineage_outputs(sample_dir, root / "panr2_inputs", sample_dir / "important", top_n=3)
             self.assertTrue(Path(outputs["important_lineage_summary"]).exists())
+            self.assertTrue(Path(outputs["important_lineage_written_summaries"]).exists())
             self.assertTrue((sample_dir / "important" / "figures" / "lineage_clonal_structure.html").exists())
             self.assertTrue((sample_dir / "important" / "lineage_tables.zip").exists())
 
@@ -162,8 +163,10 @@ class FetchM2AdapterTests(unittest.TestCase):
 
             enrichment = pd.read_csv(sample_dir / "important" / "tables" / "lineage_feature_enrichment.tsv", sep="\t")
             self.assertTrue({"odds_ratio", "p_value", "q_value", "support_label", "interpretation_label", "warning_flags"}.issubset(enrichment.columns))
+            written = pd.read_csv(sample_dir / "important" / "tables" / "lineage_written_summaries.tsv", sep="\t")
+            self.assertIn("overall_lineage_summary", set(written["section"]))
             html = (sample_dir / "important" / "figures" / "lineage_clonal_structure.html").read_text(encoding="utf-8")
-            for control in ["Lineage type", "Database", "Feature mode", "Feature", "Metadata overlay", "Minimum lineage size", "Display"]:
+            for control in ["Lineage type", "Database", "Feature mode", "Search feature", "Feature", "Metadata overlay", "Minimum lineage size", "custom", "Display", "Written Summaries"]:
                 self.assertIn(control, html)
 
     def test_kruskal_wallis_detects_multi_group_burden_difference(self):
@@ -425,6 +428,7 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue((sample_dir / "important" / "tables" / "lineage_feature_enrichment.tsv").exists())
             self.assertTrue((sample_dir / "important" / "tables" / "lineage_adjusted_top_findings.tsv").exists())
             self.assertTrue((sample_dir / "important" / "tables" / "lineage_feature_presence.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "lineage_written_summaries.tsv").exists())
             self.assertTrue((sample_dir / "important" / "figures" / "lineage_clonal_structure.html").exists())
             self.assertTrue((sample_dir / "important" / "lineage_tables.zip").exists())
             self.assertTrue((sample_dir / "important" / "lineage_figures.zip").exists())
@@ -486,12 +490,16 @@ class FetchM2AdapterTests(unittest.TestCase):
             metadata_omnibus = pd.read_csv(sample_dir / "important" / "tables" / "metadata_burden_omnibus.tsv", sep="\t")
             self.assertTrue({"test_name", "test_statistic", "p_value", "q_value", "support_label", "interpretation_label"}.issubset(metadata_omnibus.columns))
             lineage_html = (sample_dir / "important" / "figures" / "lineage_clonal_structure.html").read_text(encoding="utf-8")
-            for control in ["Lineage type", "Database", "Feature mode", "Feature", "Metadata overlay", "Minimum lineage size", "Display"]:
+            for control in ["Lineage type", "Database", "Feature mode", "Search feature", "Feature", "Metadata overlay", "Minimum lineage size", "custom", "Display", "Written Summaries"]:
                 self.assertIn(control, lineage_html)
             lineage_distribution = pd.read_csv(sample_dir / "important" / "tables" / "lineage_distribution.tsv", sep="\t")
             self.assertTrue({"lineage_type", "lineage_id", "total_genomes", "fraction_of_dataset", "warning_flags"}.issubset(lineage_distribution.columns))
             lineage_enrichment = pd.read_csv(sample_dir / "important" / "tables" / "lineage_feature_enrichment.tsv", sep="\t")
             self.assertTrue({"odds_ratio", "p_value", "q_value", "support_label", "interpretation_label", "warning_flags"}.issubset(lineage_enrichment.columns))
+            lineage_written = pd.read_csv(sample_dir / "important" / "tables" / "lineage_written_summaries.tsv", sep="\t")
+            self.assertIn("lineage_adjusted_top_findings_summary", set(lineage_written["section"]))
+            report_controls = pd.read_csv(outputs["report_controls"], sep="\t")
+            self.assertIn("important_lineage_feature_cap_per_database", set(report_controls["setting"]))
             report_html = (sample_dir / "important" / "results.html").read_text(encoding="utf-8")
             for section in [
                 "Featured Results",

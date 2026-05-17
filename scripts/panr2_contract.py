@@ -3136,6 +3136,9 @@ def write_report_controls(
         {"setting": "feature_rows", "value": str(feature_count), "message": "Total standardized feature rows."},
         {"setting": "unique_features", "value": str(unique_feature_count), "message": "Unique database-feature pairs."},
         {"setting": "databases", "value": ",".join(databases), "message": "Databases with standardized feature rows."},
+        {"setting": "important_lineage_default_top_n", "value": "20", "message": "Default Top-N lineages/features shown in important lineage figures."},
+        {"setting": "important_lineage_feature_cap_per_database", "value": "200", "message": "Report-facing feature cap per database for important lineage enrichment; complete lineage TSVs are preserved."},
+        {"setting": "important_lineage_complete_tsvs_preserved", "value": "true", "message": "Complete important lineage distribution, burden, enrichment, and selected-feature TSVs are written even when figures are capped."},
         {"setting": "report_warning", "value": warning, "message": "Summary/report-level warning generated from dataset size and configured limits."},
     ]
     controls_path = write_rows(
@@ -9143,19 +9146,40 @@ def write_important_lineage_outputs(
 
     default_burden_svg = figures / f"lineage_database_burden_{_safe_filename(default_database)}_{_safe_filename(default_lineage_type)}.svg"
     for lineage_type in available_lineage_types or [default_lineage_type]:
-        rows = [
-            row for row in burden_rows
-            if row.get("lineage_type") == lineage_type and row.get("database") == default_database
-        ]
-        rows = sorted(rows, key=lambda row: (-(_float_or_none(row.get("median_features_per_genome", "")) or 0.0), row.get("lineage_id", "")))[:top_n]
-        write_bar_figure(
-            f"lineage_database_burden_{_safe_filename(default_database)}_{_safe_filename(lineage_type)}",
+        groups = group_samples_by_lineage(lineage_type)
+        ordered_groups = sorted(groups.items(), key=lambda item: (-len(item[1]), item[0]))[:top_n]
+        boxplot_rows = []
+        for lineage_id, lineage_samples in ordered_groups:
+            values = [float(feature_rows_by_sample_database.get((sample, default_database), 0)) for sample in sorted(lineage_samples)]
+            stats = _summary_stats_full(values)
+            boxplot_rows.append({
+                "metadata_group": lineage_id,
+                "lineage_type": lineage_type,
+                "lineage_id": lineage_id,
+                "database": default_database,
+                "n": str(len(values)),
+                "min": "" if stats["min"] is None else f"{stats['min']:.4f}",
+                "q1": "" if stats["q1"] is None else f"{stats['q1']:.4f}",
+                "median": "" if stats["median"] is None else f"{stats['median']:.4f}",
+                "q3": "" if stats["q3"] is None else f"{stats['q3']:.4f}",
+                "max": "" if stats["max"] is None else f"{stats['max']:.4f}",
+                "mean": "" if stats["mean"] is None else f"{stats['mean']:.4f}",
+            })
+        base = f"lineage_database_burden_{_safe_filename(default_database)}_{_safe_filename(lineage_type)}"
+        data_path = figures / f"{base}.data.tsv"
+        svg_path = figures / f"{base}.svg"
+        png_path = figures / f"{base}.png"
+        pdf_path = figures / f"{base}.pdf"
+        boxplot_fields = ["metadata_group", "lineage_type", "lineage_id", "database", "n", "min", "q1", "median", "q3", "max", "mean"]
+        write_rows(data_path, boxplot_rows, boxplot_fields)
+        _write_burden_boxplot_svg(svg_path, boxplot_rows, f"{default_database} Burden by {lineage_type}")
+        _write_burden_boxplot_png(png_path, boxplot_rows)
+        _write_simple_pdf(
+            pdf_path,
             f"{default_database} Burden by {lineage_type}",
-            rows,
-            "lineage_id",
-            "median_features_per_genome",
-            burden_fields,
+            [f"{row.get('lineage_id', '')}: median={row.get('median', '')}, n={row.get('n', '')}" for row in boxplot_rows],
         )
+        figure_paths.extend([data_path, svg_path, png_path, pdf_path])
 
     heatmap_feature_rows = [
         row for row in presence_rows
@@ -9191,8 +9215,8 @@ def write_important_lineage_outputs(
     enrichment_pdf = figures / f"{enrichment_base}.pdf"
     enrichment_plot_fields = [*enrichment_fields, "feature_lineage", "abs_prevalence_difference_percent"]
     write_rows(enrichment_data, enrichment_plot_rows, enrichment_plot_fields)
-    _write_bar_svg(enrichment_svg, enrichment_plot_rows, f"{default_database} Lineage Enrichment", "feature_lineage", "abs_prevalence_difference_percent", "Absolute prevalence difference (%)")
-    _write_bar_png(enrichment_png, enrichment_plot_rows, "abs_prevalence_difference_percent")
+    _write_metadata_volcano_svg(enrichment_svg, enrichment_plot_rows, f"{default_database} Lineage Enrichment")
+    _write_metadata_volcano_png(enrichment_png, enrichment_plot_rows)
     _write_simple_pdf(enrichment_pdf, f"{default_database} Lineage Enrichment", [f"{row.get('feature_lineage', '')}: {row.get('prevalence_difference_percent', '')} pp" for row in enrichment_plot_rows])
     figure_paths.extend([enrichment_data, enrichment_svg, enrichment_png, enrichment_pdf])
 
@@ -9246,6 +9270,80 @@ def write_important_lineage_outputs(
     lineage_warning_count = sum(1 for row in distribution_rows + overlap_rows + burden_rows + presence_rows + enrichment_rows + adjusted_rows if row.get("warning_flags") or row.get("lineage_warning_flags"))
     dominant_st = next((row for row in distribution_rows if row.get("lineage_type") == "mlst_ST"), {})
     dominant_ani = next((row for row in distribution_rows if row.get("lineage_type") == "ani_cluster"), {})
+    dominant_project = next((row for row in distribution_rows if row.get("lineage_type") == "bioproject"), {})
+    top_overlap = next(iter(sorted(overlap_rows, key=lambda row: (-(_float_or_none(row.get("dominant_lineage_fraction", "")) or 0.0), row.get("metadata_column", ""), row.get("metadata_group", "")))), {})
+    top_burden = next(iter(sorted(burden_rows, key=lambda row: (-(_float_or_none(row.get("median_features_per_genome", "")) or 0.0), row.get("database", ""), row.get("lineage_id", "")))), {})
+    top_selected_presence = next(iter(sorted(selected_presence_rows, key=lambda row: (-(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("lineage_id", "")))), {})
+    possible_confounding = sum(1 for row in adjusted_rows if row.get("lineage_adjusted_interpretation") == "possible_lineage_confounding")
+    strong_confounding = sum(1 for row in adjusted_rows if row.get("lineage_adjusted_interpretation") == "strong_lineage_confounding")
+    severe_confounding = sum(1 for row in adjusted_rows if row.get("lineage_adjusted_interpretation") == "severe_lineage_confounding")
+    mlst_genome_count = sum(1 for sample in samples if mlst_by_sample.get(sample))
+    ani_genome_count = sum(1 for sample in samples if ani_by_sample.get(sample))
+    if not mlst_genome_count and not ani_genome_count:
+        availability_note = "MLST and ANI cluster information were not available. Lineage-aware interpretation could not be performed; BioProject context is still reported where possible."
+    elif not ani_genome_count:
+        availability_note = "ANI cluster information was not available. Lineage interpretation is based on MLST and BioProject context where available."
+    elif not mlst_genome_count:
+        availability_note = "MLST sequence type information was not available. Lineage interpretation is based on ANI clusters and BioProject context where available."
+    else:
+        availability_note = "MLST and ANI cluster context were both available for lineage-aware interpretation."
+    written_rows = [
+        {
+            "section": "overall_lineage_summary",
+            "summary": (
+                f"Lineage analysis identified {len(set(mlst_by_sample.values()))} MLST sequence type(s) among {mlst_genome_count} typed genome(s) "
+                f"and {len(set(ani_by_sample.values()))} ANI cluster(s) among {ani_genome_count} genome(s). "
+                f"The largest MLST group was {dominant_st.get('lineage_id', 'not available')} ({dominant_st.get('fraction_display', 'not available')}); "
+                f"the largest ANI cluster was {dominant_ani.get('lineage_id', 'not available')} ({dominant_ani.get('fraction_display', 'not available')}); "
+                f"the largest BioProject group was {dominant_project.get('lineage_id', 'not available')} ({dominant_project.get('fraction_display', 'not available')}). "
+                f"{availability_note}"
+            ),
+        },
+        {
+            "section": "metadata_lineage_overlap_summary",
+            "summary": (
+                (
+                    f"Metadata-lineage overlap screening found {len(overlap_rows)} group-by-lineage rows. "
+                    f"The strongest default imbalance was {top_overlap.get('metadata_column', 'metadata')}={top_overlap.get('metadata_group', 'not available')} "
+                    f"dominated by {top_overlap.get('dominant_lineage', 'not available')} ({top_overlap.get('dominant_lineage_fraction', '')}). "
+                    "Dominated metadata groups should be treated as possible clonal-structure confounding."
+                )
+                if overlap_rows else "Metadata-lineage overlap could not be summarized because no lineage group and metadata group overlap was available."
+            ),
+        },
+        {
+            "section": "feature_burden_by_lineage_summary",
+            "summary": (
+                (
+                    f"Feature burden by lineage was summarized for {len(burden_rows)} database-lineage combinations. "
+                    f"The highest median report-facing burden row was {top_burden.get('database', 'database')} in {top_burden.get('lineage_id', 'not available')} "
+                    f"with median {top_burden.get('median_features_per_genome', '0')} feature row(s) per genome."
+                )
+                if burden_rows else "Feature burden by lineage could not be summarized because no lineage-feature overlap was available."
+            ),
+        },
+        {
+            "section": "selected_feature_lineage_summary",
+            "summary": (
+                (
+                    f"The default selected feature view is {default_database}:{default_feature} by {default_lineage_type}. "
+                    f"The top lineage carrying it was {top_selected_presence.get('lineage_id', 'not available')} "
+                    f"({top_selected_presence.get('prevalence_display', 'not available')})."
+                )
+                if default_feature else "No default selected-feature lineage prevalence view was available because no feature-lineage overlap was detected."
+            ),
+        },
+        {
+            "section": "lineage_adjusted_top_findings_summary",
+            "summary": (
+                f"Among lineage-adjusted top findings, {possible_confounding} were flagged for possible lineage confounding, "
+                f"{strong_confounding} for strong lineage confounding, and {severe_confounding} for severe lineage confounding. "
+                "These findings remain useful for exploration but should be checked with lineage-aware or phylogeny-aware analysis before strong interpretation."
+            ),
+        },
+    ]
+    written_path = tables / "lineage_written_summaries.tsv"
+    write_rows(written_path, written_rows, ["section", "summary"])
     summary_stat_rows = [
         {"metric": "samples", "value": str(sample_count), "message": "Samples represented in the important lineage report."},
         {"metric": "lineage_types_available", "value": ",".join(available_lineage_types) or "none", "message": "Lineage/context views available for this run."},
@@ -9261,6 +9359,7 @@ def write_important_lineage_outputs(
         {"metric": "lineage_feature_burden_rows", "value": str(len(burden_rows)), "message": "Database-burden by lineage rows."},
         {"metric": "lineage_feature_enrichment_rows", "value": str(len(enrichment_rows)), "message": "Feature-lineage enrichment comparisons."},
         {"metric": "lineage_adjusted_top_findings_rows", "value": str(len(adjusted_rows)), "message": "Top findings with lineage-aware caution labels."},
+        {"metric": "lineage_written_summaries", "value": str(len(written_rows)), "message": "Auto-written lineage interpretation summaries."},
         {"metric": "warning_rows", "value": str(lineage_warning_count), "message": "Rows carrying lineage/context warning flags."},
         {"metric": "feature_cap", "value": str(max_features_per_database), "message": f"Lineage enrichment feature cap per database. Capped databases: {','.join(sorted(capped_databases)) or 'none'}."},
         {"metric": "default_view", "value": f"{default_lineage_type}|{default_database}|{default_metadata_column}|{default_feature}", "message": "Default lineage report controls."},
@@ -9268,12 +9367,16 @@ def write_important_lineage_outputs(
     summary_stats_path = tables / "lineage_report_summary.tsv"
     write_rows(summary_stats_path, summary_stat_rows, ["metric", "value", "message"])
 
-    table_paths = [summary_path, distribution_path, overlap_path, burden_path, enrichment_path, adjusted_path, presence_path, summary_stats_path]
+    table_paths = [summary_path, distribution_path, overlap_path, burden_path, enrichment_path, adjusted_path, presence_path, summary_stats_path, written_path]
     tables_zip = important_dir / "lineage_tables.zip"
     figures_zip = important_dir / "lineage_figures.zip"
     _write_zip_bundle(tables_zip, table_paths, important_dir)
     _write_zip_bundle(figures_zip, figure_paths, important_dir)
 
+    written_html = "".join(
+        f"<p><strong>{html.escape(row.get('section', '').replace('_', ' ').title())}:</strong> {html.escape(row.get('summary', ''))}</p>"
+        for row in written_rows
+    )
     interactive_html = figures / "lineage_clonal_structure.html"
     interactive_html.write_text(
         f"""<!doctype html>
@@ -9281,7 +9384,7 @@ def write_important_lineage_outputs(
 <style>
 body {{ font-family: Arial, sans-serif; color: #1f2933; margin: 1.5rem; }}
 label {{ font-weight: 700; margin-right: 0.35rem; }}
-select {{ margin: 0 1rem 0.75rem 0; padding: 0.35rem; }}
+select, input {{ margin: 0 1rem 0.75rem 0; padding: 0.35rem; }}
 .warning {{ background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; margin: 0.75rem 0; }}
 .panel {{ border: 1px solid #d9e2ec; background: #f8fafc; padding: 0.75rem; margin: 0.75rem 0; }}
 .figure-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }}
@@ -9296,11 +9399,14 @@ th {{ background: #f0f4f8; }}
 <label for="lineageType">Lineage type</label><select id="lineageType"></select>
 <label for="database">Database</label><select id="database"></select>
 <label for="featureMode">Feature mode</label><select id="featureMode"><option value="burden" selected>Database burden</option><option value="feature">Individual feature</option><option value="enrichment">Top lineage-enriched features</option></select>
+<label for="featureSearch">Search feature</label><input id="featureSearch" type="search" placeholder="type feature name">
 <label for="feature">Feature</label><select id="feature"></select>
 <label for="metadataOverlay">Metadata overlay</label><select id="metadataOverlay"></select>
-<label for="minLineage">Minimum lineage size</label><select id="minLineage"><option value="0">All</option><option value="3" selected>n >= 3</option><option value="5">n >= 5</option><option value="10">n >= 10</option></select>
+<label for="minLineage">Minimum lineage size</label><select id="minLineage"><option value="0">All</option><option value="3" selected>n >= 3</option><option value="5">n >= 5</option><option value="10">n >= 10</option><option value="custom">custom</option></select>
+<input id="customMinLineage" type="number" min="0" value="3" style="width:5rem" aria-label="Custom minimum lineage size">
 <label for="displayCount">Display</label><select id="displayCount"><option value="10">Top 10</option><option value="20" selected>Top 20</option><option value="50">Top 50</option><option value="99999">Complete</option></select>
 <div id="summary"></div>
+<div class="panel"><h2>Written Summaries</h2>{written_html}</div>
 <div class="panel"><h2>Default Visuals</h2><div class="figure-row">
 <div><h3>Lineage distribution</h3><img src="{html.escape(default_distribution_svg.name)}" alt="Lineage distribution"></div>
 <div><h3>Metadata-lineage overlap</h3><img src="{html.escape(default_overlap_svg.name)}" alt="Metadata-lineage overlap"></div>
@@ -9311,7 +9417,7 @@ th {{ background: #f0f4f8; }}
 <div><h3>Lineage-adjusted top findings</h3><img src="{html.escape(confounding_svg.name)}" alt="Lineage-adjusted top findings"></div>
 </div></div>
 <h2>Filtered Results</h2><div id="table" class="scrollbox"></div>
-<p><a href="../tables/lineage_summary.tsv">Download lineage summary</a> | <a href="../tables/lineage_distribution.tsv">Download distribution</a> | <a href="../tables/lineage_metadata_overlap.tsv">Download metadata overlap</a> | <a href="../tables/lineage_feature_burden.tsv">Download burden table</a> | <a href="../tables/lineage_feature_enrichment.tsv">Download enrichment table</a> | <a href="../tables/lineage_feature_presence.tsv">Download selected-feature lineage table</a> | <a href="../tables/lineage_adjusted_top_findings.tsv">Download lineage-adjusted top findings</a> | <a href="../lineage_tables.zip">Download lineage tables ZIP</a> | <a href="../lineage_figures.zip">Download lineage figures ZIP</a></p>
+<p><a href="../tables/lineage_summary.tsv">Download lineage summary</a> | <a href="../tables/lineage_distribution.tsv">Download distribution</a> | <a href="../tables/lineage_metadata_overlap.tsv">Download metadata overlap</a> | <a href="../tables/lineage_feature_burden.tsv">Download burden table</a> | <a href="../tables/lineage_feature_enrichment.tsv">Download enrichment table</a> | <a href="../tables/lineage_feature_presence.tsv">Download selected-feature lineage table</a> | <a href="../tables/lineage_adjusted_top_findings.tsv">Download lineage-adjusted top findings</a> | <a href="../tables/lineage_written_summaries.tsv">Download written summaries</a> | <a href="../lineage_tables.zip">Download lineage tables ZIP</a> | <a href="../lineage_figures.zip">Download lineage figures ZIP</a></p>
 <script>
 const distributionRows = {json.dumps(distribution_rows[:3000])};
 const overlapRows = {json.dumps(overlap_rows[:5000])};
@@ -9324,7 +9430,7 @@ const defaultDatabase = {json.dumps(default_database)};
 const defaultFeature = {json.dumps(default_feature)};
 const defaultMetadataColumn = {json.dumps(default_metadata_column)};
 function num(value) {{ const n = Number(value); return Number.isFinite(n) ? n : 0; }}
-const lineageType = document.getElementById('lineageType'), database = document.getElementById('database'), featureMode = document.getElementById('featureMode'), feature = document.getElementById('feature'), metadataOverlay = document.getElementById('metadataOverlay'), minLineage = document.getElementById('minLineage'), displayCount = document.getElementById('displayCount');
+const lineageType = document.getElementById('lineageType'), database = document.getElementById('database'), featureMode = document.getElementById('featureMode'), featureSearch = document.getElementById('featureSearch'), feature = document.getElementById('feature'), metadataOverlay = document.getElementById('metadataOverlay'), minLineage = document.getElementById('minLineage'), customMinLineage = document.getElementById('customMinLineage'), displayCount = document.getElementById('displayCount');
 function fillSelect(select, values, preferred) {{ const unique = Array.from(new Set(values.filter(Boolean))).sort(); select.innerHTML = unique.map(v => `<option value="${{v}}">${{v}}</option>`).join(''); if (unique.includes(preferred)) select.value = preferred; }}
 function refreshControls() {{
   fillSelect(lineageType, distributionRows.map(r => r.lineage_type), defaultLineageType);
@@ -9333,8 +9439,10 @@ function refreshControls() {{
   refreshFeatures();
 }}
 function refreshFeatures() {{
-  fillSelect(feature, presenceRows.filter(r => r.database === database.value).map(r => r.feature_id), defaultFeature);
+  const query = featureSearch.value.toLowerCase();
+  fillSelect(feature, presenceRows.filter(r => r.database === database.value && (!query || String(r.feature_id || '').toLowerCase().includes(query))).map(r => r.feature_id), defaultFeature);
 }}
+function selectedMinLineage() {{ return minLineage.value === 'custom' ? num(customMinLineage.value) : num(minLineage.value); }}
 function currentRows() {{
   if (featureMode.value === 'feature') return presenceRows.filter(r => r.feature_id === feature.value);
   if (featureMode.value === 'enrichment') return enrichmentRows;
@@ -9343,7 +9451,7 @@ function currentRows() {{
 function passes(row) {{
   if (row.lineage_type !== lineageType.value) return false;
   if (row.database && row.database !== database.value) return false;
-  if (num(row.lineage_n || row.total_genomes) < num(minLineage.value)) return false;
+  if (num(row.lineage_n || row.total_genomes) < selectedMinLineage()) return false;
   return true;
 }}
 function render() {{
@@ -9359,7 +9467,8 @@ function render() {{
 }}
 featureMode.addEventListener('change', render);
 database.addEventListener('change', () => {{ refreshFeatures(); render(); }});
-[lineageType, feature, metadataOverlay, minLineage, displayCount].forEach(el => el.addEventListener('change', render));
+featureSearch.addEventListener('input', () => {{ refreshFeatures(); render(); }});
+[lineageType, feature, metadataOverlay, minLineage, customMinLineage, displayCount].forEach(el => el.addEventListener('change', render));
 refreshControls(); render();
 </script></body></html>
 """,
@@ -9375,6 +9484,7 @@ refreshControls(); render();
         "important_lineage_adjusted_top_findings": str(adjusted_path),
         "important_lineage_feature_presence": str(presence_path),
         "important_lineage_report_summary": str(summary_stats_path),
+        "important_lineage_written_summaries": str(written_path),
         "important_lineage_distribution_svg": str(default_distribution_svg),
         "important_lineage_metadata_overlap_svg": str(default_overlap_svg),
         "important_lineage_database_burden_svg": str(default_burden_svg),
@@ -9449,6 +9559,7 @@ def write_important_results_report(
     lineage_enrichment_rows = read_table(important_dir / "tables" / "lineage_feature_enrichment.tsv")
     lineage_presence_rows = read_table(important_dir / "tables" / "lineage_feature_presence.tsv")
     lineage_adjusted_rows = read_table(important_dir / "tables" / "lineage_adjusted_top_findings.tsv")
+    lineage_written_rows = read_table(important_dir / "tables" / "lineage_written_summaries.tsv")
     top_prevalence = sorted(prevalence_rows, key=lambda row: (row.get("database", ""), -(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("feature_id", "")))[:20]
     top_geographic_burden = sorted(
         [
@@ -9769,6 +9880,10 @@ def write_important_results_report(
         "Use this section to check whether feature, geography, temporal, or metadata patterns are concentrated in one ST, ANI cluster, or BioProject."
         "</p>"
     )
+    lineage_written_html = "".join(
+        f"<p><strong>{html.escape(row.get('section', '').replace('_', ' ').title())}:</strong> {html.escape(row.get('summary', ''))}</p>"
+        for row in lineage_written_rows
+    ) or lineage_summary_html
     lineage_figure_items = []
     for key, title in [
         ("important_lineage_distribution_svg", "Lineage distribution"),
@@ -9899,6 +10014,7 @@ th {{ background: #f0f4f8; }}
 <section id="lineage"><h2>Lineage / Clonal Structure</h2><div class="warning">Lineage summaries are exploratory and do not replace phylogenetic analysis. Apparent metadata associations may reflect clonal structure, BioProject sampling, geography, or temporal sampling.</div>
 {lineage_cards_html}
 {lineage_summary_html}
+{lineage_written_html}
 <iframe src="figures/lineage_clonal_structure.html" title="Lineage and clonal structure interactive report"></iframe>
 {lineage_figures_html}
 <h3>Lineage distribution</h3>
@@ -9911,7 +10027,7 @@ th {{ background: #f0f4f8; }}
 {lineage_enrichment_table_html}
 <h3>Selected feature lineage report</h3>
 {lineage_presence_table_html}
-<div class="downloads"><a href="figures/lineage_clonal_structure.html">Open interactive lineage report</a><a href="lineage_tables.zip">Download lineage tables ZIP</a><a href="lineage_figures.zip">Download lineage figures ZIP</a><a href="tables/lineage_summary.tsv">Download sample lineage summary</a><a href="tables/lineage_distribution.tsv">Download lineage distribution</a><a href="tables/lineage_metadata_overlap.tsv">Download metadata-lineage overlap</a><a href="tables/lineage_feature_burden.tsv">Download lineage feature burden</a><a href="tables/lineage_feature_enrichment.tsv">Download lineage feature enrichment</a><a href="tables/lineage_adjusted_top_findings.tsv">Download lineage-adjusted top findings</a><a href="tables/lineage_feature_presence.tsv">Download selected feature lineage table</a></div></section>
+<div class="downloads"><a href="figures/lineage_clonal_structure.html">Open interactive lineage report</a><a href="lineage_tables.zip">Download lineage tables ZIP</a><a href="lineage_figures.zip">Download lineage figures ZIP</a><a href="tables/lineage_summary.tsv">Download sample lineage summary</a><a href="tables/lineage_distribution.tsv">Download lineage distribution</a><a href="tables/lineage_metadata_overlap.tsv">Download metadata-lineage overlap</a><a href="tables/lineage_feature_burden.tsv">Download lineage feature burden</a><a href="tables/lineage_feature_enrichment.tsv">Download lineage feature enrichment</a><a href="tables/lineage_adjusted_top_findings.tsv">Download lineage-adjusted top findings</a><a href="tables/lineage_feature_presence.tsv">Download selected feature lineage table</a><a href="tables/lineage_written_summaries.tsv">Download written summaries</a></div></section>
 <section id="files"><h2>Important Files</h2><ul>
 <li><a href="../basic/enriched_genome_dataset.csv">Enriched genome dataset CSV</a></li>
 <li><a href="key_tables/qc_step_summary.tsv">QC step summary</a></li>
@@ -9937,6 +10053,7 @@ th {{ background: #f0f4f8; }}
 <li><a href="tables/lineage_metadata_overlap.tsv">Metadata-lineage overlap</a></li>
 <li><a href="tables/lineage_feature_enrichment.tsv">Lineage feature enrichment</a></li>
 <li><a href="tables/lineage_adjusted_top_findings.tsv">Lineage-adjusted top findings</a></li>
+<li><a href="tables/lineage_written_summaries.tsv">Lineage written summaries</a></li>
 <li><a href="../panr2_inputs/features/all_features.tsv">Complete standardized feature table</a></li>
 <li><a href="../panr2_inputs/manifest/schema_validation_summary.txt">Feature-contract validation summary</a></li>
 </ul></section>
