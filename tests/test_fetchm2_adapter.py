@@ -210,8 +210,14 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue((sample_dir / "important" / "key_tables" / "temporal_decreasing_features.tsv").exists())
             self.assertTrue((sample_dir / "important" / "figures" / "temporal_database_burden_top20.svg").exists())
             self.assertTrue((sample_dir / "important" / "figures" / "temporal_feature_heatmap_top40.png").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "temporal_trends.html").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "temporal_selected_feature_prevalence.svg").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "temporal_slope_top40.png").exists())
             temporal_summary = pd.read_csv(sample_dir / "important" / "key_tables" / "temporal_trend_summary.tsv", sep="\t")
-            self.assertTrue({"trend_label", "support_label", "warning_flags"}.issubset(temporal_summary.columns))
+            self.assertTrue({"trend_label", "support_label", "temporal_pattern_label", "warning_flags"}.issubset(temporal_summary.columns))
+            temporal_html = (sample_dir / "important" / "figures" / "temporal_trends.html").read_text(encoding="utf-8")
+            for control in ["Database", "Trend", "Support", "Feature", "Selected Feature Prevalence", "First-to-Last Year Slope"]:
+                self.assertIn(control, temporal_html)
             report_html = (sample_dir / "important" / "results.html").read_text(encoding="utf-8")
             for section in [
                 "Featured Results",

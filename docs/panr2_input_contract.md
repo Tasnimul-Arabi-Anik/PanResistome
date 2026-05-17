@@ -182,8 +182,10 @@ CSV/TSV in the final output directory. `important` adds a curated
 Summary, Prevalence, Geographic Distribution, Variations, Temporal Trends,
 Warnings, and Important Files sections. It writes key QC, prevalence, geography,
 variation, and temporal trend tables plus portable PNG/SVG/TSV figures without
-adding new runtime plotting dependencies. `all` preserves the full advanced
-output tree and includes both user-facing bundles.
+adding new runtime plotting dependencies. Temporal Trends also includes an
+interactive HTML viewer with database, trend, support, and feature controls,
+selected-feature prevalence lines, and a first-to-last-year slope plot. `all`
+preserves the full advanced output tree and includes both user-facing bundles.
 
 `manifest/report_controls.tsv` records report density settings such as `large_dataset`, `report_mode`, feature caps for handoff matrices/co-occurrence/proximity summaries, metadata row caps for HTML pages, and whether heavy interactive plots were skipped or deprioritized. Complete feature TSVs remain available even when large-dataset safeguards cap report-facing summaries.
 

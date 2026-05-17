@@ -4017,6 +4017,180 @@ def _write_heatmap_png(path: Path, rows: list[dict[str, str]], row_field: str, c
     _write_png(path, width, height, pixels)
 
 
+def _write_temporal_series_svg(path: Path, rows: list[dict[str, str]], title: str) -> None:
+    width, height = 960, 420
+    left, top, plot_width, plot_height = 78, 58, 812, 280
+    years = [_float_or_none(row.get("collection_year", "")) for row in rows]
+    values = [_float_or_none(row.get("prevalence_percent", "")) for row in rows]
+    pairs = [(year, value, row) for year, value, row in zip(years, values, rows) if year is not None and value is not None]
+    if not pairs:
+        pairs = [(0.0, 0.0, {})]
+    min_year = min(year for year, _, _ in pairs)
+    max_year = max(year for year, _, _ in pairs)
+    if min_year == max_year:
+        max_year = min_year + 1
+    max_value = max(max(value for _, value, _ in pairs), 100.0)
+    points = []
+    circles = []
+    labels = []
+    for year, value, row in pairs:
+        x = left + (year - min_year) / (max_year - min_year) * plot_width
+        y = top + plot_height - value / max_value * plot_height
+        points.append(f"{x:.1f},{y:.1f}")
+        label = f"{int(year)}: {row.get('prevalence_percent', '0')}% ({row.get('positive_genomes', '0')}/{row.get('total_genomes', '0')})"
+        circles.append(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='5' fill='#0f766e'><title>{html.escape(label)}</title></circle>")
+        labels.append(f"<text x='{x - 16:.1f}' y='{top + plot_height + 22}' font-family='Arial' font-size='11' fill='#52606d'>{int(year)}</text>")
+    path.write_text(
+        f"""<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>
+<rect width='100%' height='100%' fill='#f8fafc'/>
+<text x='20' y='30' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>
+<line x1='{left}' y1='{top + plot_height}' x2='{left + plot_width}' y2='{top + plot_height}' stroke='#9fb3c8'/>
+<line x1='{left}' y1='{top}' x2='{left}' y2='{top + plot_height}' stroke='#9fb3c8'/>
+<text x='20' y='{top + 18}' font-family='Arial' font-size='12' fill='#52606d'>Prevalence %</text>
+<polyline points='{" ".join(points)}' fill='none' stroke='#0f766e' stroke-width='3'/>
+{"".join(circles)}
+{"".join(labels)}
+</svg>
+""",
+        encoding="utf-8",
+    )
+
+
+def _write_temporal_series_png(path: Path, rows: list[dict[str, str]]) -> None:
+    width, height = 960, 420
+    left, top, plot_width, plot_height = 78, 58, 812, 280
+    pixels = [bytearray([248, 250, 252] * width) for _ in range(height)]
+
+    def set_pixel(x: int, y: int, color: tuple[int, int, int]) -> None:
+        if 0 <= x < width and 0 <= y < height:
+            idx = x * 3
+            pixels[y][idx:idx + 3] = bytes(color)
+
+    def line(x0: float, y0: float, x1: float, y1: float, color: tuple[int, int, int]) -> None:
+        steps = int(max(abs(x1 - x0), abs(y1 - y0), 1))
+        for i in range(steps + 1):
+            t = i / steps
+            set_pixel(int(x0 + (x1 - x0) * t), int(y0 + (y1 - y0) * t), color)
+
+    def circle(cx: float, cy: float, radius: float, color: tuple[int, int, int]) -> None:
+        r2 = radius * radius
+        for y in range(int(cy - radius) - 1, int(cy + radius) + 2):
+            for x in range(int(cx - radius) - 1, int(cx + radius) + 2):
+                if (x - cx) ** 2 + (y - cy) ** 2 <= r2:
+                    set_pixel(x, y, color)
+
+    pairs = []
+    for row in rows:
+        year = _float_or_none(row.get("collection_year", ""))
+        value = _float_or_none(row.get("prevalence_percent", ""))
+        if year is not None and value is not None:
+            pairs.append((year, value))
+    if not pairs:
+        pairs = [(0.0, 0.0)]
+    min_year = min(year for year, _ in pairs)
+    max_year = max(year for year, _ in pairs)
+    if min_year == max_year:
+        max_year = min_year + 1
+    max_value = max(max(value for _, value in pairs), 100.0)
+    line(left, top + plot_height, left + plot_width, top + plot_height, (159, 179, 200))
+    line(left, top, left, top + plot_height, (159, 179, 200))
+    points = []
+    for year, value in pairs:
+        x = left + (year - min_year) / (max_year - min_year) * plot_width
+        y = top + plot_height - value / max_value * plot_height
+        points.append((x, y))
+        circle(x, y, 5, (15, 118, 110))
+    for a, b in zip(points, points[1:]):
+        line(a[0], a[1], b[0], b[1], (15, 118, 110))
+    _write_png(path, width, height, pixels)
+
+
+def _write_temporal_slope_svg(path: Path, rows: list[dict[str, str]], title: str) -> None:
+    width = 960
+    top = 62
+    left_x = 250
+    right_x = 710
+    row_h = 28
+    height = max(220, top + row_h * max(len(rows), 1) + 50)
+    values = []
+    for row in rows:
+        first = _float_or_none(row.get("first_year_prevalence_percent", "")) or 0.0
+        last = _float_or_none(row.get("last_year_prevalence_percent", "")) or 0.0
+        values.extend([first, last])
+    max_value = max(max(values), 100.0) if values else 100.0
+
+    def y_for(idx: int, value: float) -> float:
+        base = top + idx * row_h + 14
+        return base - (value / max_value) * 8
+
+    def color(label: str) -> str:
+        if "increasing" in label:
+            return "#0f766e"
+        if "decreasing" in label:
+            return "#b91c1c"
+        return "#64748b"
+
+    parts = [
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
+        "<rect width='100%' height='100%' fill='#f8fafc'/>",
+        f"<text x='20' y='30' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
+        f"<text x='{left_x - 24}' y='52' font-family='Arial' font-size='12' fill='#52606d'>First year</text>",
+        f"<text x='{right_x - 20}' y='52' font-family='Arial' font-size='12' fill='#52606d'>Last year</text>",
+    ]
+    for idx, row in enumerate(rows):
+        first = _float_or_none(row.get("first_year_prevalence_percent", "")) or 0.0
+        last = _float_or_none(row.get("last_year_prevalence_percent", "")) or 0.0
+        y1 = y_for(idx, first)
+        y2 = y_for(idx, last)
+        label = f"{row.get('database', '')}:{row.get('feature_id', '')}"
+        short_label = label if len(label) <= 34 else label[:31] + "..."
+        stroke = color(row.get("trend_label", ""))
+        parts.append(f"<text x='20' y='{top + idx * row_h + 18}' font-family='Arial' font-size='11' fill='#1f2933'>{html.escape(short_label)}</text>")
+        parts.append(f"<line x1='{left_x}' y1='{y1:.1f}' x2='{right_x}' y2='{y2:.1f}' stroke='{stroke}' stroke-width='2.4'><title>{html.escape(label)}: {first:.1f}% to {last:.1f}%</title></line>")
+        parts.append(f"<circle cx='{left_x}' cy='{y1:.1f}' r='4' fill='{stroke}'/>")
+        parts.append(f"<circle cx='{right_x}' cy='{y2:.1f}' r='4' fill='{stroke}'/>")
+        parts.append(f"<text x='{left_x + 8}' y='{y1 + 4:.1f}' font-family='Arial' font-size='10' fill='#52606d'>{first:.1f}%</text>")
+        parts.append(f"<text x='{right_x + 8}' y='{y2 + 4:.1f}' font-family='Arial' font-size='10' fill='#52606d'>{last:.1f}%</text>")
+    parts.append("</svg>\n")
+    path.write_text("".join(parts), encoding="utf-8")
+
+
+def _write_temporal_slope_png(path: Path, rows: list[dict[str, str]]) -> None:
+    width = 960
+    top = 62
+    left_x = 250
+    right_x = 710
+    row_h = 28
+    height = max(220, top + row_h * max(len(rows), 1) + 50)
+    pixels = [bytearray([248, 250, 252] * width) for _ in range(height)]
+
+    def set_pixel(x: int, y: int, color: tuple[int, int, int]) -> None:
+        if 0 <= x < width and 0 <= y < height:
+            idx = x * 3
+            pixels[y][idx:idx + 3] = bytes(color)
+
+    def line(x0: float, y0: float, x1: float, y1: float, color: tuple[int, int, int]) -> None:
+        steps = int(max(abs(x1 - x0), abs(y1 - y0), 1))
+        for i in range(steps + 1):
+            t = i / steps
+            set_pixel(int(x0 + (x1 - x0) * t), int(y0 + (y1 - y0) * t), color)
+
+    def color(label: str) -> tuple[int, int, int]:
+        if "increasing" in label:
+            return (15, 118, 110)
+        if "decreasing" in label:
+            return (185, 28, 28)
+        return (100, 116, 139)
+
+    for idx, row in enumerate(rows):
+        first = _float_or_none(row.get("first_year_prevalence_percent", "")) or 0.0
+        last = _float_or_none(row.get("last_year_prevalence_percent", "")) or 0.0
+        y1 = top + idx * row_h + 14 - first / 100.0 * 8
+        y2 = top + idx * row_h + 14 - last / 100.0 * 8
+        line(left_x, y1, right_x, y2, color(row.get("trend_label", "")))
+    _write_png(path, width, height, pixels)
+
+
 def _extract_year(value: str) -> int | None:
     match = re.search(r"(19|20)\d{2}", str(value or ""))
     if not match:
@@ -4060,6 +4234,32 @@ def _temporal_support_label(years_observed: int, min_year_genomes: int, total_po
     if years_observed >= 5 and min_year_genomes >= 5 and total_positive >= 10:
         return "high_support"
     return "moderate_support"
+
+
+def _temporal_pattern_label(prevalence_values: list[tuple[int, float, int, int]]) -> str:
+    if not prevalence_values:
+        return "insufficient_data"
+    positives = [positive for _, _, _, positive in prevalence_values]
+    prevalence = [value for _, value, _, _ in prevalence_values]
+    if len(prevalence_values) >= 3:
+        midpoint = max(1, len(prevalence_values) // 2)
+        early_positive = sum(positives[:midpoint])
+        late_positive = sum(positives[midpoint:])
+        early_prevalence = max(prevalence[:midpoint]) if prevalence[:midpoint] else 0.0
+        late_prevalence = max(prevalence[midpoint:]) if prevalence[midpoint:] else 0.0
+        if early_positive == 0 and late_positive > 0:
+            return "newly_detected"
+        if early_positive > 0 and late_positive == 0:
+            return "disappearing"
+        if min(positives) > 0:
+            return "persistent"
+        if late_prevalence >= early_prevalence + 20:
+            return "newly_detected"
+        if early_prevalence >= late_prevalence + 20:
+            return "disappearing"
+    if sum(1 for positive in positives if positive > 0) <= max(1, len(positives) // 3):
+        return "sporadic"
+    return "persistent"
 
 
 def write_important_qc_outputs(sample_dir: Path, out_dir: Path, important_dir: Path) -> dict[str, str]:
@@ -4406,6 +4606,7 @@ def write_important_temporal_outputs(sample_dir: Path, out_dir: Path, important_
         years_observed = len(prevalence_values)
         trend_label = _temporal_trend_label(correlation, change, years_observed)
         support_label = _temporal_support_label(years_observed, min_year_genomes, total_positive)
+        pattern_label = _temporal_pattern_label(prevalence_values)
 
         support_samples = [sample for sample in present_samples if sample in sample_year]
         support_bioprojects = Counter(metadata_by_sample.get(sample, {}).get("bioproject", "") for sample in support_samples)
@@ -4456,6 +4657,7 @@ def write_important_temporal_outputs(sample_dir: Path, out_dir: Path, important_
             "correlation": "" if correlation is None else f"{correlation:.4f}",
             "trend_label": trend_label,
             "support_label": support_label,
+            "temporal_pattern_label": pattern_label,
             "total_positive_genomes": str(total_positive),
             "min_year_genomes": str(min_year_genomes),
             "max_year_genomes": str(max_year_genomes),
@@ -4469,7 +4671,7 @@ def write_important_temporal_outputs(sample_dir: Path, out_dir: Path, important_
     trend_fields = [
         "database", "feature_id", "years_observed", "first_year", "last_year",
         "first_year_prevalence_percent", "last_year_prevalence_percent", "change_percent_points",
-        "correlation", "trend_label", "support_label", "total_positive_genomes",
+        "correlation", "trend_label", "support_label", "temporal_pattern_label", "total_positive_genomes",
         "min_year_genomes", "max_year_genomes", "largest_bioproject",
         "largest_bioproject_fraction", "warning_flags",
     ]
@@ -4563,6 +4765,172 @@ def write_important_temporal_outputs(sample_dir: Path, out_dir: Path, important_
         "important_temporal_heatmap_svg": str(heatmap_svg),
         "important_temporal_heatmap_png": str(heatmap_png),
     })
+
+    selected_feature = (increasing or decreasing or sorted(trend_rows, key=lambda row: -abs(_float_or_none(row.get("change_percent_points", "")) or 0.0)))[:1]
+    selected_rows = []
+    selected_title = "Selected Feature Temporal Prevalence"
+    if selected_feature:
+        selected = selected_feature[0]
+        selected_title = f"{selected['database']}:{selected['feature_id']} Temporal Prevalence"
+        selected_rows = [
+            row for row in prevalence_rows
+            if row["database"] == selected["database"] and row["feature_id"] == selected["feature_id"]
+        ]
+    selected_data = figures / "temporal_selected_feature_prevalence.data.tsv"
+    selected_svg = figures / "temporal_selected_feature_prevalence.svg"
+    selected_png = figures / "temporal_selected_feature_prevalence.png"
+    write_rows(selected_data, selected_rows, prevalence_fields)
+    _write_temporal_series_svg(selected_svg, selected_rows, selected_title)
+    _write_temporal_series_png(selected_png, selected_rows)
+
+    slope_rows = (increasing[:top_n] + decreasing[:top_n])[: top_n * 2]
+    if not slope_rows:
+        slope_rows = sorted(trend_rows, key=lambda row: -abs(_float_or_none(row.get("change_percent_points", "")) or 0.0))[:top_n]
+    slope_data = figures / "temporal_slope_top40.data.tsv"
+    slope_svg = figures / "temporal_slope_top40.svg"
+    slope_png = figures / "temporal_slope_top40.png"
+    write_rows(slope_data, slope_rows, trend_fields)
+    _write_temporal_slope_svg(slope_svg, slope_rows, "Temporal Slope Plot")
+    _write_temporal_slope_png(slope_png, slope_rows)
+
+    temporal_html = figures / "temporal_trends.html"
+    temporal_html.write_text(
+        f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>Temporal Trends</title>
+<style>
+body {{ font-family: Arial, sans-serif; color: #1f2933; margin: 1.5rem; }}
+label {{ font-weight: 700; margin-right: 0.35rem; }}
+select {{ margin: 0 1rem 0.75rem 0; padding: 0.35rem; max-width: 22rem; }}
+.warning {{ background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; margin: 0.75rem 0; }}
+.grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem; }}
+.panel {{ border: 1px solid #d9e2ec; border-radius: 6px; padding: 0.75rem; background: #f8fafc; }}
+svg {{ max-width: 100%; height: auto; }}
+table {{ border-collapse: collapse; width: 100%; font-size: 0.88rem; margin-top: 0.75rem; }}
+th, td {{ border: 1px solid #d9e2ec; padding: 0.35rem; text-align: left; }}
+th {{ background: #f0f4f8; }}
+</style></head><body>
+<h1>Temporal Trends</h1>
+<p>Use the controls to inspect database burden, feature prevalence, and trend support over collection years.</p>
+<div class="warning">Temporal trends are exploratory. Sampling year, BioProject composition, geography, lineage, and missing collection-year metadata can change the apparent pattern.</div>
+<label for="database">Database</label><select id="database"></select>
+<label for="trend">Trend</label><select id="trend"><option value="all">All</option><option value="increasing">Increasing</option><option value="decreasing">Decreasing</option><option value="stable">Stable</option></select>
+<label for="support">Support</label><select id="support"><option value="all">All</option><option value="high_support">High</option><option value="moderate_support">Moderate</option><option value="low_support">Low</option></select>
+<label for="feature">Feature</label><select id="feature"></select>
+<div id="summary"></div>
+<div class="grid"><div class="panel"><h2>Selected Feature Prevalence</h2><div id="linePlot"></div></div><div class="panel"><h2>First-to-Last Year Slope</h2><div id="slopePlot"></div></div></div>
+<div class="panel"><h2>Filtered Trend Table</h2><div id="trendTable"></div></div>
+<p><a href="temporal_selected_feature_prevalence.png">Download default line PNG</a> | <a href="temporal_selected_feature_prevalence.svg">Download default line SVG</a> | <a href="temporal_slope_top40.png">Download slope PNG</a> | <a href="temporal_slope_top40.svg">Download slope SVG</a> | <a href="temporal_trend_summary.data.tsv">Download trend data TSV</a></p>
+<script>
+const trends = {json.dumps(trend_rows)};
+const prevalence = {json.dumps(prevalence_rows)};
+const burden = {json.dumps(burden_rows)};
+const dbSelect = document.getElementById('database');
+const trendSelect = document.getElementById('trend');
+const supportSelect = document.getElementById('support');
+const featureSelect = document.getElementById('feature');
+function num(value) {{ const n = Number(value); return Number.isFinite(n) ? n : 0; }}
+function label(row) {{ return row.database + ':' + row.feature_id; }}
+function trendGroup(value) {{
+  if (value.includes('increasing')) return 'increasing';
+  if (value.includes('decreasing')) return 'decreasing';
+  if (value === 'stable') return 'stable';
+  return 'all';
+}}
+function filteredTrends() {{
+  return trends.filter(row => {{
+    if (dbSelect.value !== 'all' && row.database !== dbSelect.value) return false;
+    if (trendSelect.value !== 'all' && trendGroup(row.trend_label) !== trendSelect.value) return false;
+    if (supportSelect.value !== 'all' && row.support_label !== supportSelect.value) return false;
+    return true;
+  }}).sort((a, b) => Math.abs(num(b.change_percent_points)) - Math.abs(num(a.change_percent_points)));
+}}
+function populateDatabases() {{
+  const dbs = ['all', ...Array.from(new Set(trends.map(row => row.database))).sort()];
+  dbSelect.innerHTML = dbs.map(db => `<option value="${{db}}">${{db === 'all' ? 'All' : db}}</option>`).join('');
+  const amr = dbs.find(db => db.toLowerCase() === 'amr');
+  if (amr) dbSelect.value = amr;
+  trendSelect.value = 'increasing';
+  supportSelect.value = 'all';
+}}
+function populateFeatures() {{
+  const rows = filteredTrends();
+  featureSelect.innerHTML = rows.map(row => `<option value="${{label(row)}}">${{label(row)}} (${{row.trend_label}}, Δ${{row.change_percent_points}})</option>`).join('');
+  if (!rows.length) featureSelect.innerHTML = '<option value="">No matching features</option>';
+}}
+function renderLine() {{
+  const selected = featureSelect.value;
+  const rows = prevalence.filter(row => label(row) === selected).sort((a, b) => num(a.collection_year) - num(b.collection_year));
+  const width = 760, height = 320, left = 58, top = 30, plotW = 650, plotH = 220;
+  const years = rows.map(row => num(row.collection_year));
+  const values = rows.map(row => num(row.prevalence_percent));
+  const minYear = years.length ? Math.min(...years) : 0;
+  const maxYear = years.length && Math.max(...years) !== minYear ? Math.max(...years) : minYear + 1;
+  let svg = `<svg width="${{width}}" height="${{height}}" viewBox="0 0 ${{width}} ${{height}}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#f8fafc"/>`;
+  svg += `<line x1="${{left}}" y1="${{top + plotH}}" x2="${{left + plotW}}" y2="${{top + plotH}}" stroke="#9fb3c8"/><line x1="${{left}}" y1="${{top}}" x2="${{left}}" y2="${{top + plotH}}" stroke="#9fb3c8"/>`;
+  const points = rows.map(row => {{
+    const x = left + (num(row.collection_year) - minYear) / (maxYear - minYear) * plotW;
+    const y = top + plotH - num(row.prevalence_percent) / 100 * plotH;
+    return [x, y, row];
+  }});
+  svg += `<polyline points="${{points.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')}}" fill="none" stroke="#0f766e" stroke-width="3"/>`;
+  for (const [x, y, row] of points) {{
+    const tip = `${{row.collection_year}}: ${{row.prevalence_percent}}% (${{row.positive_genomes}}/${{row.total_genomes}})`;
+    svg += `<circle cx="${{x.toFixed(1)}}" cy="${{y.toFixed(1)}}" r="5" fill="#0f766e"><title>${{tip}}</title></circle><text x="${{(x - 14).toFixed(1)}}" y="${{top + plotH + 20}}" font-size="11" fill="#52606d">${{row.collection_year}}</text>`;
+  }}
+  svg += `<text x="8" y="${{top + 15}}" font-size="12" fill="#52606d">Prevalence %</text></svg>`;
+  document.getElementById('linePlot').innerHTML = svg;
+  if (rows.length) {{
+    const first = rows[0], last = rows[rows.length - 1];
+    document.getElementById('summary').innerHTML = `<p><strong>${{selected}}</strong> changed from ${{first.prevalence_percent}}% (${{first.positive_genomes}}/${{first.total_genomes}}) in ${{first.collection_year}} to ${{last.prevalence_percent}}% (${{last.positive_genomes}}/${{last.total_genomes}}) in ${{last.collection_year}}.</p>`;
+  }} else {{
+    document.getElementById('summary').innerHTML = '<p>No matching temporal data.</p>';
+  }}
+}}
+function renderSlope() {{
+  const rows = filteredTrends().slice(0, 30);
+  const width = 760, rowH = 24, top = 40, leftX = 250, rightX = 560;
+  const height = Math.max(180, top + rows.length * rowH + 30);
+  let svg = `<svg width="${{width}}" height="${{height}}" viewBox="0 0 ${{width}} ${{height}}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#f8fafc"/>`;
+  svg += `<text x="${{leftX - 30}}" y="24" font-size="12" fill="#52606d">First year</text><text x="${{rightX - 20}}" y="24" font-size="12" fill="#52606d">Last year</text>`;
+  rows.forEach((row, idx) => {{
+    const yBase = top + idx * rowH + 12;
+    const y1 = yBase - num(row.first_year_prevalence_percent) / 100 * 8;
+    const y2 = yBase - num(row.last_year_prevalence_percent) / 100 * 8;
+    const color = row.trend_label.includes('increasing') ? '#0f766e' : (row.trend_label.includes('decreasing') ? '#b91c1c' : '#64748b');
+    const short = label(row).length > 30 ? label(row).slice(0, 27) + '...' : label(row);
+    svg += `<text x="10" y="${{yBase + 4}}" font-size="11" fill="#1f2933">${{short}}</text><line x1="${{leftX}}" y1="${{y1.toFixed(1)}}" x2="${{rightX}}" y2="${{y2.toFixed(1)}}" stroke="${{color}}" stroke-width="2.4"><title>${{label(row)}}: ${{row.first_year_prevalence_percent}}% to ${{row.last_year_prevalence_percent}}%</title></line><circle cx="${{leftX}}" cy="${{y1.toFixed(1)}}" r="3.5" fill="${{color}}"/><circle cx="${{rightX}}" cy="${{y2.toFixed(1)}}" r="3.5" fill="${{color}}"/>`;
+  }});
+  svg += '</svg>';
+  document.getElementById('slopePlot').innerHTML = svg;
+}}
+function renderTable() {{
+  const rows = filteredTrends().slice(0, 50);
+  const cols = ['database','feature_id','first_year','last_year','change_percent_points','correlation','trend_label','support_label','temporal_pattern_label','warning_flags'];
+  let html = '<table><thead><tr>' + cols.map(c => `<th>${{c}}</th>`).join('') + '</tr></thead><tbody>';
+  for (const row of rows) html += '<tr>' + cols.map(c => `<td>${{row[c] || ''}}</td>`).join('') + '</tr>';
+  html += '</tbody></table>';
+  document.getElementById('trendTable').innerHTML = html;
+}}
+function renderAll() {{ populateFeatures(); renderLine(); renderSlope(); renderTable(); }}
+populateDatabases(); renderAll();
+dbSelect.addEventListener('change', renderAll);
+trendSelect.addEventListener('change', renderAll);
+supportSelect.addEventListener('change', renderAll);
+featureSelect.addEventListener('change', () => {{ renderLine(); }});
+</script></body></html>
+""",
+        encoding="utf-8",
+    )
+    (figures / "temporal_trend_summary.data.tsv").write_text(trend_path.read_text(encoding="utf-8"), encoding="utf-8")
+    outputs.update({
+        "important_temporal_selected_feature_data": str(selected_data),
+        "important_temporal_selected_feature_svg": str(selected_svg),
+        "important_temporal_selected_feature_png": str(selected_png),
+        "important_temporal_slope_data": str(slope_data),
+        "important_temporal_slope_svg": str(slope_svg),
+        "important_temporal_slope_png": str(slope_png),
+        "important_temporal_interactive_html": str(temporal_html),
+    })
     return outputs
 
 
@@ -4624,6 +4992,8 @@ def write_important_results_report(
     variation_figures_html = "<div class='figure-row'>" + "".join(variation_figures[:6]) + "</div>" if variation_figures else "<p>No variation figures were generated because no identity/coverage feature rows were available.</p>"
     temporal_figure_items = []
     for figure_name, title in [
+        ("temporal_selected_feature_prevalence", "Selected feature prevalence"),
+        ("temporal_slope_top40", "First-to-last-year slope plot"),
         ("temporal_database_burden_top20", "Database burden over time"),
         ("temporal_top_increasing_features", "Top increasing features"),
         ("temporal_top_decreasing_features", "Top decreasing features"),
@@ -4695,9 +5065,10 @@ th {{ background: #f0f4f8; }}
 <div class="downloads"><a href="key_tables/feature_variation_summary.tsv">Download variation summary</a><a href="key_tables/feature_variation_hits.tsv">Download hit-level variation table</a></div></section>
 <section id="temporal"><h2>Temporal Trends</h2><div class="warning">Temporal trends reflect the analyzed dataset only. They can be affected by sampling year, BioProject, country, lineage, and missing collection-year metadata.</div>
 <p>Prevalence trends use yearly percentages with genome-count denominators. Database burden is summarized as mean detected features per genome by collection year.</p>
+<iframe src="figures/temporal_trends.html" title="Temporal trends interactive report"></iframe>
 {temporal_figures_html}
 {temporal_table_html}
-<div class="downloads"><a href="key_tables/temporal_database_burden.tsv">Download database burden by year</a><a href="key_tables/temporal_feature_prevalence.tsv">Download yearly feature prevalence</a><a href="key_tables/temporal_trend_summary.tsv">Download temporal trend summary</a><a href="key_tables/temporal_increasing_features.tsv">Download increasing features</a><a href="key_tables/temporal_decreasing_features.tsv">Download decreasing features</a></div></section>
+<div class="downloads"><a href="figures/temporal_trends.html">Open interactive temporal report</a><a href="key_tables/temporal_database_burden.tsv">Download database burden by year</a><a href="key_tables/temporal_feature_prevalence.tsv">Download yearly feature prevalence</a><a href="key_tables/temporal_trend_summary.tsv">Download temporal trend summary</a><a href="key_tables/temporal_increasing_features.tsv">Download increasing features</a><a href="key_tables/temporal_decreasing_features.tsv">Download decreasing features</a></div></section>
 <section id="files"><h2>Important Files</h2><ul>
 <li><a href="../basic/enriched_genome_dataset.csv">Enriched genome dataset CSV</a></li>
 <li><a href="key_tables/qc_step_summary.tsv">QC step summary</a></li>
