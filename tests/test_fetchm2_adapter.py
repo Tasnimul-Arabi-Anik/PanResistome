@@ -225,6 +225,16 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue(any((sample_dir / "important" / "figures").glob("cooccurrence_heatmap_*_vs_*.svg")))
             self.assertTrue(any((sample_dir / "important" / "figures").glob("cooccurrence_heatmap_*_vs_*.pdf")))
             self.assertTrue(any((sample_dir / "important" / "figures").glob("cooccurrence_network_*_vs_*.png")))
+            self.assertTrue((sample_dir / "important" / "tables" / "metadata_feature_enrichment.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "metadata_burden_associations.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "metadata_category_enrichment.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "metadata_association_summary.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "metadata_associations.html").exists())
+            self.assertTrue((sample_dir / "important" / "metadata_association_tables.zip").exists())
+            self.assertTrue((sample_dir / "important" / "metadata_association_figures.zip").exists())
+            self.assertTrue(any((sample_dir / "important" / "figures").glob("metadata_volcano_*_*.svg")))
+            self.assertTrue(any((sample_dir / "important" / "figures").glob("metadata_enrichment_heatmap_*_*.pdf")))
+            self.assertTrue(any((sample_dir / "important" / "figures").glob("metadata_burden_boxplot_*_*.png")))
             temporal_summary = pd.read_csv(sample_dir / "important" / "key_tables" / "temporal_trend_summary.tsv", sep="\t")
             self.assertTrue({"trend_label", "support_label", "temporal_pattern_label", "warning_flags"}.issubset(temporal_summary.columns))
             temporal_html = (sample_dir / "important" / "figures" / "temporal_trends.html").read_text(encoding="utf-8")
@@ -247,6 +257,11 @@ class FetchM2AdapterTests(unittest.TestCase):
                 self.assertIn(control, cooccurrence_html)
             cooccurrence_pairs = pd.read_csv(sample_dir / "important" / "tables" / "cooccurrence_pair_summary.tsv", sep="\t")
             self.assertTrue({"phi_correlation", "q_value", "significance_label", "evidence_level", "warning_flags"}.issubset(cooccurrence_pairs.columns))
+            metadata_html = (sample_dir / "important" / "figures" / "metadata_associations.html").read_text(encoding="utf-8")
+            for control in ["Database", "Association type", "Metadata variable", "Group", "Minimum group size", "Significance", "Warning filter"]:
+                self.assertIn(control, metadata_html)
+            metadata_enrichment = pd.read_csv(sample_dir / "important" / "tables" / "metadata_feature_enrichment.tsv", sep="\t")
+            self.assertTrue({"odds_ratio", "p_value", "q_value", "support_label", "interpretation_label", "warning_flags"}.issubset(metadata_enrichment.columns))
             report_html = (sample_dir / "important" / "results.html").read_text(encoding="utf-8")
             for section in [
                 "Featured Results",
@@ -257,6 +272,7 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "Variations",
                 "Temporal Trends",
                 "Co-occurrence / Genomic Context",
+                "Metadata Associations",
                 "Warnings And Limitations",
                 "Important Files",
             ]:

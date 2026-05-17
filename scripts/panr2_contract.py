@@ -4588,6 +4588,320 @@ def _write_contig_neighborhood_png(path: Path, rows: list[dict[str, str]]) -> No
         rect(x1, y, x2, y + 18, color_map.get(row.get("database", ""), (100, 116, 139)))
     _write_png(path, width, height, pixels)
 
+
+def _metadata_support_label(group_n: int, outside_n: int) -> str:
+    minimum = min(group_n, outside_n)
+    if minimum < 5:
+        return "insufficient_support"
+    if minimum < 10:
+        return "descriptive_only"
+    if minimum < 30:
+        return "exploratory"
+    if minimum >= 100:
+        return "strong_support"
+    return "standard_support"
+
+
+def _mean(values: list[float]) -> float:
+    return sum(values) / len(values) if values else 0.0
+
+
+def _median(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2.0
+
+
+def _quantile(values: list[float], fraction: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    position = (len(ordered) - 1) * fraction
+    lower = int(math.floor(position))
+    upper = int(math.ceil(position))
+    if lower == upper:
+        return ordered[lower]
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
+
+
+def _format_pvalue(value: float | None) -> str:
+    if value is None:
+        return ""
+    return f"{min(max(value, 0.0), 1.0):.6g}"
+
+
+def _odds_ratio(a: int, b: int, c: int, d: int) -> float:
+    return ((a + 0.5) * (d + 0.5)) / ((b + 0.5) * (c + 0.5))
+
+
+def _chi_square_2x2_p_value(a: int, b: int, c: int, d: int) -> float:
+    n_total = a + b + c + d
+    denominator = (a + b) * (c + d) * (a + c) * (b + d)
+    if n_total == 0 or denominator == 0:
+        return 1.0
+    chi_square = n_total * ((a * d - b * c) ** 2) / denominator
+    return math.erfc(math.sqrt(max(chi_square, 0.0) / 2.0))
+
+
+def _binary_test_for_counts(a: int, b: int, c: int, d: int) -> tuple[str, float]:
+    n_total = a + b + c + d
+    expected = []
+    for row_total in [a + b, c + d]:
+        for column_total in [a + c, b + d]:
+            expected.append(row_total * column_total / n_total if n_total else 0.0)
+    if n_total >= 40 and min(expected or [0.0]) >= 5:
+        return "chi_square_2x2", _chi_square_2x2_p_value(a, b, c, d)
+    return "fisher_exact", fisher_exact_two_sided(a, b, c, d)
+
+
+def _rank_values(values: list[float]) -> list[float]:
+    indexed = sorted(enumerate(values), key=lambda item: item[1])
+    ranks = [0.0] * len(values)
+    idx = 0
+    while idx < len(indexed):
+        end = idx + 1
+        while end < len(indexed) and indexed[end][1] == indexed[idx][1]:
+            end += 1
+        average_rank = (idx + 1 + end) / 2.0
+        for original_index, _ in indexed[idx:end]:
+            ranks[original_index] = average_rank
+        idx = end
+    return ranks
+
+
+def _mann_whitney_u_p_value(group_values: list[float], outside_values: list[float]) -> float | None:
+    n1 = len(group_values)
+    n2 = len(outside_values)
+    if n1 < 1 or n2 < 1:
+        return None
+    combined = group_values + outside_values
+    ranks = _rank_values(combined)
+    rank_sum_group = sum(ranks[:n1])
+    u1 = rank_sum_group - n1 * (n1 + 1) / 2.0
+    mean_u = n1 * n2 / 2.0
+    sd_u = math.sqrt(n1 * n2 * (n1 + n2 + 1) / 12.0)
+    if sd_u == 0:
+        return 1.0
+    z_score = (u1 - mean_u) / sd_u
+    return math.erfc(abs(z_score) / math.sqrt(2.0))
+
+
+def _dominance_flag(samples: set[str], metadata_by_sample: dict[str, dict[str, str]], column: str, flag: str) -> str:
+    values = [metadata_by_sample.get(sample, {}).get(column, "") for sample in samples]
+    values = [value for value in values if value and not is_missing_value(value)]
+    if len(values) < 3:
+        return ""
+    most_common = Counter(values).most_common(1)[0]
+    return flag if most_common[1] / len(values) >= 0.7 else ""
+
+
+def _metadata_interpretation_label(q_value: float | None, group_n: int, outside_n: int, effect_size: float, warning_flags: str) -> str:
+    support = _metadata_support_label(group_n, outside_n)
+    severe_flags = {"bioproject_dominance", "lineage_dominance", "low_positive_count", "missing_metadata"}
+    flags = {flag for flag in warning_flags.split(";") if flag}
+    if support == "insufficient_support":
+        return "insufficient_support"
+    if support == "descriptive_only":
+        return "descriptive_only"
+    if support == "exploratory":
+        return "exploratory"
+    if q_value is not None and q_value <= 0.05 and abs(effect_size) >= 0.20 and not flags.intersection(severe_flags):
+        return "strong_supported"
+    if q_value is not None and q_value <= 0.10 and abs(effect_size) >= 0.10 and "bioproject_dominance" not in flags:
+        return "moderate_supported"
+    if q_value is not None and q_value <= 0.10:
+        return "exploratory"
+    return "descriptive_only"
+
+
+def _write_metadata_volcano_svg(path: Path, rows: list[dict[str, str]], title: str) -> None:
+    width, height = 920, 520
+    left, top, plot_w, plot_h = 90, 70, 760, 360
+    points = []
+    for row in rows:
+        x = _float_or_none(row.get("prevalence_difference", "")) or 0.0
+        q_value = _float_or_none(row.get("q_value", ""))
+        y = -math.log10(max(q_value or 1.0, 1e-12)) if q_value is not None else 0.0
+        points.append((x, y, row))
+    max_abs_x = max([abs(point[0]) for point in points] + [0.25])
+    max_y = max([point[1] for point in points] + [1.0])
+    parts = [
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
+        "<rect width='100%' height='100%' fill='#f8fafc'/>",
+        f"<text x='20' y='32' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
+        f"<line x1='{left}' y1='{top + plot_h}' x2='{left + plot_w}' y2='{top + plot_h}' stroke='#94a3b8'/>",
+        f"<line x1='{left + plot_w / 2}' y1='{top}' x2='{left + plot_w / 2}' y2='{top + plot_h}' stroke='#cbd5e1' stroke-dasharray='4 4'/>",
+        f"<line x1='{left}' y1='{top}' x2='{left}' y2='{top + plot_h}' stroke='#94a3b8'/>",
+    ]
+    for x, y, row in points[:600]:
+        cx = left + (x + max_abs_x) / (2 * max_abs_x) * plot_w
+        cy = top + plot_h - (y / max_y) * plot_h if max_y else top + plot_h
+        label = row.get("interpretation_label", "")
+        color = "#94a3b8"
+        if label in {"strong_supported", "moderate_supported"} and x > 0:
+            color = "#dc2626"
+        elif label in {"strong_supported", "moderate_supported"} and x < 0:
+            color = "#2563eb"
+        tip = (
+            f"{row.get('feature_id', '')}; diff={x:.3f}; q={row.get('q_value', '')}; "
+            f"{row.get('positive_in_group', '')}/{row.get('group_n', '')} vs "
+            f"{row.get('positive_outside_group', '')}/{row.get('outside_group_n', '')}; {row.get('warning_flags', '')}"
+        )
+        parts.append(f"<circle cx='{cx:.1f}' cy='{cy:.1f}' r='4' fill='{color}' fill-opacity='0.82'><title>{html.escape(tip)}</title></circle>")
+    parts.extend([
+        f"<text x='{left + plot_w / 2 - 90}' y='{height - 35}' font-family='Arial' font-size='12' fill='#52606d'>Prevalence difference (selected group - outside)</text>",
+        f"<text x='18' y='{top + 20}' font-family='Arial' font-size='12' fill='#52606d' transform='rotate(-90 18,{top + 20})'>-log10(q-value)</text>",
+        "</svg>\n",
+    ])
+    path.write_text("".join(parts), encoding="utf-8")
+
+
+def _write_metadata_volcano_png(path: Path, rows: list[dict[str, str]]) -> None:
+    width, height = 920, 520
+    left, top, plot_w, plot_h = 90, 70, 760, 360
+    pixels = [bytearray([248, 250, 252] * width) for _ in range(height)]
+    points = []
+    for row in rows:
+        x = _float_or_none(row.get("prevalence_difference", "")) or 0.0
+        q_value = _float_or_none(row.get("q_value", ""))
+        y = -math.log10(max(q_value or 1.0, 1e-12)) if q_value is not None else 0.0
+        points.append((x, y, row))
+    max_abs_x = max([abs(point[0]) for point in points] + [0.25])
+    max_y = max([point[1] for point in points] + [1.0])
+
+    def set_pixel(x: int, y: int, color: tuple[int, int, int]) -> None:
+        if 0 <= x < width and 0 <= y < height:
+            idx = x * 3
+            pixels[y][idx:idx + 3] = bytes(color)
+
+    def circle(cx: int, cy: int, radius: int, color: tuple[int, int, int]) -> None:
+        for yy in range(cy - radius, cy + radius + 1):
+            for xx in range(cx - radius, cx + radius + 1):
+                if (xx - cx) ** 2 + (yy - cy) ** 2 <= radius ** 2:
+                    set_pixel(xx, yy, color)
+
+    for x, y, row in points[:600]:
+        cx = int(left + (x + max_abs_x) / (2 * max_abs_x) * plot_w)
+        cy = int(top + plot_h - (y / max_y) * plot_h) if max_y else top + plot_h
+        label = row.get("interpretation_label", "")
+        color = (148, 163, 184)
+        if label in {"strong_supported", "moderate_supported"} and x > 0:
+            color = (220, 38, 38)
+        elif label in {"strong_supported", "moderate_supported"} and x < 0:
+            color = (37, 99, 235)
+        circle(cx, cy, 4, color)
+    _write_png(path, width, height, pixels)
+
+
+def _write_diverging_heatmap_svg(path: Path, rows: list[dict[str, str]], title: str, row_field: str, column_field: str, value_field: str) -> None:
+    row_labels = list(dict.fromkeys(row.get(row_field, "") for row in rows if row.get(row_field, "")))
+    column_labels = sorted({row.get(column_field, "") for row in rows if row.get(column_field, "")})
+    values = {(row.get(row_field, ""), row.get(column_field, "")): _float_or_none(row.get(value_field, "")) or 0.0 for row in rows}
+    max_abs = max([abs(value) for value in values.values()] + [0.1])
+    cell_w, cell_h = 92, 24
+    left, top = 260, 84
+    width = max(840, left + cell_w * max(len(column_labels), 1) + 60)
+    height = max(220, top + cell_h * max(len(row_labels), 1) + 50)
+    parts = [
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
+        "<rect width='100%' height='100%' fill='#f8fafc'/>",
+        f"<text x='20' y='32' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
+    ]
+    for cidx, column in enumerate(column_labels):
+        x = left + cidx * cell_w
+        short = column if len(column) <= 18 else column[:15] + "..."
+        parts.append(f"<text x='{x + 4}' y='{top - 14}' font-family='Arial' font-size='11' fill='#52606d'>{html.escape(short)}</text>")
+    for ridx, label in enumerate(row_labels):
+        y = top + ridx * cell_h
+        short_label = label if len(label) <= 40 else label[:37] + "..."
+        parts.append(f"<text x='20' y='{y + 16}' font-family='Arial' font-size='11' fill='#1f2933'>{html.escape(short_label)}</text>")
+        for cidx, column in enumerate(column_labels):
+            x = left + cidx * cell_w
+            value = values.get((label, column), 0.0)
+            intensity = min(abs(value) / max_abs, 1.0)
+            if value > 0:
+                fill = f"rgb(254,{int(226 - 130 * intensity)},{int(226 - 130 * intensity)})"
+            elif value < 0:
+                fill = f"rgb({int(219 - 135 * intensity)},{int(234 - 120 * intensity)},254)"
+            else:
+                fill = "#f1f5f9"
+            parts.append(f"<rect x='{x}' y='{y}' width='{cell_w - 2}' height='{cell_h - 2}' fill='{fill}' stroke='#d9e2ec'><title>{html.escape(label)} / {html.escape(column)}: {value:.3f}</title></rect>")
+    parts.append("</svg>\n")
+    path.write_text("".join(parts), encoding="utf-8")
+
+
+def _write_diverging_heatmap_png(path: Path, rows: list[dict[str, str]], row_field: str, column_field: str, value_field: str) -> None:
+    row_labels = list(dict.fromkeys(row.get(row_field, "") for row in rows if row.get(row_field, "")))
+    column_labels = sorted({row.get(column_field, "") for row in rows if row.get(column_field, "")})
+    values = {(row.get(row_field, ""), row.get(column_field, "")): _float_or_none(row.get(value_field, "")) or 0.0 for row in rows}
+    max_abs = max([abs(value) for value in values.values()] + [0.1])
+    cell_w, cell_h = 92, 24
+    left, top = 260, 84
+    width = max(840, left + cell_w * max(len(column_labels), 1) + 60)
+    height = max(220, top + cell_h * max(len(row_labels), 1) + 50)
+    pixels = [bytearray([248, 250, 252] * width) for _ in range(height)]
+
+    def rect(x0: int, y0: int, x1: int, y1: int, color: tuple[int, int, int]) -> None:
+        for y in range(max(0, y0), min(height, y1)):
+            row_pixels = pixels[y]
+            for x in range(max(0, x0), min(width, x1)):
+                idx = x * 3
+                row_pixels[idx:idx + 3] = bytes(color)
+
+    for ridx, label in enumerate(row_labels):
+        y = top + ridx * cell_h
+        for cidx, column in enumerate(column_labels):
+            x = left + cidx * cell_w
+            value = values.get((label, column), 0.0)
+            intensity = min(abs(value) / max_abs, 1.0)
+            if value > 0:
+                color = (254, int(226 - 130 * intensity), int(226 - 130 * intensity))
+            elif value < 0:
+                color = (int(219 - 135 * intensity), int(234 - 120 * intensity), 254)
+            else:
+                color = (241, 245, 249)
+            rect(x, y, x + cell_w - 2, y + cell_h - 2, color)
+    _write_png(path, width, height, pixels)
+
+
+def _write_burden_boxplot_svg(path: Path, rows: list[dict[str, str]], title: str) -> None:
+    width = 940
+    row_h = 42
+    left, top, plot_w = 240, 64, 620
+    height = max(220, top + row_h * max(len(rows), 1) + 50)
+    max_value = max([_float_or_none(row.get("max", "")) or 0.0 for row in rows] + [1.0])
+    parts = [
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
+        "<rect width='100%' height='100%' fill='#f8fafc'/>",
+        f"<text x='20' y='32' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
+    ]
+    for idx, row in enumerate(rows):
+        y = top + idx * row_h
+        label = row.get("metadata_group", "")
+        short = label if len(label) <= 32 else label[:29] + "..."
+        values = {key: (_float_or_none(row.get(key, "")) or 0.0) for key in ["min", "q1", "median", "q3", "max", "mean"]}
+        def xpos(value: float) -> float:
+            return left + value / max_value * plot_w if max_value else left
+        parts.append(f"<text x='20' y='{y + 23}' font-family='Arial' font-size='12' fill='#1f2933'>{html.escape(short)} (n={html.escape(row.get('n', ''))})</text>")
+        parts.append(f"<line x1='{xpos(values['min']):.1f}' y1='{y + 18}' x2='{xpos(values['max']):.1f}' y2='{y + 18}' stroke='#64748b'/>")
+        parts.append(f"<rect x='{xpos(values['q1']):.1f}' y='{y + 8}' width='{max(xpos(values['q3']) - xpos(values['q1']), 2):.1f}' height='20' fill='#bae6fd' stroke='#0369a1'/>")
+        parts.append(f"<line x1='{xpos(values['median']):.1f}' y1='{y + 6}' x2='{xpos(values['median']):.1f}' y2='{y + 30}' stroke='#0f172a' stroke-width='2'/>")
+        parts.append(f"<circle cx='{xpos(values['mean']):.1f}' cy='{y + 18}' r='4' fill='#0f766e'><title>mean {values['mean']:.2f}</title></circle>")
+    parts.append("</svg>\n")
+    path.write_text("".join(parts), encoding="utf-8")
+
+
+def _write_burden_boxplot_png(path: Path, rows: list[dict[str, str]]) -> None:
+    # Dependency-free raster companion. The SVG carries labels and tooltips.
+    _write_bar_png(path, [{"metadata_group": row.get("metadata_group", ""), "median": row.get("median", "")} for row in rows], "median")
+
+
 def _extract_year(value: str) -> int | None:
     match = re.search(r"(19|20)\d{2}", str(value or ""))
     if not match:
@@ -5890,6 +6204,588 @@ render();
     return outputs
 
 
+def write_important_metadata_association_outputs(
+    sample_dir: Path,
+    out_dir: Path,
+    important_dir: Path,
+    top_n: int = 20,
+    max_features_per_database: int = 200,
+) -> dict[str, str]:
+    tables = important_dir / "tables"
+    figures = important_dir / "figures"
+    tables.mkdir(parents=True, exist_ok=True)
+    figures.mkdir(parents=True, exist_ok=True)
+
+    features = read_table(out_dir / "features" / "all_features.tsv")
+    metadata_rows = read_table(sample_dir / "basic" / "enriched_genome_dataset.csv")
+    if not metadata_rows:
+        metadata_rows = normalize_metadata_rows(load_metadata_rows(sample_dir))
+    metadata_by_sample = {row.get("assembly_accession", ""): row for row in metadata_rows if row.get("assembly_accession")}
+    samples = sorted(set(metadata_by_sample) | {row.get("assembly_accession", "") for row in features if row.get("assembly_accession")})
+    sample_count = len(samples)
+    presence = feature_presence(features)
+    category_by_feature: dict[tuple[str, str], str] = {}
+    for row in features:
+        key = (row.get("database", ""), row.get("feature_id", ""))
+        if key[0] and key[1]:
+            category_by_feature[key] = row.get("feature_category", "")
+
+    by_database: dict[str, list[tuple[tuple[str, str], set[str]]]] = defaultdict(list)
+    for key, present_samples in presence.items():
+        by_database[key[0]].append((key, present_samples))
+    limited_presence: dict[tuple[str, str], set[str]] = {}
+    capped_databases = []
+    for database, items in by_database.items():
+        ranked = sorted(items, key=lambda item: (-len(item[1]), item[0][1]))[:max_features_per_database]
+        if len(items) > max_features_per_database:
+            capped_databases.append(database)
+        for key, present_samples in ranked:
+            limited_presence[key] = present_samples
+
+    preferred_columns = [
+        "isolation_source",
+        "country",
+        "continent",
+        "subcontinent",
+        "host",
+        "host_group",
+        "sample_type",
+        "environment_medium",
+        "collection_year",
+        "bioproject",
+        "assembly_level",
+    ]
+    metadata_columns = []
+    missing_fraction_by_column = {}
+    for column in preferred_columns:
+        values = [row.get(column, "") for row in metadata_rows]
+        non_missing = [value for value in values if value and not is_missing_value(value)]
+        if len(set(non_missing)) >= 2:
+            metadata_columns.append(column)
+            missing_fraction_by_column[column] = 1.0 - (len(non_missing) / len(values) if values else 0.0)
+
+    def groups_for_column(column: str) -> dict[str, set[str]]:
+        groups: dict[str, set[str]] = defaultdict(set)
+        for sample in samples:
+            value = metadata_by_sample.get(sample, {}).get(column, "")
+            if value and not is_missing_value(value):
+                groups[value].add(sample)
+        return dict(groups)
+
+    feature_rows = []
+    for metadata_column in metadata_columns:
+        groups = groups_for_column(metadata_column)
+        if len(groups) < 2:
+            continue
+        all_column_samples = set().union(*groups.values()) if groups else set()
+        for (database, feature_id), present_samples in sorted(limited_presence.items()):
+            for group, group_samples in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0])):
+                outside_samples = all_column_samples - group_samples
+                group_n = len(group_samples)
+                outside_n = len(outside_samples)
+                if group_n == 0 or outside_n == 0:
+                    continue
+                positive_group_samples = present_samples & group_samples
+                positive_outside_samples = present_samples & outside_samples
+                a = len(positive_group_samples)
+                b = group_n - a
+                c = len(positive_outside_samples)
+                d = outside_n - c
+                prevalence_group = a / group_n if group_n else 0.0
+                prevalence_outside = c / outside_n if outside_n else 0.0
+                diff = prevalence_group - prevalence_outside
+                support_label = _metadata_support_label(group_n, outside_n)
+                test_name = "descriptive_only"
+                p_value: float | None = None
+                if support_label not in {"insufficient_support", "descriptive_only"} and (a + c) >= 3:
+                    test_name, p_value = _binary_test_for_counts(a, b, c, d)
+                flags = ["multiple_testing", "exploratory_only"]
+                if support_label == "insufficient_support":
+                    flags.append("small_group_warning")
+                elif support_label == "descriptive_only":
+                    flags.append("descriptive_only")
+                elif support_label == "exploratory":
+                    flags.append("exploratory_support")
+                if (a + c) < 3:
+                    flags.append("low_positive_count")
+                if missing_fraction_by_column.get(metadata_column, 0.0) >= 0.30:
+                    flags.append("missing_metadata")
+                bioproject_flag = _dominance_flag(positive_group_samples, metadata_by_sample, "bioproject", "bioproject_dominance")
+                lineage_flag = _dominance_flag(positive_group_samples, metadata_by_sample, "mlst_ST", "lineage_dominance")
+                if bioproject_flag:
+                    flags.append(bioproject_flag)
+                if lineage_flag:
+                    flags.append(lineage_flag)
+                feature_rows.append({
+                    "database": database,
+                    "feature_id": feature_id,
+                    "feature_category": category_by_feature.get((database, feature_id), ""),
+                    "metadata_column": metadata_column,
+                    "metadata_group": group,
+                    "group_n": str(group_n),
+                    "outside_group_n": str(outside_n),
+                    "positive_in_group": str(a),
+                    "positive_outside_group": str(c),
+                    "prevalence_in_group": f"{prevalence_group:.4f}",
+                    "prevalence_outside_group": f"{prevalence_outside:.4f}",
+                    "prevalence_difference": f"{diff:.4f}",
+                    "prevalence_difference_percent": f"{diff * 100:.2f}",
+                    "odds_ratio": f"{_odds_ratio(a, b, c, d):.6g}",
+                    "test_name": test_name,
+                    "p_value": _format_pvalue(p_value),
+                    "q_value": "",
+                    "effect_size_label": "enriched" if diff > 0 else ("depleted" if diff < 0 else "neutral"),
+                    "support_label": support_label,
+                    "warning_flags": _flag_string(flags),
+                    "interpretation_label": "",
+                })
+    add_bh_qvalues(feature_rows)
+    for row in feature_rows:
+        q_value = _float_or_none(row.get("q_value", ""))
+        diff = _float_or_none(row.get("prevalence_difference", "")) or 0.0
+        row["interpretation_label"] = _metadata_interpretation_label(
+            q_value,
+            int(row.get("group_n", "0") or 0),
+            int(row.get("outside_group_n", "0") or 0),
+            diff,
+            row.get("warning_flags", ""),
+        )
+    feature_rows = sorted(
+        feature_rows,
+        key=lambda row: (
+            row.get("interpretation_label", "") not in {"strong_supported", "moderate_supported"},
+            -abs(_float_or_none(row.get("prevalence_difference", "")) or 0.0),
+            row.get("database", ""),
+            row.get("metadata_column", ""),
+            row.get("feature_id", ""),
+        ),
+    )
+    feature_path = tables / "metadata_feature_enrichment.tsv"
+    feature_fields = [
+        "database",
+        "feature_id",
+        "feature_category",
+        "metadata_column",
+        "metadata_group",
+        "group_n",
+        "outside_group_n",
+        "positive_in_group",
+        "positive_outside_group",
+        "prevalence_in_group",
+        "prevalence_outside_group",
+        "prevalence_difference",
+        "prevalence_difference_percent",
+        "odds_ratio",
+        "test_name",
+        "p_value",
+        "q_value",
+        "effect_size_label",
+        "support_label",
+        "warning_flags",
+        "interpretation_label",
+    ]
+    write_rows(feature_path, feature_rows, feature_fields)
+
+    features_by_sample_database: dict[tuple[str, str], set[str]] = defaultdict(set)
+    features_by_sample_database_category: dict[tuple[str, str, str], set[str]] = defaultdict(set)
+    for row in features:
+        sample = row.get("assembly_accession", "") or row.get("sample_id", "")
+        database = row.get("database", "")
+        feature_id = row.get("feature_id", "")
+        category = row.get("feature_category", "")
+        if sample and database and feature_id:
+            features_by_sample_database[(sample, database)].add(feature_id)
+            if category:
+                features_by_sample_database_category[(sample, database, category)].add(feature_id)
+    databases = sorted({database for _, database in features_by_sample_database})
+    categories = sorted({(database, category) for _, database, category in features_by_sample_database_category})
+
+    def burden_values(database: str, sample_set: set[str]) -> list[float]:
+        return [float(len(features_by_sample_database.get((sample, database), set()))) for sample in sorted(sample_set)]
+
+    def category_values(database: str, category: str, sample_set: set[str]) -> list[float]:
+        return [float(len(features_by_sample_database_category.get((sample, database, category), set()))) for sample in sorted(sample_set)]
+
+    burden_rows = []
+    category_rows = []
+    for metadata_column in metadata_columns:
+        groups = groups_for_column(metadata_column)
+        all_column_samples = set().union(*groups.values()) if groups else set()
+        for database in databases:
+            for group, group_samples in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0])):
+                outside_samples = all_column_samples - group_samples
+                group_n = len(group_samples)
+                outside_n = len(outside_samples)
+                if not group_n or not outside_n:
+                    continue
+                group_values = burden_values(database, group_samples)
+                outside_values = burden_values(database, outside_samples)
+                support_label = _metadata_support_label(group_n, outside_n)
+                p_value = _mann_whitney_u_p_value(group_values, outside_values) if support_label not in {"insufficient_support", "descriptive_only"} else None
+                diff = _median(group_values) - _median(outside_values)
+                flags = ["multiple_testing", "exploratory_only"]
+                if support_label == "insufficient_support":
+                    flags.append("small_group_warning")
+                elif support_label == "descriptive_only":
+                    flags.append("descriptive_only")
+                elif support_label == "exploratory":
+                    flags.append("exploratory_support")
+                if missing_fraction_by_column.get(metadata_column, 0.0) >= 0.30:
+                    flags.append("missing_metadata")
+                burden_rows.append({
+                    "database": database,
+                    "metadata_column": metadata_column,
+                    "metadata_group": group,
+                    "group_n": str(group_n),
+                    "outside_group_n": str(outside_n),
+                    "median_burden_group": f"{_median(group_values):.4f}",
+                    "median_burden_outside": f"{_median(outside_values):.4f}",
+                    "mean_burden_group": f"{_mean(group_values):.4f}",
+                    "mean_burden_outside": f"{_mean(outside_values):.4f}",
+                    "burden_difference": f"{diff:.4f}",
+                    "test_name": "mann_whitney_u" if p_value is not None else "descriptive_only",
+                    "p_value": _format_pvalue(p_value),
+                    "q_value": "",
+                    "support_label": support_label,
+                    "warning_flags": _flag_string(flags),
+                    "interpretation_label": "",
+                })
+        for database, category in categories:
+            for group, group_samples in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0])):
+                outside_samples = all_column_samples - group_samples
+                group_n = len(group_samples)
+                outside_n = len(outside_samples)
+                if not group_n or not outside_n:
+                    continue
+                group_values = category_values(database, category, group_samples)
+                outside_values = category_values(database, category, outside_samples)
+                support_label = _metadata_support_label(group_n, outside_n)
+                p_value = _mann_whitney_u_p_value(group_values, outside_values) if support_label not in {"insufficient_support", "descriptive_only"} else None
+                diff = _median(group_values) - _median(outside_values)
+                flags = ["multiple_testing", "exploratory_only"]
+                if support_label == "insufficient_support":
+                    flags.append("small_group_warning")
+                elif support_label == "descriptive_only":
+                    flags.append("descriptive_only")
+                elif support_label == "exploratory":
+                    flags.append("exploratory_support")
+                category_rows.append({
+                    "database": database,
+                    "feature_category": category,
+                    "metadata_column": metadata_column,
+                    "metadata_group": group,
+                    "group_n": str(group_n),
+                    "outside_group_n": str(outside_n),
+                    "median_burden_group": f"{_median(group_values):.4f}",
+                    "median_burden_outside": f"{_median(outside_values):.4f}",
+                    "mean_burden_group": f"{_mean(group_values):.4f}",
+                    "mean_burden_outside": f"{_mean(outside_values):.4f}",
+                    "burden_difference": f"{diff:.4f}",
+                    "test_name": "mann_whitney_u" if p_value is not None else "descriptive_only",
+                    "p_value": _format_pvalue(p_value),
+                    "q_value": "",
+                    "support_label": support_label,
+                    "warning_flags": _flag_string(flags),
+                    "interpretation_label": "",
+                })
+    add_bh_qvalues(burden_rows)
+    add_bh_qvalues(category_rows)
+    for row in burden_rows + category_rows:
+        q_value = _float_or_none(row.get("q_value", ""))
+        diff = _float_or_none(row.get("burden_difference", "")) or 0.0
+        row["interpretation_label"] = _metadata_interpretation_label(
+            q_value,
+            int(row.get("group_n", "0") or 0),
+            int(row.get("outside_group_n", "0") or 0),
+            diff,
+            row.get("warning_flags", ""),
+        )
+    burden_rows = sorted(burden_rows, key=lambda row: (-abs(_float_or_none(row.get("burden_difference", "")) or 0.0), row.get("database", ""), row.get("metadata_column", "")))
+    category_rows = sorted(category_rows, key=lambda row: (-abs(_float_or_none(row.get("burden_difference", "")) or 0.0), row.get("database", ""), row.get("feature_category", "")))
+
+    burden_path = tables / "metadata_burden_associations.tsv"
+    burden_fields = [
+        "database",
+        "metadata_column",
+        "metadata_group",
+        "group_n",
+        "outside_group_n",
+        "median_burden_group",
+        "median_burden_outside",
+        "mean_burden_group",
+        "mean_burden_outside",
+        "burden_difference",
+        "test_name",
+        "p_value",
+        "q_value",
+        "support_label",
+        "warning_flags",
+        "interpretation_label",
+    ]
+    write_rows(burden_path, burden_rows, burden_fields)
+
+    category_path = tables / "metadata_category_enrichment.tsv"
+    category_fields = ["database", "feature_category", *burden_fields[1:]]
+    write_rows(category_path, category_rows, category_fields)
+
+    default_database = "amr" if any(row.get("database") == "amr" for row in feature_rows) else (feature_rows[0]["database"] if feature_rows else (databases[0] if databases else "all"))
+    default_column = "isolation_source" if "isolation_source" in metadata_columns else ("country" if "country" in metadata_columns else (metadata_columns[0] if metadata_columns else "metadata"))
+    default_group = ""
+    for row in feature_rows:
+        if row.get("database") == default_database and row.get("metadata_column") == default_column:
+            default_group = row.get("metadata_group", "")
+            break
+    if not default_group and default_column in metadata_columns:
+        group_counts = groups_for_column(default_column)
+        default_group = max(group_counts.items(), key=lambda item: len(item[1]))[0] if group_counts else ""
+
+    volcano_rows = [
+        row for row in feature_rows
+        if row.get("database") == default_database and row.get("metadata_column") == default_column and row.get("metadata_group") == default_group
+    ][:max_features_per_database]
+    volcano_base = f"metadata_volcano_{_safe_filename(default_database)}_{_safe_filename(default_column)}_{_safe_filename(default_group)}"
+    volcano_data = figures / f"{volcano_base}.data.tsv"
+    volcano_svg = figures / f"{volcano_base}.svg"
+    volcano_png = figures / f"{volcano_base}.png"
+    volcano_pdf = figures / f"{volcano_base}.pdf"
+    write_rows(volcano_data, volcano_rows, feature_fields)
+    _write_metadata_volcano_svg(volcano_svg, volcano_rows, f"{default_database} Enrichment In {default_column}={default_group}")
+    _write_metadata_volcano_png(volcano_png, volcano_rows)
+    _write_simple_pdf(
+        volcano_pdf,
+        f"{default_database} Enrichment In {default_column}={default_group}",
+        [
+            f"{row.get('feature_id', '')}: diff={row.get('prevalence_difference', '')}, q={row.get('q_value', '')}, {row.get('interpretation_label', '')}"
+            for row in volcano_rows[:30]
+        ] or ["No feature-level metadata enrichment rows were available."],
+    )
+
+    heatmap_features = {
+        row.get("feature_id", "") for row in sorted(
+            [row for row in feature_rows if row.get("database") == default_database and row.get("metadata_column") == default_column],
+            key=lambda row: -abs(_float_or_none(row.get("prevalence_difference", "")) or 0.0),
+        )[:top_n]
+    }
+    heatmap_rows = [
+        {
+            **row,
+            "feature_label": f"{row.get('database', '')}:{row.get('feature_id', '')}",
+        }
+        for row in feature_rows
+        if row.get("database") == default_database and row.get("metadata_column") == default_column and row.get("feature_id") in heatmap_features
+    ]
+    heatmap_base = f"metadata_enrichment_heatmap_{_safe_filename(default_database)}_{_safe_filename(default_column)}"
+    heatmap_data = figures / f"{heatmap_base}.data.tsv"
+    heatmap_svg = figures / f"{heatmap_base}.svg"
+    heatmap_png = figures / f"{heatmap_base}.png"
+    heatmap_pdf = figures / f"{heatmap_base}.pdf"
+    write_rows(heatmap_data, heatmap_rows, [*feature_fields, "feature_label"])
+    _write_diverging_heatmap_svg(heatmap_svg, heatmap_rows, f"{default_database} Metadata Enrichment Heatmap", "feature_label", "metadata_group", "prevalence_difference")
+    _write_diverging_heatmap_png(heatmap_png, heatmap_rows, "feature_label", "metadata_group", "prevalence_difference")
+    _write_simple_pdf(
+        heatmap_pdf,
+        f"{default_database} Metadata Enrichment Heatmap",
+        [f"{row.get('feature_label', '')} / {row.get('metadata_group', '')}: {row.get('prevalence_difference', '')}" for row in heatmap_rows[:34]]
+        or ["No metadata enrichment heatmap rows were available."],
+    )
+
+    boxplot_groups = []
+    if default_column in metadata_columns and default_database in databases:
+        for group, group_samples in sorted(groups_for_column(default_column).items(), key=lambda item: (-len(item[1]), item[0]))[:20]:
+            values = burden_values(default_database, group_samples)
+            boxplot_groups.append({
+                "metadata_group": group,
+                "n": str(len(values)),
+                "min": f"{(min(values) if values else 0.0):.4f}",
+                "q1": f"{_quantile(values, 0.25):.4f}",
+                "median": f"{_median(values):.4f}",
+                "q3": f"{_quantile(values, 0.75):.4f}",
+                "max": f"{(max(values) if values else 0.0):.4f}",
+                "mean": f"{_mean(values):.4f}",
+            })
+    boxplot_base = f"metadata_burden_boxplot_{_safe_filename(default_database)}_{_safe_filename(default_column)}"
+    boxplot_data = figures / f"{boxplot_base}.data.tsv"
+    boxplot_svg = figures / f"{boxplot_base}.svg"
+    boxplot_png = figures / f"{boxplot_base}.png"
+    boxplot_pdf = figures / f"{boxplot_base}.pdf"
+    write_rows(boxplot_data, boxplot_groups, ["metadata_group", "n", "min", "q1", "median", "q3", "max", "mean"])
+    _write_burden_boxplot_svg(boxplot_svg, boxplot_groups, f"{default_database} Burden By {default_column}")
+    _write_burden_boxplot_png(boxplot_png, boxplot_groups)
+    _write_simple_pdf(
+        boxplot_pdf,
+        f"{default_database} Burden By {default_column}",
+        [f"{row.get('metadata_group', '')}: median={row.get('median', '')}, n={row.get('n', '')}" for row in boxplot_groups],
+    )
+
+    category_plot_rows = [
+        {
+            **row,
+            "category_label": f"{row.get('feature_category', '')} / {row.get('metadata_group', '')}",
+            "abs_burden_difference": f"{abs(_float_or_none(row.get('burden_difference', '')) or 0.0):.4f}",
+        }
+        for row in category_rows
+        if row.get("database") == default_database and row.get("metadata_column") == default_column
+    ][:top_n]
+    category_base = f"metadata_category_enrichment_{_safe_filename(default_database)}_{_safe_filename(default_column)}"
+    category_data = figures / f"{category_base}.data.tsv"
+    category_svg = figures / f"{category_base}.svg"
+    category_png = figures / f"{category_base}.png"
+    category_pdf = figures / f"{category_base}.pdf"
+    write_rows(category_data, category_plot_rows, [*category_fields, "category_label", "abs_burden_difference"])
+    _write_bar_svg(category_svg, category_plot_rows, f"{default_database} Category Enrichment", "category_label", "abs_burden_difference", "Absolute median burden difference")
+    _write_bar_png(category_png, category_plot_rows, "abs_burden_difference")
+    _write_simple_pdf(
+        category_pdf,
+        f"{default_database} Category Enrichment",
+        [f"{row.get('category_label', '')}: {row.get('burden_difference', '')}" for row in category_plot_rows],
+    )
+
+    strong_features = sum(1 for row in feature_rows if row.get("interpretation_label") == "strong_supported")
+    moderate_features = sum(1 for row in feature_rows if row.get("interpretation_label") == "moderate_supported")
+    exploratory_features = sum(1 for row in feature_rows if row.get("interpretation_label") == "exploratory")
+    strong_burdens = sum(1 for row in burden_rows if row.get("interpretation_label") == "strong_supported")
+    warning_count = sum(1 for row in feature_rows + burden_rows + category_rows if row.get("warning_flags"))
+    summary_rows = [
+        {"metric": "samples", "value": str(sample_count), "message": "Samples represented in the important metadata association screen."},
+        {"metric": "metadata_columns_screened", "value": str(len(metadata_columns)), "message": "Metadata columns with at least two non-missing groups."},
+        {"metric": "feature_enrichment_rows", "value": str(len(feature_rows)), "message": "Feature-by-group comparisons in the report-facing metadata enrichment table."},
+        {"metric": "strong_feature_associations", "value": str(strong_features), "message": "Feature rows with strong_supported interpretation labels."},
+        {"metric": "moderate_feature_associations", "value": str(moderate_features), "message": "Feature rows with moderate_supported interpretation labels."},
+        {"metric": "exploratory_feature_associations", "value": str(exploratory_features), "message": "Feature rows retained as exploratory signals."},
+        {"metric": "database_burden_associations", "value": str(len(burden_rows)), "message": "Database-burden group comparisons."},
+        {"metric": "strong_burden_associations", "value": str(strong_burdens), "message": "Database-burden rows with strong_supported interpretation labels."},
+        {"metric": "warning_rows", "value": str(warning_count), "message": "Rows carrying at least one caution flag."},
+        {"metric": "default_view", "value": f"{default_database}|{default_column}|{default_group}", "message": "Default database, metadata variable, and group shown in figures."},
+        {"metric": "feature_cap", "value": str(max_features_per_database), "message": f"Report-facing feature screening cap per database. Capped databases: {','.join(sorted(capped_databases)) or 'none'}."},
+    ]
+    summary_path = tables / "metadata_association_summary.tsv"
+    write_rows(summary_path, summary_rows, ["metric", "value", "message"])
+
+    metadata_tables_zip = important_dir / "metadata_association_tables.zip"
+    metadata_figures_zip = important_dir / "metadata_association_figures.zip"
+    _write_zip_bundle(metadata_tables_zip, [feature_path, burden_path, category_path, summary_path], important_dir)
+    _write_zip_bundle(
+        metadata_figures_zip,
+        [
+            volcano_svg, volcano_png, volcano_pdf, volcano_data,
+            heatmap_svg, heatmap_png, heatmap_pdf, heatmap_data,
+            boxplot_svg, boxplot_png, boxplot_pdf, boxplot_data,
+            category_svg, category_png, category_pdf, category_data,
+        ],
+        important_dir,
+    )
+
+    interactive_html = figures / "metadata_associations.html"
+    interactive_html.write_text(
+        f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>Metadata Associations</title>
+<style>
+body {{ font-family: Arial, sans-serif; color: #1f2933; margin: 1.5rem; }}
+label {{ font-weight: 700; margin-right: 0.35rem; }}
+select {{ margin: 0 1rem 0.75rem 0; padding: 0.35rem; }}
+.warning {{ background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; margin: 0.75rem 0; }}
+.panel {{ border: 1px solid #d9e2ec; background: #f8fafc; padding: 0.75rem; margin: 0.75rem 0; }}
+.figure-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }}
+.figure-row img {{ max-width: 100%; border: 1px solid #d9e2ec; background: white; }}
+table {{ border-collapse: collapse; width: 100%; font-size: 0.88rem; }}
+th, td {{ border: 1px solid #d9e2ec; padding: 0.35rem; text-align: left; }}
+th {{ background: #f0f4f8; }}
+</style></head><body>
+<h1>Metadata Associations</h1>
+<div class="warning">Metadata associations are exploratory and may reflect sampling, BioProject structure, lineage composition, geography, collection year, or missing metadata. Enriched/depleted means more/less prevalent in this dataset, not causal.</div>
+<label for="database">Database</label><select id="database"></select>
+<label for="associationType">Association type</label><select id="associationType"><option value="feature" selected>Feature prevalence</option><option value="burden">Database burden</option><option value="category">Category burden</option></select>
+<label for="metadataColumn">Metadata variable</label><select id="metadataColumn"></select>
+<label for="metadataGroup">Group</label><select id="metadataGroup"></select>
+<label for="minGroup">Minimum group size</label><select id="minGroup"><option value="0">All</option><option value="5">n >= 5</option><option value="10" selected>n >= 10</option><option value="30">n >= 30</option></select>
+<label for="significance">Significance</label><select id="significance"><option value="q0.05">q < 0.05</option><option value="q0.10" selected>q < 0.10</option><option value="all">show all</option></select>
+<label for="warningFilter">Warning filter</label><select id="warningFilter"><option value="all" selected>show all</option><option value="hide_weak">hide weak support</option><option value="strong">strong only</option></select>
+<div id="summary"></div>
+<div class="panel"><h2>Default Visuals</h2><div class="figure-row">
+<div><h3>Volcano plot</h3><img src="{html.escape(volcano_base)}.svg" alt="Metadata volcano plot"><p><a href="{html.escape(volcano_base)}.png">PNG</a> | <a href="{html.escape(volcano_base)}.svg">SVG</a> | <a href="{html.escape(volcano_base)}.pdf">PDF</a> | <a href="{html.escape(volcano_base)}.data.tsv">Data TSV</a></p></div>
+<div><h3>Enrichment heatmap</h3><img src="{html.escape(heatmap_base)}.svg" alt="Metadata enrichment heatmap"><p><a href="{html.escape(heatmap_base)}.png">PNG</a> | <a href="{html.escape(heatmap_base)}.svg">SVG</a> | <a href="{html.escape(heatmap_base)}.pdf">PDF</a> | <a href="{html.escape(heatmap_base)}.data.tsv">Data TSV</a></p></div>
+<div><h3>Burden boxplot</h3><img src="{html.escape(boxplot_base)}.svg" alt="Metadata burden boxplot"><p><a href="{html.escape(boxplot_base)}.png">PNG</a> | <a href="{html.escape(boxplot_base)}.svg">SVG</a> | <a href="{html.escape(boxplot_base)}.pdf">PDF</a> | <a href="{html.escape(boxplot_base)}.data.tsv">Data TSV</a></p></div>
+<div><h3>Category enrichment</h3><img src="{html.escape(category_base)}.svg" alt="Metadata category enrichment"><p><a href="{html.escape(category_base)}.png">PNG</a> | <a href="{html.escape(category_base)}.svg">SVG</a> | <a href="{html.escape(category_base)}.pdf">PDF</a> | <a href="{html.escape(category_base)}.data.tsv">Data TSV</a></p></div>
+</div></div>
+<h2>Filtered Results</h2><div id="table"></div>
+<p><a href="../tables/metadata_feature_enrichment.tsv">Download feature enrichment table</a> | <a href="../tables/metadata_burden_associations.tsv">Download burden associations</a> | <a href="../tables/metadata_category_enrichment.tsv">Download category enrichment</a> | <a href="../metadata_association_tables.zip">Download all metadata association tables ZIP</a> | <a href="../metadata_association_figures.zip">Download all metadata association figures ZIP</a></p>
+<script>
+const featureRows = {json.dumps(feature_rows[:4000])};
+const burdenRows = {json.dumps(burden_rows[:3000])};
+const categoryRows = {json.dumps(category_rows[:3000])};
+const defaultDatabase = {json.dumps(default_database)};
+const defaultColumn = {json.dumps(default_column)};
+const defaultGroup = {json.dumps(default_group)};
+function num(value) {{ const n = Number(value); return Number.isFinite(n) ? n : 0; }}
+const database = document.getElementById('database'), associationType = document.getElementById('associationType'), metadataColumn = document.getElementById('metadataColumn'), metadataGroup = document.getElementById('metadataGroup'), minGroup = document.getElementById('minGroup'), significance = document.getElementById('significance'), warningFilter = document.getElementById('warningFilter');
+function currentRows() {{ return associationType.value === 'burden' ? burdenRows : (associationType.value === 'category' ? categoryRows : featureRows); }}
+function fillSelect(select, values, preferred) {{ select.innerHTML = values.map(v => `<option value="${{v}}">${{v}}</option>`).join(''); if (values.includes(preferred)) select.value = preferred; }}
+function refreshControls() {{
+  const rows = currentRows();
+  fillSelect(database, Array.from(new Set(rows.map(r => r.database))).filter(Boolean).sort(), defaultDatabase);
+  fillSelect(metadataColumn, Array.from(new Set(rows.map(r => r.metadata_column))).filter(Boolean).sort(), defaultColumn);
+  refreshGroups();
+}}
+function refreshGroups() {{
+  const rows = currentRows().filter(r => r.database === database.value && r.metadata_column === metadataColumn.value);
+  fillSelect(metadataGroup, Array.from(new Set(rows.map(r => r.metadata_group))).filter(Boolean).sort(), defaultGroup);
+}}
+function passes(row) {{
+  if (row.database !== database.value || row.metadata_column !== metadataColumn.value || row.metadata_group !== metadataGroup.value) return false;
+  if (num(row.group_n) < num(minGroup.value)) return false;
+  if (significance.value === 'q0.05' && !(num(row.q_value) > 0 && num(row.q_value) < 0.05)) return false;
+  if (significance.value === 'q0.10' && !(num(row.q_value) > 0 && num(row.q_value) < 0.10)) return false;
+  if (warningFilter.value === 'hide_weak' && ['insufficient_support','descriptive_only'].includes(row.interpretation_label)) return false;
+  if (warningFilter.value === 'strong' && row.interpretation_label !== 'strong_supported') return false;
+  return true;
+}}
+function render() {{
+  const rows = currentRows().filter(passes).slice(0, 100);
+  const cols = associationType.value === 'feature'
+    ? ['database','feature_id','metadata_column','metadata_group','group_n','positive_in_group','prevalence_in_group','prevalence_difference','odds_ratio','q_value','effect_size_label','support_label','interpretation_label','warning_flags']
+    : (associationType.value === 'category'
+      ? ['database','feature_category','metadata_column','metadata_group','group_n','median_burden_group','median_burden_outside','burden_difference','q_value','support_label','interpretation_label','warning_flags']
+      : ['database','metadata_column','metadata_group','group_n','median_burden_group','median_burden_outside','burden_difference','q_value','support_label','interpretation_label','warning_flags']);
+  document.getElementById('summary').innerHTML = `<p>${{rows.length}} rows shown after filters. Statistical labels use tiered sample-size support; rows with q-values are FDR-corrected within this report-facing screen.</p>`;
+  document.getElementById('table').innerHTML = '<table><thead><tr>' + cols.map(c => `<th>${{c}}</th>`).join('') + '</tr></thead><tbody>' + rows.map(r => '<tr>' + cols.map(c => `<td>${{r[c] || ''}}</td>`).join('') + '</tr>').join('') + '</tbody></table>';
+}}
+associationType.addEventListener('change', () => {{ refreshControls(); render(); }});
+database.addEventListener('change', () => {{ refreshGroups(); render(); }});
+metadataColumn.addEventListener('change', () => {{ refreshGroups(); render(); }});
+[metadataGroup, minGroup, significance, warningFilter].forEach(el => el.addEventListener('change', render));
+refreshControls(); render();
+</script></body></html>
+""",
+        encoding="utf-8",
+    )
+
+    return {
+        "important_metadata_feature_enrichment": str(feature_path),
+        "important_metadata_burden_associations": str(burden_path),
+        "important_metadata_category_enrichment": str(category_path),
+        "important_metadata_association_summary": str(summary_path),
+        "important_metadata_volcano_svg": str(volcano_svg),
+        "important_metadata_volcano_png": str(volcano_png),
+        "important_metadata_volcano_pdf": str(volcano_pdf),
+        "important_metadata_volcano_data": str(volcano_data),
+        "important_metadata_enrichment_heatmap_svg": str(heatmap_svg),
+        "important_metadata_enrichment_heatmap_png": str(heatmap_png),
+        "important_metadata_enrichment_heatmap_pdf": str(heatmap_pdf),
+        "important_metadata_enrichment_heatmap_data": str(heatmap_data),
+        "important_metadata_burden_boxplot_svg": str(boxplot_svg),
+        "important_metadata_burden_boxplot_png": str(boxplot_png),
+        "important_metadata_burden_boxplot_pdf": str(boxplot_pdf),
+        "important_metadata_burden_boxplot_data": str(boxplot_data),
+        "important_metadata_category_enrichment_svg": str(category_svg),
+        "important_metadata_category_enrichment_png": str(category_png),
+        "important_metadata_category_enrichment_pdf": str(category_pdf),
+        "important_metadata_category_enrichment_data": str(category_data),
+        "important_metadata_associations_html": str(interactive_html),
+        "important_metadata_association_tables_zip": str(metadata_tables_zip),
+        "important_metadata_association_figures_zip": str(metadata_figures_zip),
+    }
+
+
 def write_important_results_report(
     sample_dir: Path,
     out_dir: Path,
@@ -5900,6 +6796,7 @@ def write_important_results_report(
     variation_outputs: dict[str, str],
     temporal_outputs: dict[str, str],
     cooccurrence_outputs: dict[str, str],
+    metadata_association_outputs: dict[str, str],
 ) -> dict[str, str]:
     important_dir.mkdir(parents=True, exist_ok=True)
     basic_csv = sample_dir / "basic" / "enriched_genome_dataset.csv"
@@ -5927,17 +6824,36 @@ def write_important_results_report(
     cooccurrence_rows = read_table(important_dir / "tables" / "cooccurrence_pair_summary.tsv")
     cooccurrence_summary_rows = read_table(important_dir / "tables" / "cooccurrence_context_summary.tsv")
     context_rows = read_table(important_dir / "tables" / "genomic_context_evidence.tsv")
+    metadata_feature_rows = read_table(important_dir / "tables" / "metadata_feature_enrichment.tsv")
+    metadata_burden_rows = read_table(important_dir / "tables" / "metadata_burden_associations.tsv")
+    metadata_category_rows = read_table(important_dir / "tables" / "metadata_category_enrichment.tsv")
+    metadata_summary_rows = read_table(important_dir / "tables" / "metadata_association_summary.tsv")
     top_prevalence = sorted(prevalence_rows, key=lambda row: (row.get("database", ""), -(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("feature_id", "")))[:20]
     top_variation = sorted(variation_rows, key=lambda row: (-(_float_or_none(row.get("iqr_identity", "")) or 0.0), row.get("database", ""), row.get("feature_id", "")))[:20]
     top_temporal = sorted(temporal_rows, key=lambda row: (-abs(_float_or_none(row.get("change_percent_points", "")) or 0.0), row.get("database", ""), row.get("feature_id", "")))[:20]
     top_cooccurrence = sorted(cooccurrence_rows, key=lambda row: (-abs(_float_or_none(row.get("phi_correlation", "")) or 0.0), row.get("feature_a_database", ""), row.get("feature_a_id", "")))[:20]
     top_context = context_rows[:20]
+    top_metadata_features = sorted(
+        metadata_feature_rows,
+        key=lambda row: (
+            row.get("interpretation_label", "") not in {"strong_supported", "moderate_supported"},
+            -abs(_float_or_none(row.get("prevalence_difference", "")) or 0.0),
+            row.get("database", ""),
+            row.get("feature_id", ""),
+        ),
+    )[:20]
+    top_metadata_burden = sorted(
+        metadata_burden_rows,
+        key=lambda row: (-abs(_float_or_none(row.get("burden_difference", "")) or 0.0), row.get("database", ""), row.get("metadata_column", "")),
+    )[:20]
     qc_table_html = _html_table(qc_steps, ["step_order", "qc_step", "tool", "enabled", "pass", "warning", "fail", "skipped", "status", "notes"], max_rows=20)
     prevalence_table_html = _html_table(top_prevalence, ["database", "feature_id", "positive_genomes", "sample_count", "prevalence_percent", "feature_rows"], max_rows=20)
     variation_table_html = _html_table(top_variation, ["database", "feature_id", "total_hits", "positive_genomes", "median_identity", "iqr_identity", "median_coverage", "iqr_coverage", "variation_label", "warning_flags"], max_rows=20)
     temporal_table_html = _html_table(top_temporal, ["database", "feature_id", "first_year", "last_year", "first_year_prevalence_percent", "last_year_prevalence_percent", "change_percent_points", "correlation", "trend_label", "support_label", "warning_flags"], max_rows=20)
     cooccurrence_table_html = _html_table(top_cooccurrence, ["feature_a_database", "feature_a_id", "feature_b_database", "feature_b_id", "n_total", "n_both_present", "phi_correlation", "q_value", "direction", "significance_label", "warning_flags"], max_rows=20)
     context_table_html = _html_table(top_context, ["selected_database", "selected_feature", "context_database", "context_feature", "assembly_accession", "contig", "distance_bp", "evidence_level", "warning_flags"], max_rows=20)
+    metadata_feature_table_html = _html_table(top_metadata_features, ["database", "feature_id", "metadata_column", "metadata_group", "group_n", "positive_in_group", "prevalence_in_group", "prevalence_difference", "odds_ratio", "q_value", "effect_size_label", "support_label", "interpretation_label", "warning_flags"], max_rows=20)
+    metadata_burden_table_html = _html_table(top_metadata_burden, ["database", "metadata_column", "metadata_group", "group_n", "median_burden_group", "median_burden_outside", "burden_difference", "q_value", "support_label", "interpretation_label", "warning_flags"], max_rows=20)
     prevalence_figures = []
     for path in sorted((important_dir / "figures").glob("prevalence_*_top20.svg")):
         database = path.name.replace("prevalence_", "").replace("_top20.svg", "")
@@ -6001,6 +6917,33 @@ def write_important_results_report(
             f"<p><a href='figures/{html.escape(png_name)}'>PNG</a> | <a href='figures/{html.escape(figure_path.name)}'>SVG</a> | <a href='figures/{html.escape(pdf_name)}'>PDF</a> | <a href='figures/{html.escape(data_name)}'>Data TSV</a></p></div>"
         )
     cooccurrence_figures_html = "<div class='figure-row'>" + "".join(cooccurrence_figure_items) + "</div>" if cooccurrence_figure_items else "<p>No co-occurrence/context figures were generated because feature-pair data were unavailable.</p>"
+    metadata_summary = {row.get("metric", ""): row.get("value", "") for row in metadata_summary_rows}
+    metadata_summary_html = (
+        "<p>"
+        f"Metadata association screening evaluated {html.escape(metadata_summary.get('metadata_columns_screened', '0'))} metadata columns, "
+        f"{html.escape(metadata_summary.get('feature_enrichment_rows', '0'))} feature-by-group comparisons, and "
+        f"{html.escape(metadata_summary.get('database_burden_associations', '0'))} database-burden comparisons. "
+        f"Strong feature associations: {html.escape(metadata_summary.get('strong_feature_associations', '0'))}; "
+        f"moderate feature associations: {html.escape(metadata_summary.get('moderate_feature_associations', '0'))}; "
+        f"warning rows: {html.escape(metadata_summary.get('warning_rows', '0'))}."
+        "</p>"
+    )
+    metadata_figure_items = []
+    for key, title in [
+        ("important_metadata_volcano_svg", "Metadata enrichment volcano"),
+        ("important_metadata_enrichment_heatmap_svg", "Metadata enrichment heatmap"),
+        ("important_metadata_burden_boxplot_svg", "Database burden by group"),
+        ("important_metadata_category_enrichment_svg", "Category enrichment"),
+    ]:
+        figure_path = Path(metadata_association_outputs.get(key, ""))
+        if not figure_path.exists():
+            continue
+        stem = figure_path.stem
+        metadata_figure_items.append(
+            f"<div><h3>{html.escape(title)}</h3><img src='figures/{html.escape(figure_path.name)}' alt='{html.escape(title)}'>"
+            f"<p><a href='figures/{html.escape(stem)}.png'>PNG</a> | <a href='figures/{html.escape(figure_path.name)}'>SVG</a> | <a href='figures/{html.escape(stem)}.pdf'>PDF</a> | <a href='figures/{html.escape(stem)}.data.tsv'>Data TSV</a></p></div>"
+        )
+    metadata_figures_html = "<div class='figure-row'>" + "".join(metadata_figure_items) + "</div>" if metadata_figure_items else "<p>No metadata association figures were generated because metadata groups or feature rows were unavailable.</p>"
     report_path = important_dir / "results.html"
     report_path.write_text(
         f"""<!doctype html>
@@ -6036,6 +6979,7 @@ th {{ background: #f0f4f8; }}
 <a href="#variations">Variations</a>
 <a href="#temporal">Temporal Trends</a>
 <a href="#cooccurrence">Co-occurrence / Genomic Context</a>
+<a href="#metadata-associations">Metadata Associations</a>
 <a href="#files">Important Files</a>
 <a href="#warnings">Warnings</a>
 </nav>
@@ -6073,6 +7017,15 @@ th {{ background: #f0f4f8; }}
 <h3>Genomic context evidence</h3>
 {context_table_html}
 <div class="downloads"><a href="figures/cooccurrence_context.html">Open interactive co-occurrence report</a><a href="cooccurrence_tables.zip">Download all co-occurrence tables ZIP</a><a href="cooccurrence_figures.zip">Download all co-occurrence figures ZIP</a><a href="tables/cooccurrence_pair_summary.tsv">Download pair summary</a><a href="tables/cooccurrence_heatmap_matrix.tsv">Download heatmap matrix</a><a href="tables/cooccurrence_network_edges.tsv">Download network edges</a><a href="tables/cooccurrence_network_nodes.tsv">Download network nodes</a><a href="tables/genomic_context_evidence.tsv">Download genomic context evidence</a><a href="tables/contig_neighborhoods.tsv">Download contig neighborhoods</a></div></section>
+<section id="metadata-associations"><h2>Metadata Associations</h2><div class="warning">Metadata associations are exploratory enrichment-style screens. They may reflect sampling, BioProject structure, lineage composition, geography, collection year, or missing metadata and should not be interpreted as causal.</div>
+{metadata_summary_html}
+<iframe src="figures/metadata_associations.html" title="Metadata associations interactive report"></iframe>
+{metadata_figures_html}
+<h3>Top feature associations</h3>
+{metadata_feature_table_html}
+<h3>Top database-burden associations</h3>
+{metadata_burden_table_html}
+<div class="downloads"><a href="figures/metadata_associations.html">Open interactive metadata association report</a><a href="metadata_association_tables.zip">Download all metadata association tables ZIP</a><a href="metadata_association_figures.zip">Download all metadata association figures ZIP</a><a href="tables/metadata_feature_enrichment.tsv">Download feature enrichment</a><a href="tables/metadata_burden_associations.tsv">Download burden associations</a><a href="tables/metadata_category_enrichment.tsv">Download category enrichment</a><a href="tables/metadata_association_summary.tsv">Download metadata association summary</a></div></section>
 <section id="files"><h2>Important Files</h2><ul>
 <li><a href="../basic/enriched_genome_dataset.csv">Enriched genome dataset CSV</a></li>
 <li><a href="key_tables/qc_step_summary.tsv">QC step summary</a></li>
@@ -6082,6 +7035,8 @@ th {{ background: #f0f4f8; }}
 <li><a href="key_tables/temporal_trend_summary.tsv">Temporal trend summary</a></li>
 <li><a href="tables/cooccurrence_pair_summary.tsv">Co-occurrence pair summary</a></li>
 <li><a href="tables/genomic_context_evidence.tsv">Genomic context evidence</a></li>
+<li><a href="tables/metadata_feature_enrichment.tsv">Metadata feature enrichment</a></li>
+<li><a href="tables/metadata_burden_associations.tsv">Metadata burden associations</a></li>
 <li><a href="../panr2_inputs/features/all_features.tsv">Complete standardized feature table</a></li>
 <li><a href="../panr2_inputs/manifest/schema_validation_summary.txt">Feature-contract validation summary</a></li>
 </ul></section>
@@ -6090,7 +7045,16 @@ th {{ background: #f0f4f8; }}
 """,
         encoding="utf-8",
     )
-    return {"important_results_html": str(report_path), **geographic_outputs, **qc_outputs, **prevalence_outputs, **variation_outputs, **temporal_outputs, **cooccurrence_outputs}
+    return {
+        "important_results_html": str(report_path),
+        **geographic_outputs,
+        **qc_outputs,
+        **prevalence_outputs,
+        **variation_outputs,
+        **temporal_outputs,
+        **cooccurrence_outputs,
+        **metadata_association_outputs,
+    }
 
 
 def write_user_output_bundles(
@@ -6115,7 +7079,8 @@ def write_user_output_bundles(
         variation_outputs = write_important_variation_outputs(sample_dir, out_dir, important_dir)
         temporal_outputs = write_important_temporal_outputs(sample_dir, out_dir, important_dir)
         cooccurrence_outputs = write_important_cooccurrence_context_outputs(sample_dir, out_dir, important_dir)
-        outputs.update(write_important_results_report(sample_dir, out_dir, important_dir, geographic_outputs, qc_outputs, prevalence_outputs, variation_outputs, temporal_outputs, cooccurrence_outputs))
+        metadata_association_outputs = write_important_metadata_association_outputs(sample_dir, out_dir, important_dir)
+        outputs.update(write_important_results_report(sample_dir, out_dir, important_dir, geographic_outputs, qc_outputs, prevalence_outputs, variation_outputs, temporal_outputs, cooccurrence_outputs, metadata_association_outputs))
         write_rows(
             manifest_dir / "important_output_manifest.tsv",
             [

@@ -180,10 +180,11 @@ advanced PanR2 contract tree and publishes only `basic/enriched_genome_dataset`
 CSV/TSV in the final output directory. `important` adds a curated
 `important/results.html` entry point with Featured Results, Run Overview, QC
 Summary, Prevalence, Geographic Distribution, Variations, Temporal Trends,
-Co-occurrence / Genomic Context, Warnings, and Important Files sections. It
-writes key QC, prevalence, geography, variation, temporal trend, co-occurrence,
-and genomic-context tables plus portable PNG/SVG/TSV figures without adding new
-runtime plotting dependencies. Temporal Trends includes an interactive HTML
+Co-occurrence / Genomic Context, Metadata Associations, Warnings, and Important
+Files sections. It writes key QC, prevalence, geography, variation, temporal
+trend, co-occurrence, genomic-context, and metadata-association tables plus
+portable PNG/SVG/PDF/TSV figures without adding new runtime plotting
+dependencies. Temporal Trends includes an interactive HTML
 viewer with database, trend, support, and feature controls, selected-feature
 prevalence lines, and a first-to-last-year slope plot. Co-occurrence / Genomic
 Context includes an interactive heatmap viewer, co-occurrence network tables,
@@ -191,8 +192,13 @@ same-contig/proximity evidence summaries, and contig-neighborhood exports when
 coordinates are available. Sample-level co-occurrence remains explicitly
 separate from same-contig/proximity evidence and should not be interpreted as
 proof of physical linkage, transfer, expression, phenotype, or plasmid
-localization. `all` preserves the full advanced output tree and includes both
-user-facing bundles.
+localization. Metadata Associations includes an interactive enrichment-style
+viewer, FDR-corrected feature-prevalence screens, database/category burden
+comparisons, volcano plots, enrichment heatmaps, burden boxplots, warning flags,
+and conservative interpretation labels. These metadata associations are
+exploratory and may reflect sampling, BioProject, lineage, geography,
+collection-year, or missing-metadata bias. `all` preserves the full advanced
+output tree and includes both user-facing bundles.
 
 `manifest/report_controls.tsv` records report density settings such as `large_dataset`, `report_mode`, feature caps for handoff matrices/co-occurrence/proximity summaries, metadata row caps for HTML pages, and whether heavy interactive plots were skipped or deprioritized. Complete feature TSVs remain available even when large-dataset safeguards cap report-facing summaries.
 
