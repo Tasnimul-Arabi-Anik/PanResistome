@@ -220,7 +220,10 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue((sample_dir / "important" / "tables" / "genomic_context_evidence.tsv").exists())
             self.assertTrue((sample_dir / "important" / "tables" / "contig_neighborhoods.tsv").exists())
             self.assertTrue((sample_dir / "important" / "figures" / "cooccurrence_context.html").exists())
+            self.assertTrue((sample_dir / "important" / "cooccurrence_tables.zip").exists())
+            self.assertTrue((sample_dir / "important" / "cooccurrence_figures.zip").exists())
             self.assertTrue(any((sample_dir / "important" / "figures").glob("cooccurrence_heatmap_*_vs_*.svg")))
+            self.assertTrue(any((sample_dir / "important" / "figures").glob("cooccurrence_heatmap_*_vs_*.pdf")))
             self.assertTrue(any((sample_dir / "important" / "figures").glob("cooccurrence_network_*_vs_*.png")))
             temporal_summary = pd.read_csv(sample_dir / "important" / "key_tables" / "temporal_trend_summary.tsv", sep="\t")
             self.assertTrue({"trend_label", "support_label", "temporal_pattern_label", "warning_flags"}.issubset(temporal_summary.columns))
@@ -228,7 +231,19 @@ class FetchM2AdapterTests(unittest.TestCase):
             for control in ["Database", "Trend", "Support", "Feature", "Selected Feature Prevalence", "First-to-Last Year Slope"]:
                 self.assertIn(control, temporal_html)
             cooccurrence_html = (sample_dir / "important" / "figures" / "cooccurrence_context.html").read_text(encoding="utf-8")
-            for control in ["X database", "Y database", "Feature set", "Minimum sample support", "Effect size"]:
+            for control in [
+                "Analysis mode",
+                "X database",
+                "Y database",
+                "Feature set",
+                "Minimum sample support",
+                "Minimum feature prevalence",
+                "Significance",
+                "Effect size",
+                "Evidence level",
+                "Download all co-occurrence tables ZIP",
+                "Download all co-occurrence figures ZIP",
+            ]:
                 self.assertIn(control, cooccurrence_html)
             cooccurrence_pairs = pd.read_csv(sample_dir / "important" / "tables" / "cooccurrence_pair_summary.tsv", sep="\t")
             self.assertTrue({"phi_correlation", "q_value", "significance_label", "evidence_level", "warning_flags"}.issubset(cooccurrence_pairs.columns))

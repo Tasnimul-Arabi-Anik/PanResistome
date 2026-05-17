@@ -10,6 +10,7 @@ import json
 import math
 import re
 import struct
+import zipfile
 import zlib
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -3605,6 +3606,57 @@ def _write_png(path: Path, width: int, height: int, pixels: list[bytearray]) -> 
     path.write_bytes(payload)
 
 
+def _pdf_escape(value: str) -> str:
+    return str(value or "").replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def _write_simple_pdf(path: Path, title: str, lines: list[str]) -> None:
+    """Write a dependency-free PDF companion for report figures.
+
+    The publication-quality vector artifact remains the SVG; this lightweight PDF
+    gives users a portable manuscript/supplement placeholder without requiring
+    cairo, matplotlib, or browser-based rendering on remote machines.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    content_lines = ["BT", "/F1 18 Tf", "72 760 Td", f"({_pdf_escape(title)}) Tj", "/F1 10 Tf"]
+    y_step = 18
+    for line in lines[:34]:
+        content_lines.append(f"0 -{y_step} Td")
+        content_lines.append(f"({_pdf_escape(line)[:150]}) Tj")
+    content_lines.append("ET")
+    stream = "\n".join(content_lines).encode("latin-1", errors="replace")
+    objects = [
+        b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+        b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+        b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n",
+        b"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+        b"5 0 obj\n<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream\nendobj\n",
+    ]
+    payload = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for obj in objects:
+        offsets.append(len(payload))
+        payload.extend(obj)
+    xref_offset = len(payload)
+    payload.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    payload.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        payload.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    payload.extend(
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode("ascii")
+    )
+    path.write_bytes(bytes(payload))
+
+
+def _write_zip_bundle(path: Path, files: list[Path], base_dir: Path) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for file_path in files:
+            if file_path.exists() and file_path.is_file():
+                archive.write(file_path, arcname=str(file_path.relative_to(base_dir)))
+    return str(path)
+
+
 def _geographic_map_png(rows: list[dict[str, str]], path: Path) -> None:
     width, map_height, header = 960, 480, 48
     height = map_height + header + 10
@@ -5442,9 +5494,20 @@ def write_important_cooccurrence_context_outputs(sample_dir: Path, out_dir: Path
     heatmap_data = figures / f"{heatmap_base}.data.tsv"
     heatmap_svg = figures / f"{heatmap_base}.svg"
     heatmap_png = figures / f"{heatmap_base}.png"
+    heatmap_pdf = figures / f"{heatmap_base}.pdf"
     write_rows(heatmap_data, heatmap_rows, heatmap_fields)
     _write_cooccurrence_heatmap_svg(heatmap_svg, heatmap_rows, f"{x_database} vs {y_database} Co-occurrence")
     _write_cooccurrence_heatmap_png(heatmap_png, heatmap_rows)
+    _write_simple_pdf(
+        heatmap_pdf,
+        f"{x_database} vs {y_database} Co-occurrence",
+        [
+            "PDF companion for the SVG/PNG co-occurrence heatmap.",
+            "Red cells indicate significant positive association; blue cells indicate significant negative association.",
+            "Gray cells are not significant or below support/effect thresholds.",
+            "Use the SVG for publication-quality vector rendering and the data TSV for exact values.",
+        ],
+    )
 
     network_edges = [
         {
@@ -5490,9 +5553,19 @@ def write_important_cooccurrence_context_outputs(sample_dir: Path, out_dir: Path
     network_data = figures / f"{network_base}.data.tsv"
     network_svg = figures / f"{network_base}.svg"
     network_png = figures / f"{network_base}.png"
+    network_pdf = figures / f"{network_base}.pdf"
     write_rows(network_data, network_edges, edge_fields)
     _write_cooccurrence_network_svg(network_svg, node_rows[:50], network_edges[:100], f"{x_database} vs {y_database} Co-occurrence Network")
     _write_cooccurrence_network_png(network_png, node_rows[:50], network_edges[:100])
+    _write_simple_pdf(
+        network_pdf,
+        f"{x_database} vs {y_database} Co-occurrence Network",
+        [
+            "PDF companion for the co-occurrence network.",
+            "Node color indicates database, node size indicates prevalence, and edge width indicates absolute phi correlation.",
+            "Network edges are exploratory unless supported by same-contig/proximity evidence.",
+        ],
+    )
 
     feature_lookup = {}
     feature_lookup_fallback = {}
@@ -5572,9 +5645,15 @@ def write_important_cooccurrence_context_outputs(sample_dir: Path, out_dir: Path
     ladder_data = figures / f"{ladder_base}.data.tsv"
     ladder_svg = figures / f"{ladder_base}.svg"
     ladder_png = figures / f"{ladder_base}.png"
+    ladder_pdf = figures / f"{ladder_base}.pdf"
     write_rows(ladder_data, ladder_rows, ["evidence_level", "count"])
     _write_context_ladder_svg(ladder_svg, ladder_rows, f"{selected_database}:{selected_feature} Context Evidence")
     _write_context_ladder_png(ladder_png, ladder_rows)
+    _write_simple_pdf(
+        ladder_pdf,
+        f"{selected_database}:{selected_feature} Context Evidence",
+        [f"{row['evidence_level']}: {row['count']}" for row in ladder_rows],
+    )
 
     context_counter = Counter()
     for row in context_rows:
@@ -5594,9 +5673,15 @@ def write_important_cooccurrence_context_outputs(sample_dir: Path, out_dir: Path
     top_context_data = figures / f"{top_context_base}.data.tsv"
     top_context_svg = figures / f"{top_context_base}.svg"
     top_context_png = figures / f"{top_context_base}.png"
+    top_context_pdf = figures / f"{top_context_base}.pdf"
     write_rows(top_context_data, top_context_rows, ["context_database", "context_feature", "evidence_level", "count", "feature_label"])
     _write_bar_svg(top_context_svg, top_context_rows, f"Top Context Features For {selected_feature}", "feature_label", "count", "Context evidence count")
     _write_bar_png(top_context_png, top_context_rows, "count")
+    _write_simple_pdf(
+        top_context_pdf,
+        f"Top Context Features For {selected_feature}",
+        [f"{row.get('feature_label', '')}: {row.get('count', '')} ({row.get('evidence_level', '')})" for row in top_context_rows],
+    )
 
     neighborhood_rows = []
     neighborhood_sample = ""
@@ -5626,9 +5711,16 @@ def write_important_cooccurrence_context_outputs(sample_dir: Path, out_dir: Path
     neighborhood_data = figures / f"{neighborhood_base}.data.tsv"
     neighborhood_svg = figures / f"{neighborhood_base}.svg"
     neighborhood_png = figures / f"{neighborhood_base}.png"
+    neighborhood_pdf = figures / f"{neighborhood_base}.pdf"
     write_rows(neighborhood_data, neighborhood_rows, neighborhood_fields)
     _write_contig_neighborhood_svg(neighborhood_svg, neighborhood_rows, f"{neighborhood_sample} {neighborhood_contig} Neighborhood")
     _write_contig_neighborhood_png(neighborhood_png, neighborhood_rows)
+    _write_simple_pdf(
+        neighborhood_pdf,
+        f"{neighborhood_sample} {neighborhood_contig} Neighborhood",
+        [f"{row.get('database', '')}:{row.get('feature_id', '')} {row.get('start', '')}-{row.get('end', '')}" for row in neighborhood_rows]
+        or ["No coordinate-compatible contig neighborhood was available."],
+    )
 
     same_contig_count = sum(1 for row in context_rows if row["evidence_level"] in {"same_contig", "within_10kb", "overlap_or_adjacent"})
     within_10kb_count = sum(1 for row in context_rows if row["evidence_level"] in {"within_10kb", "overlap_or_adjacent"})
@@ -5648,6 +5740,24 @@ def write_important_cooccurrence_context_outputs(sample_dir: Path, out_dir: Path
     }]
     summary_path = tables / "cooccurrence_context_summary.tsv"
     write_rows(summary_path, summary_rows, ["tested_pairs", "significant_positive_pairs", "significant_negative_pairs", "same_contig_context_pairs", "within_10kb_context_pairs", "overlap_or_adjacent_context_pairs", "selected_default_x_database", "selected_default_y_database", "message"])
+    cooccurrence_tables_zip = important_dir / "cooccurrence_tables.zip"
+    cooccurrence_figures_zip = important_dir / "cooccurrence_figures.zip"
+    _write_zip_bundle(
+        cooccurrence_tables_zip,
+        [pair_summary_path, heatmap_matrix_path, edge_path, node_path, context_path, neighborhood_path, summary_path],
+        important_dir,
+    )
+    _write_zip_bundle(
+        cooccurrence_figures_zip,
+        [
+            heatmap_svg, heatmap_png, heatmap_pdf, heatmap_data,
+            network_svg, network_png, network_pdf, network_data,
+            ladder_svg, ladder_png, ladder_pdf, ladder_data,
+            top_context_svg, top_context_png, top_context_pdf, top_context_data,
+            neighborhood_svg, neighborhood_png, neighborhood_pdf, neighborhood_data,
+        ],
+        important_dir,
+    )
 
     interactive_html = figures / "cooccurrence_context.html"
     interactive_html.write_text(
@@ -5662,30 +5772,55 @@ select {{ margin: 0 1rem 0.75rem 0; padding: 0.35rem; }}
 table {{ border-collapse: collapse; width: 100%; font-size: 0.88rem; }}
 th, td {{ border: 1px solid #d9e2ec; padding: 0.35rem; text-align: left; }}
 th {{ background: #f0f4f8; }}
+.panel {{ border: 1px solid #d9e2ec; background: #f8fafc; padding: 0.75rem; margin: 0.75rem 0; }}
+.figure-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }}
+.figure-row img {{ max-width: 100%; border: 1px solid #d9e2ec; background: white; }}
 </style></head><body>
 <h1>Co-occurrence / Genomic Context</h1>
 <div class="warning">Sample-level co-occurrence does not prove physical linkage. Same-contig/proximity evidence is stronger, but still does not prove transfer, expression, phenotype, or plasmid localization.</div>
+<label for="analysisMode">Analysis mode</label><select id="analysisMode"><option value="heatmap" selected>Co-occurrence heatmap</option><option value="network">Co-occurrence network</option><option value="same_contig">Same-contig context</option><option value="proximity">Proximity context</option><option value="selected_feature">Selected feature report</option></select>
 <label for="xDatabase">X database</label><select id="xDatabase"></select>
 <label for="yDatabase">Y database</label><select id="yDatabase"></select>
 <label for="featureSet">Feature set</label><select id="featureSet"><option value="10">Top 10</option><option value="20" selected>Top 20</option><option value="50">Top 50</option><option value="99999">Complete</option></select>
 <label for="support">Minimum sample support</label><select id="support"><option value="0">All</option><option value="10">n >= 10</option><option value="20">n >= 20</option><option value="30" selected>n >= 30</option></select>
+<label for="prevalence">Minimum feature prevalence</label><select id="prevalence"><option value="0">Any</option><option value="0.01" selected>&gt;= 1%</option><option value="0.05">&gt;= 5%</option><option value="0.10">&gt;= 10%</option></select>
+<label for="significance">Significance</label><select id="significance"><option value="q0.05" selected>FDR q &lt; 0.05</option><option value="q0.10">FDR q &lt; 0.10</option><option value="p0.05">p &lt; 0.05</option><option value="all">show all</option></select>
 <label for="effect">Effect size</label><select id="effect"><option value="0">Any</option><option value="0.2" selected>|phi| >= 0.2</option><option value="0.4">|phi| >= 0.4</option><option value="0.6">|phi| >= 0.6</option></select>
+<label for="evidence">Evidence level</label><select id="evidence"><option value="same_genome" selected>same genome</option><option value="same_contig">same contig</option><option value="within_10kb">within 10 kb</option><option value="overlap_or_adjacent">overlap / adjacent</option></select>
 <div id="summary"></div>
-<div class="heatmap-box" id="heatmap"></div>
+<div id="heatmapPanel" class="panel"><h2>Co-occurrence heatmap</h2><div class="heatmap-box" id="heatmap"></div></div>
+<div id="networkPanel" class="panel"><h2>Co-occurrence network</h2><p>Network edges represent statistical co-occurrence unless supported by same-contig/proximity evidence.</p><img src="{html.escape(network_base)}.svg" alt="Co-occurrence network"><p><a href="{html.escape(network_base)}.png">PNG</a> | <a href="{html.escape(network_base)}.svg">SVG</a> | <a href="{html.escape(network_base)}.pdf">PDF</a> | <a href="{html.escape(network_base)}.data.tsv">Data TSV</a></p></div>
+<div id="contextPanel" class="panel"><h2>Same-contig / proximity context</h2><p>Physical context evidence is shown separately from sample-level co-occurrence.</p><div class="figure-row"><div><h3>Evidence ladder</h3><img src="{html.escape(ladder_base)}.svg" alt="Context evidence ladder"><p><a href="{html.escape(ladder_base)}.png">PNG</a> | <a href="{html.escape(ladder_base)}.svg">SVG</a> | <a href="{html.escape(ladder_base)}.pdf">PDF</a> | <a href="{html.escape(ladder_base)}.data.tsv">Data TSV</a></p></div><div><h3>Top context features</h3><img src="{html.escape(top_context_base)}.svg" alt="Top context features"><p><a href="{html.escape(top_context_base)}.png">PNG</a> | <a href="{html.escape(top_context_base)}.svg">SVG</a> | <a href="{html.escape(top_context_base)}.pdf">PDF</a> | <a href="{html.escape(top_context_base)}.data.tsv">Data TSV</a></p></div></div></div>
+<div id="selectedFeaturePanel" class="panel"><h2>Selected feature report</h2><p>Default selected feature: {html.escape(selected_database)}:{html.escape(selected_feature)}.</p><img src="{html.escape(neighborhood_base)}.svg" alt="Contig neighborhood"><p><a href="{html.escape(neighborhood_base)}.png">PNG</a> | <a href="{html.escape(neighborhood_base)}.svg">SVG</a> | <a href="{html.escape(neighborhood_base)}.pdf">PDF</a> | <a href="{html.escape(neighborhood_base)}.data.tsv">Data TSV</a></p></div>
 <h2>Top Pair Table</h2><div id="pairTable"></div>
-<p><a href="{html.escape(heatmap_base)}.png">Download default heatmap PNG</a> | <a href="{html.escape(heatmap_base)}.svg">Download default heatmap SVG</a> | <a href="{html.escape(heatmap_base)}.data.tsv">Download default heatmap data</a> | <a href="../tables/cooccurrence_pair_summary.tsv">Download full pair table</a></p>
+<p><a href="{html.escape(heatmap_base)}.png">Download default heatmap PNG</a> | <a href="{html.escape(heatmap_base)}.svg">Download default heatmap SVG</a> | <a href="{html.escape(heatmap_base)}.pdf">Download default heatmap PDF</a> | <a href="{html.escape(heatmap_base)}.data.tsv">Download default heatmap data</a> | <a href="../tables/cooccurrence_pair_summary.tsv">Download full pair table</a> | <a href="../cooccurrence_tables.zip">Download all co-occurrence tables ZIP</a> | <a href="../cooccurrence_figures.zip">Download all co-occurrence figures ZIP</a></p>
 <script>
 const pairs = {json.dumps(pair_rows)};
 function num(value) {{ const n = Number(value); return Number.isFinite(n) ? n : 0; }}
-const xSelect = document.getElementById('xDatabase'), ySelect = document.getElementById('yDatabase'), featureSet = document.getElementById('featureSet'), support = document.getElementById('support'), effect = document.getElementById('effect');
+const analysisMode = document.getElementById('analysisMode'), xSelect = document.getElementById('xDatabase'), ySelect = document.getElementById('yDatabase'), featureSet = document.getElementById('featureSet'), support = document.getElementById('support'), prevalence = document.getElementById('prevalence'), significance = document.getElementById('significance'), effect = document.getElementById('effect'), evidence = document.getElementById('evidence');
 const databases = Array.from(new Set(pairs.flatMap(r => [r.feature_a_database, r.feature_b_database]))).filter(Boolean).sort();
 function fillSelect(select, preferred) {{ select.innerHTML = databases.map(db => `<option value="${{db}}">${{db}}</option>`).join(''); if (databases.includes(preferred)) select.value = preferred; }}
 fillSelect(xSelect, '{html.escape(x_database)}'); fillSelect(ySelect, '{html.escape(y_database)}');
 function label(row, side) {{ return side === 'a' ? row.feature_a_database + ':' + row.feature_a_id : row.feature_b_database + ':' + row.feature_b_id; }}
+function passesSignificance(r) {{
+  if (significance.value === 'all') return true;
+  if (significance.value === 'p0.05') return num(r.p_value) > 0 && num(r.p_value) < 0.05;
+  if (significance.value === 'q0.10') return num(r.q_value) > 0 && num(r.q_value) < 0.10;
+  return num(r.q_value) > 0 && num(r.q_value) < 0.05;
+}}
+function updatePanels() {{
+  const mode = analysisMode.value;
+  document.getElementById('heatmapPanel').style.display = mode === 'heatmap' ? 'block' : 'none';
+  document.getElementById('networkPanel').style.display = mode === 'network' ? 'block' : 'none';
+  document.getElementById('contextPanel').style.display = (mode === 'same_contig' || mode === 'proximity') ? 'block' : 'none';
+  document.getElementById('selectedFeaturePanel').style.display = mode === 'selected_feature' ? 'block' : 'none';
+}}
 function render() {{
-  const minSupport = Number(support.value), minEffect = Number(effect.value), limit = Number(featureSet.value);
+  updatePanels();
+  const minSupport = Number(support.value), minEffect = Number(effect.value), minPrevalence = Number(prevalence.value), limit = Number(featureSet.value);
   let active = pairs.filter(r => r.feature_a_database === xSelect.value && r.feature_b_database === ySelect.value);
   if (!active.length) active = pairs.filter(r => r.feature_b_database === xSelect.value && r.feature_a_database === ySelect.value).map(r => Object.assign({{}}, r, {{feature_a_database: r.feature_b_database, feature_a_id: r.feature_b_id, feature_b_database: r.feature_a_database, feature_b_id: r.feature_a_id}}));
+  active = active.filter(r => num(r.prevalence_a) >= minPrevalence && num(r.prevalence_b) >= minPrevalence);
   const xFeatures = Array.from(new Set(active.map(r => r.feature_a_id))).slice(0, limit);
   const yFeatures = Array.from(new Set(active.map(r => r.feature_b_id))).slice(0, limit);
   const byPair = new Map(active.map(r => [r.feature_a_id + '||' + r.feature_b_id, r]));
@@ -5695,12 +5830,12 @@ function render() {{
     for (const x of xFeatures) {{
       const r = byPair.get(x + '||' + y);
       let color = '#f1f5f9', text = '';
-      if (r && num(r.n_total) >= minSupport && Math.abs(num(r.phi_correlation)) >= minEffect && (r.significance_label === 'significant_positive' || r.significance_label === 'significant_negative')) {{
+      if (r && num(r.n_total) >= minSupport && Math.abs(num(r.phi_correlation)) >= minEffect && passesSignificance(r) && (r.significance_label === 'significant_positive' || r.significance_label === 'significant_negative')) {{
         const intensity = Math.min(Math.abs(num(r.phi_correlation)), 1);
         color = r.significance_label === 'significant_positive' ? `rgb(254,${{Math.round(226 - 140 * intensity)}},${{Math.round(226 - 140 * intensity)}})` : `rgb(${{Math.round(219 - 150 * intensity)}},${{Math.round(234 - 120 * intensity)}},254)`;
         text = num(r.phi_correlation).toFixed(2);
       }}
-      const tip = r ? `phi=${{r.phi_correlation}}; q=${{r.q_value}}; both=${{r.n_both_present}}/${{r.n_total}}; ${{r.significance_label}}` : 'No pair';
+      const tip = r ? `phi=${{r.phi_correlation}}; p=${{r.p_value}}; q=${{r.q_value}}; both=${{r.n_both_present}}/${{r.n_total}}; odds=${{r.odds_ratio}}; evidence=${{evidence.value}}; ${{r.significance_label}}` : 'No pair';
       html += `<td style="background:${{color}}" title="${{tip}}">${{text}}</td>`;
     }}
     html += '</tr>';
@@ -5708,12 +5843,12 @@ function render() {{
   html += '</tbody></table>';
   document.getElementById('heatmap').innerHTML = html;
   const significant = active.filter(r => r.significance_label === 'significant_positive' || r.significance_label === 'significant_negative');
-  document.getElementById('summary').innerHTML = `<p>${{active.length}} tested pairs for ${{xSelect.value}} vs ${{ySelect.value}}; ${{significant.length}} significant pairs before current display filters. Gray cells are not significant or below support/effect thresholds.</p>`;
+  document.getElementById('summary').innerHTML = `<p>${{active.length}} tested pairs for ${{xSelect.value}} vs ${{ySelect.value}}; ${{significant.length}} significant pairs before current display filters. Gray cells are not significant or below support/effect/prevalence thresholds. Evidence level selector controls interpretation context; sample-level co-occurrence remains separate from same-contig/proximity evidence.</p>`;
   const top = active.slice().sort((a,b) => Math.abs(num(b.phi_correlation)) - Math.abs(num(a.phi_correlation))).slice(0, 50);
   const cols = ['feature_a_database','feature_a_id','feature_b_database','feature_b_id','n_total','n_both_present','phi_correlation','q_value','significance_label','warning_flags'];
   document.getElementById('pairTable').innerHTML = '<table><thead><tr>' + cols.map(c => `<th>${{c}}</th>`).join('') + '</tr></thead><tbody>' + top.map(r => '<tr>' + cols.map(c => `<td>${{r[c] || ''}}</td>`).join('') + '</tr>').join('') + '</tbody></table>';
 }}
-[xSelect, ySelect, featureSet, support, effect].forEach(el => el.addEventListener('change', render));
+[analysisMode, xSelect, ySelect, featureSet, support, prevalence, significance, effect, evidence].forEach(el => el.addEventListener('change', render));
 render();
 </script></body></html>
 """,
@@ -5730,20 +5865,27 @@ render();
         "important_cooccurrence_context_summary": str(summary_path),
         "important_cooccurrence_heatmap_svg": str(heatmap_svg),
         "important_cooccurrence_heatmap_png": str(heatmap_png),
+        "important_cooccurrence_heatmap_pdf": str(heatmap_pdf),
         "important_cooccurrence_heatmap_data": str(heatmap_data),
         "important_cooccurrence_network_svg": str(network_svg),
         "important_cooccurrence_network_png": str(network_png),
+        "important_cooccurrence_network_pdf": str(network_pdf),
         "important_cooccurrence_network_data": str(network_data),
         "important_context_ladder_svg": str(ladder_svg),
         "important_context_ladder_png": str(ladder_png),
+        "important_context_ladder_pdf": str(ladder_pdf),
         "important_context_ladder_data": str(ladder_data),
         "important_top_context_features_svg": str(top_context_svg),
         "important_top_context_features_png": str(top_context_png),
+        "important_top_context_features_pdf": str(top_context_pdf),
         "important_top_context_features_data": str(top_context_data),
         "important_contig_neighborhood_svg": str(neighborhood_svg),
         "important_contig_neighborhood_png": str(neighborhood_png),
+        "important_contig_neighborhood_pdf": str(neighborhood_pdf),
         "important_contig_neighborhood_data": str(neighborhood_data),
         "important_cooccurrence_context_html": str(interactive_html),
+        "important_cooccurrence_tables_zip": str(cooccurrence_tables_zip),
+        "important_cooccurrence_figures_zip": str(cooccurrence_figures_zip),
     }
     return outputs
 
@@ -5852,10 +5994,11 @@ def write_important_results_report(
             continue
         stem = figure_path.stem
         png_name = figure_path.with_suffix(".png").name
+        pdf_name = figure_path.with_suffix(".pdf").name
         data_name = f"{stem}.data.tsv"
         cooccurrence_figure_items.append(
             f"<div><h3>{html.escape(title)}</h3><img src='figures/{html.escape(figure_path.name)}' alt='{html.escape(title)}'>"
-            f"<p><a href='figures/{html.escape(png_name)}'>PNG</a> | <a href='figures/{html.escape(figure_path.name)}'>SVG</a> | <a href='figures/{html.escape(data_name)}'>Data TSV</a></p></div>"
+            f"<p><a href='figures/{html.escape(png_name)}'>PNG</a> | <a href='figures/{html.escape(figure_path.name)}'>SVG</a> | <a href='figures/{html.escape(pdf_name)}'>PDF</a> | <a href='figures/{html.escape(data_name)}'>Data TSV</a></p></div>"
         )
     cooccurrence_figures_html = "<div class='figure-row'>" + "".join(cooccurrence_figure_items) + "</div>" if cooccurrence_figure_items else "<p>No co-occurrence/context figures were generated because feature-pair data were unavailable.</p>"
     report_path = important_dir / "results.html"
@@ -5929,7 +6072,7 @@ th {{ background: #f0f4f8; }}
 {cooccurrence_table_html}
 <h3>Genomic context evidence</h3>
 {context_table_html}
-<div class="downloads"><a href="figures/cooccurrence_context.html">Open interactive co-occurrence report</a><a href="tables/cooccurrence_pair_summary.tsv">Download pair summary</a><a href="tables/cooccurrence_heatmap_matrix.tsv">Download heatmap matrix</a><a href="tables/cooccurrence_network_edges.tsv">Download network edges</a><a href="tables/cooccurrence_network_nodes.tsv">Download network nodes</a><a href="tables/genomic_context_evidence.tsv">Download genomic context evidence</a><a href="tables/contig_neighborhoods.tsv">Download contig neighborhoods</a></div></section>
+<div class="downloads"><a href="figures/cooccurrence_context.html">Open interactive co-occurrence report</a><a href="cooccurrence_tables.zip">Download all co-occurrence tables ZIP</a><a href="cooccurrence_figures.zip">Download all co-occurrence figures ZIP</a><a href="tables/cooccurrence_pair_summary.tsv">Download pair summary</a><a href="tables/cooccurrence_heatmap_matrix.tsv">Download heatmap matrix</a><a href="tables/cooccurrence_network_edges.tsv">Download network edges</a><a href="tables/cooccurrence_network_nodes.tsv">Download network nodes</a><a href="tables/genomic_context_evidence.tsv">Download genomic context evidence</a><a href="tables/contig_neighborhoods.tsv">Download contig neighborhoods</a></div></section>
 <section id="files"><h2>Important Files</h2><ul>
 <li><a href="../basic/enriched_genome_dataset.csv">Enriched genome dataset CSV</a></li>
 <li><a href="key_tables/qc_step_summary.tsv">QC step summary</a></li>

@@ -692,6 +692,8 @@ results/
     │   ├── tables/cooccurrence_network_nodes.tsv
     │   ├── tables/genomic_context_evidence.tsv
     │   ├── tables/contig_neighborhoods.tsv
+    │   ├── cooccurrence_tables.zip
+    │   ├── cooccurrence_figures.zip
     │   ├── figures/qc_funnel.png
     │   ├── figures/qc_funnel.svg
     │   ├── figures/qc_status_overview.png
@@ -709,10 +711,15 @@ results/
     │   ├── figures/temporal_feature_heatmap_top40.svg
     │   ├── figures/cooccurrence_context.html
     │   ├── figures/cooccurrence_heatmap_<db>_vs_<db>.svg
+    │   ├── figures/cooccurrence_heatmap_<db>_vs_<db>.pdf
     │   ├── figures/cooccurrence_network_<db>_vs_<db>.svg
+    │   ├── figures/cooccurrence_network_<db>_vs_<db>.pdf
     │   ├── figures/genomic_context_evidence_ladder_<feature>.svg
+    │   ├── figures/genomic_context_evidence_ladder_<feature>.pdf
     │   ├── figures/top_context_features_<feature>.svg
-    │   └── figures/contig_neighborhood_<sample>_<contig>.svg
+    │   ├── figures/top_context_features_<feature>.pdf
+    │   ├── figures/contig_neighborhood_<sample>_<contig>.svg
+    │   └── figures/contig_neighborhood_<sample>_<contig>.pdf
     └── panr2_inputs/
 
 --output_mode all
