@@ -12,7 +12,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from normalize_fetchm2_output import normalize_fetchm2_output
 from export_panr2_inputs import parse_version_line
-from panr2_contract import export_contract, _kruskal_wallis, write_important_geographic_outputs, write_important_lineage_outputs, write_important_prevalence_outputs
+from panr2_contract import export_contract, _kruskal_wallis, write_important_diversity_outputs, write_important_geographic_outputs, write_important_lineage_outputs, write_important_prevalence_outputs
 from check_genomad_readiness import resolve_database_dir
 from check_container_readiness import as_list as container_as_list
 from check_container_readiness import image_exec_command
@@ -167,6 +167,63 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("overall_lineage_summary", set(written["section"]))
             html = (sample_dir / "important" / "figures" / "lineage_clonal_structure.html").read_text(encoding="utf-8")
             for control in ["Lineage type", "Database", "Feature mode", "Search feature", "Feature", "Metadata overlay", "Minimum lineage size", "custom", "Display", "Written Summaries"]:
+                self.assertIn(control, html)
+
+    def test_important_diversity_counts_unique_features_and_writes_complete_tables(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            sample_dir = root / "Sample"
+            basic_dir = sample_dir / "basic"
+            features_dir = root / "panr2_inputs" / "features"
+            basic_dir.mkdir(parents=True)
+            features_dir.mkdir(parents=True)
+            pd.DataFrame(
+                [
+                    {"assembly_accession": "G1", "sample_id": "s1", "country": "Bangladesh", "isolation_source": "clinical", "bioproject": "PRJ1", "mlst_ST": "ST_11", "ani_cluster": "ANI_1"},
+                    {"assembly_accession": "G2", "sample_id": "s2", "country": "Bangladesh", "isolation_source": "clinical", "bioproject": "PRJ1", "mlst_ST": "ST_11", "ani_cluster": "ANI_1"},
+                    {"assembly_accession": "G3", "sample_id": "s3", "country": "India", "isolation_source": "environmental", "bioproject": "PRJ2", "mlst_ST": "ST_15", "ani_cluster": "ANI_2"},
+                    {"assembly_accession": "G4", "sample_id": "s4", "country": "India", "isolation_source": "environmental", "bioproject": "PRJ2", "mlst_ST": "ST_15", "ani_cluster": "ANI_2"},
+                ]
+            ).to_csv(basic_dir / "enriched_genome_dataset.csv", index=False)
+            pd.DataFrame(
+                [
+                    {"assembly_accession": "G1", "sample_id": "s1", "database": "amr", "feature_id": "coreA", "feature_name": "coreA", "feature_category": "beta_lactam", "presence": "1", "identity": "99", "coverage": "100"},
+                    {"assembly_accession": "G2", "sample_id": "s2", "database": "amr", "feature_id": "coreA", "feature_name": "coreA", "feature_category": "beta_lactam", "presence": "1", "identity": "98", "coverage": "99"},
+                    {"assembly_accession": "G3", "sample_id": "s3", "database": "amr", "feature_id": "coreA", "feature_name": "coreA", "feature_category": "beta_lactam", "presence": "1", "identity": "97", "coverage": "98"},
+                    {"assembly_accession": "G4", "sample_id": "s4", "database": "amr", "feature_id": "coreA", "feature_name": "coreA", "feature_category": "beta_lactam", "presence": "1", "identity": "96", "coverage": "97"},
+                    {"assembly_accession": "G1", "sample_id": "s1", "database": "vfdb", "feature_id": "rareV", "feature_name": "rareV", "feature_category": "adhesion", "presence": "1", "identity": "95", "coverage": "88"},
+                    {"assembly_accession": "G1", "sample_id": "s1", "database": "vfdb", "feature_id": "rareV", "feature_name": "rareV", "feature_category": "adhesion", "presence": "1", "identity": "94", "coverage": "87"},
+                    {"assembly_accession": "G2", "sample_id": "s2", "database": "plasmidfinder", "feature_id": "IncF", "feature_name": "IncF", "feature_category": "replicon", "presence": "1", "identity": "100", "coverage": "100"},
+                ]
+            ).to_csv(features_dir / "all_features.tsv", sep="\t", index=False)
+
+            outputs = write_important_diversity_outputs(sample_dir, root / "panr2_inputs", sample_dir / "important", top_n=2)
+            self.assertTrue(Path(outputs["important_diversity_feature_richness"]).exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "diversity_analysis.html").exists())
+            self.assertTrue((sample_dir / "important" / "diversity_tables.zip").exists())
+            self.assertTrue((sample_dir / "important" / "diversity_figures.zip").exists())
+
+            richness = pd.read_csv(sample_dir / "important" / "tables" / "diversity_feature_richness_by_sample.tsv", sep="\t")
+            g1 = richness[richness["assembly_accession"] == "G1"].iloc[0]
+            self.assertEqual(int(g1["total_unique_features"]), 2)
+            self.assertEqual(int(g1["total_feature_rows"]), 3)
+            self.assertEqual(int(g1["vfdb_richness"]), 1)
+
+            classes = pd.read_csv(sample_dir / "important" / "tables" / "diversity_core_common_accessory_rare_features.tsv", sep="\t")
+            self.assertEqual(classes.loc[classes["feature_id"] == "coreA", "feature_class"].iloc[0], "core")
+            self.assertEqual(int(classes.loc[classes["feature_id"] == "rareV", "feature_rows"].iloc[0]), 2)
+
+            jaccard = pd.read_csv(sample_dir / "important" / "tables" / "diversity_jaccard_distance_matrix.tsv", sep="\t")
+            diag = jaccard[(jaccard["sample_a"] == "G1") & (jaccard["sample_b"] == "G1")].iloc[0]
+            self.assertAlmostEqual(float(diag["jaccard_distance"]), 0.0)
+            self.assertTrue((jaccard["jaccard_distance"].astype(float) >= 0).all())
+
+            accumulation = pd.read_csv(sample_dir / "important" / "tables" / "diversity_pan_feature_accumulation.tsv", sep="\t")
+            self.assertTrue((accumulation["new_features_added"].astype(int) >= 0).all())
+            self.assertTrue(accumulation["cumulative_unique_features"].is_monotonic_increasing)
+
+            html = (sample_dir / "important" / "figures" / "diversity_analysis.html").read_text(encoding="utf-8")
+            for control in ["Diversity scope", "Diversity view", "Metadata color/group", "Display", "Sort", "Pan-feature accumulation", "Jaccard similarity/distance"]:
                 self.assertIn(control, html)
 
     def test_kruskal_wallis_detects_multi_group_burden_difference(self):
@@ -435,6 +492,22 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue(any((sample_dir / "important" / "figures").glob("lineage_distribution_*.svg")))
             self.assertTrue(any((sample_dir / "important" / "figures").glob("lineage_metadata_overlap_*_*.png")))
             self.assertTrue(any((sample_dir / "important" / "figures").glob("lineage_feature_enrichment_*_*.pdf")))
+            self.assertTrue((sample_dir / "important" / "tables" / "diversity_feature_richness_by_sample.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "diversity_database_by_sample.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "diversity_database_by_sample_wide.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "diversity_core_common_accessory_rare_features.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "diversity_core_accessory_summary_by_database.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "diversity_pan_feature_accumulation.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "diversity_jaccard_distance_matrix.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "diversity_jaccard_pairs.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "diversity_by_metadata_group.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "diversity_written_summaries.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "diversity_analysis.html").exists())
+            self.assertTrue((sample_dir / "important" / "diversity_tables.zip").exists())
+            self.assertTrue((sample_dir / "important" / "diversity_figures.zip").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "diversity_feature_richness_by_sample.svg").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "diversity_database_by_sample_heatmap.png").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "diversity_pan_feature_accumulation.data.tsv").exists())
             temporal_summary = pd.read_csv(sample_dir / "important" / "key_tables" / "temporal_trend_summary.tsv", sep="\t")
             self.assertTrue({"trend_label", "support_label", "temporal_pattern_label", "warning_flags"}.issubset(temporal_summary.columns))
             prevalence = pd.read_csv(sample_dir / "important" / "tables" / "feature_prevalence.tsv", sep="\t")
@@ -498,8 +571,18 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue({"odds_ratio", "p_value", "q_value", "support_label", "interpretation_label", "warning_flags"}.issubset(lineage_enrichment.columns))
             lineage_written = pd.read_csv(sample_dir / "important" / "tables" / "lineage_written_summaries.tsv", sep="\t")
             self.assertIn("lineage_adjusted_top_findings_summary", set(lineage_written["section"]))
+            diversity_html = (sample_dir / "important" / "figures" / "diversity_analysis.html").read_text(encoding="utf-8")
+            for control in ["Diversity scope", "Diversity view", "Metadata color/group", "Display", "Sort", "Core/common/accessory/rare", "Pan-feature accumulation", "Jaccard similarity/distance"]:
+                self.assertIn(control, diversity_html)
+            diversity_richness = pd.read_csv(sample_dir / "important" / "tables" / "diversity_feature_richness_by_sample.tsv", sep="\t")
+            self.assertTrue({"assembly_accession", "total_unique_features", "total_feature_rows", "richness_label", "warning_flags"}.issubset(diversity_richness.columns))
+            diversity_classes = pd.read_csv(sample_dir / "important" / "tables" / "diversity_core_common_accessory_rare_features.tsv", sep="\t")
+            self.assertTrue({"database", "feature_id", "positive_genomes", "prevalence_percent", "feature_class", "feature_rows"}.issubset(diversity_classes.columns))
+            diversity_jaccard = pd.read_csv(sample_dir / "important" / "tables" / "diversity_jaccard_distance_matrix.tsv", sep="\t")
+            self.assertTrue({"sample_a", "sample_b", "jaccard_distance", "jaccard_similarity"}.issubset(diversity_jaccard.columns))
             report_controls = pd.read_csv(outputs["report_controls"], sep="\t")
             self.assertIn("important_lineage_feature_cap_per_database", set(report_controls["setting"]))
+            self.assertIn("important_diversity_jaccard_heatmap_cap", set(report_controls["setting"]))
             report_html = (sample_dir / "important" / "results.html").read_text(encoding="utf-8")
             for section in [
                 "Featured Results",
@@ -512,6 +595,7 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "Co-occurrence / Genomic Context",
                 "Metadata Associations",
                 "Lineage / Clonal Structure",
+                "Diversity / Pan-feature Summary",
                 "Warnings And Limitations",
                 "Important Files",
             ]:

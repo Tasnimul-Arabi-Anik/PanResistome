@@ -181,10 +181,12 @@ CSV/TSV in the final output directory. `important` adds a curated
 `important/results.html` entry point with Featured Results, Run Overview, QC
 Summary, Prevalence, Geographic Distribution, Variations, Temporal Trends,
 Co-occurrence / Genomic Context, Metadata Associations, Lineage / Clonal
-Structure, Warnings, and Important Files sections. It writes key QC,
+Structure, Diversity / Pan-feature Summary, Warnings, and Important Files
+sections. It writes key QC,
 prevalence, geography, variation, temporal trend, co-occurrence,
-genomic-context, metadata-association, and lineage/clonal-structure tables plus
-portable PNG/SVG/PDF/TSV figures without adding new runtime plotting
+genomic-context, metadata-association, lineage/clonal-structure, and
+diversity/pan-feature tables plus portable PNG/SVG/PDF/TSV figures without
+adding new runtime plotting
 dependencies. Prevalence includes an interactive HTML viewer with database,
 Top 10/20/50/Complete, metric, sort, minimum-prevalence, minimum-genome, and
 coordinate/category filters; denominator-aware top-feature plots; database
@@ -216,8 +218,13 @@ interactive report with MLST ST, ANI cluster, BioProject, and combined-lineage
 views; metadata-lineage overlap; feature burden and feature enrichment by
 lineage; selected-feature lineage prevalence; custom lineage-size filtering;
 feature search; burden boxplots; enrichment volcano-style plots; auto-written
-lineage summaries; and lineage-adjusted top-finding warnings. `all` preserves
-the full advanced output tree and includes both user-facing bundles.
+lineage summaries; and lineage-adjusted top-finding warnings. Diversity /
+Pan-feature Summary adds an interactive viewer for feature richness by genome,
+database diversity by sample, core/common/accessory/rare feature classes,
+pan-feature accumulation, Jaccard feature-profile distances, and
+metadata-stratified richness, with complete TSVs preserved when static figures
+are capped. `all` preserves the full advanced output tree and includes both
+user-facing bundles.
 
 `manifest/report_controls.tsv` records report density settings such as `large_dataset`, `report_mode`, feature caps for handoff matrices/co-occurrence/proximity summaries, metadata row caps for HTML pages, and whether heavy interactive plots were skipped or deprioritized. Complete feature TSVs remain available even when large-dataset safeguards cap report-facing summaries.
 

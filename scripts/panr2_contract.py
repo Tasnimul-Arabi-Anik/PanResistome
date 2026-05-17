@@ -3139,6 +3139,9 @@ def write_report_controls(
         {"setting": "important_lineage_default_top_n", "value": "20", "message": "Default Top-N lineages/features shown in important lineage figures."},
         {"setting": "important_lineage_feature_cap_per_database", "value": "200", "message": "Report-facing feature cap per database for important lineage enrichment; complete lineage TSVs are preserved."},
         {"setting": "important_lineage_complete_tsvs_preserved", "value": "true", "message": "Complete important lineage distribution, burden, enrichment, and selected-feature TSVs are written even when figures are capped."},
+        {"setting": "important_diversity_default_top_n", "value": "20", "message": "Default Top-N samples/features shown in important diversity figures."},
+        {"setting": "important_diversity_jaccard_heatmap_cap", "value": "100", "message": "Maximum genomes shown in the report-facing static Jaccard heatmap; complete Jaccard TSVs are preserved."},
+        {"setting": "important_diversity_complete_tsvs_preserved", "value": "true", "message": "Complete important diversity TSVs are written even when figures are capped."},
         {"setting": "report_warning", "value": warning, "message": "Summary/report-level warning generated from dataset size and configured limits."},
     ]
     controls_path = write_rows(
@@ -9498,6 +9501,637 @@ refreshControls(); render();
     }
 
 
+def write_important_diversity_outputs(
+    sample_dir: Path,
+    out_dir: Path,
+    important_dir: Path,
+    top_n: int = 20,
+    jaccard_heatmap_cap: int = 100,
+) -> dict[str, str]:
+    tables = important_dir / "tables"
+    figures = important_dir / "figures"
+    tables.mkdir(parents=True, exist_ok=True)
+    figures.mkdir(parents=True, exist_ok=True)
+
+    features = [row for row in read_table(out_dir / "features" / "all_features.tsv") if row.get("presence", "1") == "1"]
+    metadata_rows = read_table(sample_dir / "basic" / "enriched_genome_dataset.csv")
+    if not metadata_rows:
+        metadata_rows = normalize_metadata_rows(load_metadata_rows(sample_dir))
+    metadata_by_sample = {row.get("assembly_accession", ""): row for row in metadata_rows if row.get("assembly_accession")}
+    samples = sorted(set(metadata_by_sample) | {row.get("assembly_accession", "") or row.get("sample_id", "") for row in features if row.get("assembly_accession") or row.get("sample_id")})
+    for sample in samples:
+        metadata_by_sample.setdefault(sample, {"assembly_accession": sample, "sample_id": sample})
+    sample_count = len(samples)
+
+    def clean(value: str) -> str:
+        text = str(value or "").strip()
+        return "" if is_missing_value(text) else text
+
+    def sample_value(sample: str, column: str) -> str:
+        return clean(metadata_by_sample.get(sample, {}).get(column, ""))
+
+    ani_by_sample = _ani_cluster_by_sample(out_dir)
+    mlst_by_sample = {
+        sample: sample_value(sample, "mlst_ST")
+        for sample in samples
+        if sample_value(sample, "mlst_ST")
+    }
+    for row in features:
+        if row.get("database") != "mlst":
+            continue
+        sample = row.get("assembly_accession", "") or row.get("sample_id", "")
+        feature_id = row.get("feature_id", "")
+        if sample and (feature_id.startswith("ST_") or re.search(r"ST[-_: ]*[A-Za-z0-9]+", feature_id, flags=re.IGNORECASE)):
+            mlst_by_sample.setdefault(sample, feature_id if feature_id.startswith("ST_") else re.sub(r"^.*ST[-_: ]*", "ST_", feature_id, flags=re.IGNORECASE))
+
+    feature_sets_by_sample: dict[str, set[tuple[str, str]]] = defaultdict(set)
+    feature_rows_by_sample: Counter[str] = Counter()
+    feature_rows_by_sample_database: Counter[tuple[str, str]] = Counter()
+    feature_sets_by_sample_database: dict[tuple[str, str], set[str]] = defaultdict(set)
+    feature_rows_by_key: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
+    sample_rows_by_key: dict[tuple[str, str], set[str]] = defaultdict(set)
+    feature_name_by_key: dict[tuple[str, str], str] = {}
+    category_by_key: dict[tuple[str, str], str] = {}
+    for row in features:
+        sample = row.get("assembly_accession", "") or row.get("sample_id", "")
+        database = row.get("database", "")
+        feature_id = row.get("feature_id", "")
+        if not sample or not database or not feature_id:
+            continue
+        key = (database, feature_id)
+        feature_sets_by_sample[sample].add(key)
+        feature_sets_by_sample_database[(sample, database)].add(feature_id)
+        feature_rows_by_sample[sample] += 1
+        feature_rows_by_sample_database[(sample, database)] += 1
+        feature_rows_by_key[key].append(row)
+        sample_rows_by_key[key].add(sample)
+        feature_name_by_key[key] = row.get("feature_name", "")
+        category_by_key[key] = row.get("feature_category", "")
+
+    databases = sorted({database for database, _feature in feature_rows_by_key})
+    canonical_database_fields = {
+        "amr": "amr_richness",
+        "amrfinderplus": "amrfinderplus_richness",
+        "vfdb": "vfdb_richness",
+        "plasmidfinder": "plasmidfinder_richness",
+        "integronfinder": "integronfinder_richness",
+        "mlst": "mlst_richness",
+        "mobsuite": "mge_richness",
+        "mobileelementfinder": "mge_richness",
+        "genomad": "prophage_richness",
+        "prophage": "prophage_richness",
+    }
+    richness_values = [len(feature_sets_by_sample.get(sample, set())) for sample in samples]
+    sorted_richness = sorted(richness_values)
+    low_cut = sorted_richness[max(0, int(len(sorted_richness) * 0.10) - 1)] if sorted_richness else 0
+    high_cut = sorted_richness[min(len(sorted_richness) - 1, int(math.ceil(len(sorted_richness) * 0.90)) - 1)] if sorted_richness else 0
+
+    richness_rows = []
+    for sample in samples:
+        total_unique = len(feature_sets_by_sample.get(sample, set()))
+        flags = []
+        if sample_count < 5:
+            flags.append("low_sample_count")
+        if total_unique >= high_cut and sorted_richness:
+            richness_label = "high_feature_richness"
+        elif total_unique <= low_cut and sorted_richness:
+            richness_label = "low_feature_richness"
+        else:
+            richness_label = "typical_feature_richness"
+        out = {
+            "sample_id": sample_value(sample, "sample_id") or sample,
+            "assembly_accession": sample,
+            "organism_name": sample_value(sample, "organism_name"),
+            "total_unique_features": str(total_unique),
+            "total_feature_rows": str(feature_rows_by_sample.get(sample, 0)),
+            "amr_richness": "0",
+            "amrfinderplus_richness": "0",
+            "vfdb_richness": "0",
+            "plasmidfinder_richness": "0",
+            "integronfinder_richness": "0",
+            "mlst_richness": "0",
+            "mge_richness": "0",
+            "prophage_richness": "0",
+            "metadata_country": sample_value(sample, "country"),
+            "metadata_source": sample_value(sample, "isolation_source") or sample_value(sample, "sample_type"),
+            "metadata_host": sample_value(sample, "host"),
+            "metadata_bioproject": sample_value(sample, "bioproject"),
+            "lineage_mlst_ST": mlst_by_sample.get(sample, ""),
+            "lineage_ani_cluster": sample_value(sample, "ani_cluster") or ani_by_sample.get(sample, ""),
+            "richness_label": richness_label,
+            "warning_flags": _flag_string(flags),
+        }
+        for database in databases:
+            field = canonical_database_fields.get(database)
+            if field:
+                out[field] = str(int(out.get(field, "0")) + len(feature_sets_by_sample_database.get((sample, database), set())))
+        richness_rows.append(out)
+    richness_fields = [
+        "sample_id", "assembly_accession", "organism_name", "total_unique_features", "total_feature_rows",
+        "amr_richness", "amrfinderplus_richness", "vfdb_richness", "plasmidfinder_richness", "integronfinder_richness",
+        "mlst_richness", "mge_richness", "prophage_richness", "metadata_country", "metadata_source", "metadata_host",
+        "metadata_bioproject", "lineage_mlst_ST", "lineage_ani_cluster", "richness_label", "warning_flags",
+    ]
+    richness_path = tables / "diversity_feature_richness_by_sample.tsv"
+    write_rows(richness_path, richness_rows, richness_fields)
+
+    database_rows = []
+    for sample in samples:
+        for database in databases:
+            unique_count = len(feature_sets_by_sample_database.get((sample, database), set()))
+            row_count = feature_rows_by_sample_database.get((sample, database), 0)
+            flags = []
+            if unique_count == 0:
+                flags.append("database_sparse")
+            database_rows.append({
+                "sample_id": sample_value(sample, "sample_id") or sample,
+                "assembly_accession": sample,
+                "database": database,
+                "unique_features": str(unique_count),
+                "feature_rows": str(row_count),
+                "positive": "true" if unique_count else "false",
+                "metadata_country": sample_value(sample, "country"),
+                "metadata_source": sample_value(sample, "isolation_source") or sample_value(sample, "sample_type"),
+                "metadata_host": sample_value(sample, "host"),
+                "metadata_bioproject": sample_value(sample, "bioproject"),
+                "lineage_mlst_ST": mlst_by_sample.get(sample, ""),
+                "lineage_ani_cluster": sample_value(sample, "ani_cluster") or ani_by_sample.get(sample, ""),
+                "warning_flags": _flag_string(flags),
+            })
+    database_path = tables / "diversity_database_by_sample.tsv"
+    database_fields = [
+        "sample_id", "assembly_accession", "database", "unique_features", "feature_rows", "positive",
+        "metadata_country", "metadata_source", "metadata_host", "metadata_bioproject", "lineage_mlst_ST", "lineage_ani_cluster", "warning_flags",
+    ]
+    write_rows(database_path, database_rows, database_fields)
+
+    wide_fields = ["sample_id", "assembly_accession"]
+    detected_db_fields = [f"{database}_unique_features" for database in databases]
+    wide_fields.extend([
+        "amr_unique_features", "amrfinderplus_unique_features", "vfdb_unique_features", "plasmidfinder_unique_features",
+        "integronfinder_unique_features", "mlst_unique_features", "mge_unique_features", "prophage_unique_features",
+        *[field for field in detected_db_fields if field not in {
+            "amr_unique_features", "amrfinderplus_unique_features", "vfdb_unique_features", "plasmidfinder_unique_features",
+            "integronfinder_unique_features", "mlst_unique_features", "mge_unique_features", "prophage_unique_features",
+        }],
+        "total_unique_features",
+    ])
+    wide_rows = []
+    for sample in samples:
+        out = {"sample_id": sample_value(sample, "sample_id") or sample, "assembly_accession": sample, "total_unique_features": str(len(feature_sets_by_sample.get(sample, set())))}
+        for field in wide_fields:
+            out.setdefault(field, "0")
+        for database in databases:
+            value = str(len(feature_sets_by_sample_database.get((sample, database), set())))
+            out[f"{database}_unique_features"] = value
+            if database in canonical_database_fields:
+                out[canonical_database_fields[database].replace("_richness", "_unique_features")] = str(
+                    int(out.get(canonical_database_fields[database].replace("_richness", "_unique_features"), "0")) + int(value)
+                )
+        wide_rows.append(out)
+    wide_path = tables / "diversity_database_by_sample_wide.tsv"
+    write_rows(wide_path, wide_rows, wide_fields)
+
+    class_rows = []
+    for (database, feature_id), present_samples in sorted(sample_rows_by_key.items(), key=lambda item: (item[0][0], item[0][1])):
+        positive = len(present_samples)
+        prevalence_percent = (positive / sample_count * 100) if sample_count else 0.0
+        identities = [_float_or_none(row.get("identity", "")) for row in feature_rows_by_key[(database, feature_id)]]
+        coverages = [_float_or_none(row.get("coverage", "")) for row in feature_rows_by_key[(database, feature_id)]]
+        identities = [value for value in identities if value is not None]
+        coverages = [value for value in coverages if value is not None]
+        feature_class = _prevalence_label(prevalence_percent)
+        flags = []
+        if feature_class == "rare":
+            flags.append("sparse_feature_matrix")
+        class_rows.append({
+            "database": database,
+            "feature_id": feature_id,
+            "feature_name": feature_name_by_key.get((database, feature_id), ""),
+            "positive_genomes": str(positive),
+            "total_genomes": str(sample_count),
+            "prevalence_percent": f"{prevalence_percent:.2f}",
+            "feature_class": feature_class,
+            "feature_rows": str(len(feature_rows_by_key[(database, feature_id)])),
+            "median_identity": f"{_median(identities):.2f}" if identities else "",
+            "median_coverage": f"{_median(coverages):.2f}" if coverages else "",
+            "warning_flags": _flag_string(flags),
+        })
+    class_path = tables / "diversity_core_common_accessory_rare_features.tsv"
+    class_fields = [
+        "database", "feature_id", "feature_name", "positive_genomes", "total_genomes", "prevalence_percent",
+        "feature_class", "feature_rows", "median_identity", "median_coverage", "warning_flags",
+    ]
+    write_rows(class_path, class_rows, class_fields)
+
+    class_counts: dict[str, Counter[str]] = defaultdict(Counter)
+    for row in class_rows:
+        class_counts[row["database"]][row["feature_class"]] += 1
+    summary_rows = []
+    for database in databases:
+        total = sum(class_counts[database].values())
+        summary_rows.append({
+            "database": database,
+            "core_features": str(class_counts[database].get("core", 0)),
+            "common_features": str(class_counts[database].get("common", 0)),
+            "accessory_features": str(class_counts[database].get("accessory", 0)),
+            "rare_features": str(class_counts[database].get("rare", 0)),
+            "total_unique_features": str(total),
+            "core_fraction": f"{(class_counts[database].get('core', 0) / total) if total else 0.0:.4f}",
+            "common_fraction": f"{(class_counts[database].get('common', 0) / total) if total else 0.0:.4f}",
+            "accessory_fraction": f"{(class_counts[database].get('accessory', 0) / total) if total else 0.0:.4f}",
+            "rare_fraction": f"{(class_counts[database].get('rare', 0) / total) if total else 0.0:.4f}",
+        })
+    summary_path = tables / "diversity_core_accessory_summary_by_database.tsv"
+    summary_fields = ["database", "core_features", "common_features", "accessory_features", "rare_features", "total_unique_features", "core_fraction", "common_fraction", "accessory_fraction", "rare_fraction"]
+    write_rows(summary_path, summary_rows, summary_fields)
+
+    accumulation_rows = []
+    seen_features: set[tuple[str, str]] = set()
+    for index, sample in enumerate(samples, start=1):
+        before = len(seen_features)
+        seen_features.update(feature_sets_by_sample.get(sample, set()))
+        added = len(seen_features) - before
+        accumulation_rows.append({
+            "genome_order": str(index),
+            "genomes_included": str(index),
+            "assembly_accession": sample,
+            "cumulative_unique_features": str(len(seen_features)),
+            "new_features_added": str(added),
+            "database": "all",
+            "randomization_round": "1",
+            "mean_cumulative_features": str(len(seen_features)),
+            "lower_ci": str(len(seen_features)),
+            "upper_ci": str(len(seen_features)),
+        })
+    accumulation_path = tables / "diversity_pan_feature_accumulation.tsv"
+    accumulation_fields = ["genome_order", "genomes_included", "assembly_accession", "cumulative_unique_features", "new_features_added", "database", "randomization_round", "mean_cumulative_features", "lower_ci", "upper_ci"]
+    write_rows(accumulation_path, accumulation_rows, accumulation_fields)
+
+    jaccard_rows = []
+    pair_rows = []
+    for sample_a in samples:
+        features_a = feature_sets_by_sample.get(sample_a, set())
+        for sample_b in samples:
+            features_b = feature_sets_by_sample.get(sample_b, set())
+            union = features_a | features_b
+            intersection = features_a & features_b
+            similarity = len(intersection) / len(union) if union else 1.0
+            distance = 1.0 - similarity
+            jaccard_rows.append({
+                "sample_a": sample_a,
+                "sample_b": sample_b,
+                "shared_features": str(len(intersection)),
+                "union_features": str(len(union)),
+                "jaccard_similarity": f"{similarity:.6f}",
+                "jaccard_distance": f"{distance:.6f}",
+            })
+            if sample_a < sample_b:
+                same_country = sample_value(sample_a, "country") and sample_value(sample_a, "country") == sample_value(sample_b, "country")
+                same_source = (sample_value(sample_a, "isolation_source") or sample_value(sample_a, "sample_type")) and (sample_value(sample_a, "isolation_source") or sample_value(sample_a, "sample_type")) == (sample_value(sample_b, "isolation_source") or sample_value(sample_b, "sample_type"))
+                lineage_a = mlst_by_sample.get(sample_a, "") or ani_by_sample.get(sample_a, "")
+                lineage_b = mlst_by_sample.get(sample_b, "") or ani_by_sample.get(sample_b, "")
+                same_bioproject = sample_value(sample_a, "bioproject") and sample_value(sample_a, "bioproject") == sample_value(sample_b, "bioproject")
+                pair_rows.append({
+                    "sample_a": sample_a,
+                    "sample_b": sample_b,
+                    "jaccard_distance": f"{distance:.6f}",
+                    "jaccard_similarity": f"{similarity:.6f}",
+                    "same_country": str(bool(same_country)).lower(),
+                    "same_source": str(bool(same_source)).lower(),
+                    "same_lineage": str(bool(lineage_a and lineage_a == lineage_b)).lower(),
+                    "same_bioproject": str(bool(same_bioproject)).lower(),
+                    "warning_flags": "",
+                })
+    jaccard_path = tables / "diversity_jaccard_distance_matrix.tsv"
+    jaccard_fields = ["sample_a", "sample_b", "shared_features", "union_features", "jaccard_similarity", "jaccard_distance"]
+    write_rows(jaccard_path, jaccard_rows, jaccard_fields)
+    pairs_path = tables / "diversity_jaccard_pairs.tsv"
+    pair_fields = ["sample_a", "sample_b", "jaccard_distance", "jaccard_similarity", "same_country", "same_source", "same_lineage", "same_bioproject", "warning_flags"]
+    write_rows(pairs_path, pair_rows, pair_fields)
+
+    metadata_group_rows = []
+    metadata_columns = [
+        column for column in ["isolation_source", "country", "host", "bioproject", "mlst_ST", "ani_cluster"]
+        if column in {"mlst_ST", "ani_cluster"} or any(sample_value(sample, column) for sample in samples)
+    ]
+    richness_by_sample = {row["assembly_accession"]: int(row.get("total_unique_features", "0") or 0) for row in richness_rows}
+    database_richness_lookup = {(row["assembly_accession"], row["database"]): int(row.get("unique_features", "0") or 0) for row in database_rows}
+    for column in metadata_columns:
+        groups: dict[str, list[str]] = defaultdict(list)
+        for sample in samples:
+            if column == "mlst_ST":
+                value = mlst_by_sample.get(sample, "")
+            elif column == "ani_cluster":
+                value = sample_value(sample, "ani_cluster") or ani_by_sample.get(sample, "")
+            else:
+                value = sample_value(sample, column)
+            if value:
+                groups[value].append(sample)
+        for group, group_samples in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0])):
+            for database in ["all"] + databases:
+                values = [richness_by_sample.get(sample, 0) if database == "all" else database_richness_lookup.get((sample, database), 0) for sample in group_samples]
+                stats = _summary_stats_full([float(value) for value in values])
+                flags = []
+                if len(group_samples) < 5:
+                    flags.append("metadata_group_small")
+                metadata_group_rows.append({
+                    "metadata_column": column,
+                    "metadata_group": group,
+                    "group_n": str(len(group_samples)),
+                    "database": database,
+                    "mean_richness": "" if stats["mean"] is None else f"{stats['mean']:.4f}",
+                    "median_richness": "" if stats["median"] is None else f"{stats['median']:.4f}",
+                    "min_richness": "" if stats["min"] is None else f"{stats['min']:.4f}",
+                    "max_richness": "" if stats["max"] is None else f"{stats['max']:.4f}",
+                    "iqr_richness": "" if stats["iqr"] is None else f"{stats['iqr']:.4f}",
+                    "warning_flags": _flag_string(flags),
+                })
+    metadata_group_path = tables / "diversity_by_metadata_group.tsv"
+    metadata_group_fields = ["metadata_column", "metadata_group", "group_n", "database", "mean_richness", "median_richness", "min_richness", "max_richness", "iqr_richness", "warning_flags"]
+    write_rows(metadata_group_path, metadata_group_rows, metadata_group_fields)
+
+    figure_paths: list[Path] = []
+
+    def add_standard_figure(stem: str, data_rows: list[dict[str, str]], fields: list[str], svg_writer, png_writer, pdf_lines: list[str]) -> None:
+        data_path = figures / f"{stem}.data.tsv"
+        write_rows(data_path, data_rows, fields)
+        svg_path = figures / f"{stem}.svg"
+        png_path = figures / f"{stem}.png"
+        pdf_path = figures / f"{stem}.pdf"
+        svg_writer(svg_path)
+        png_writer(png_path)
+        _write_simple_pdf(pdf_path, stem.replace("_", " ").title(), pdf_lines)
+        figure_paths.extend([data_path, svg_path, png_path, pdf_path])
+
+    top_richness = sorted(richness_rows, key=lambda row: (-int(_float_or_none(row.get("total_unique_features", "")) or 0), row.get("assembly_accession", "")))[:top_n]
+    add_standard_figure(
+        "diversity_feature_richness_by_sample",
+        top_richness,
+        richness_fields,
+        lambda path: _write_bar_svg(path, top_richness, "Feature richness by genome", "assembly_accession", "total_unique_features", "Unique features"),
+        lambda path: _write_bar_png(path, top_richness, "total_unique_features"),
+        [f"{row.get('assembly_accession')}: {row.get('total_unique_features')} unique features" for row in top_richness],
+    )
+
+    heatmap_samples = [row["assembly_accession"] for row in sorted(richness_rows, key=lambda row: (-int(_float_or_none(row.get("total_unique_features", "")) or 0), row.get("assembly_accession", "")))[:50]]
+    heatmap_rows = [row for row in database_rows if row["assembly_accession"] in heatmap_samples]
+    add_standard_figure(
+        "diversity_database_by_sample_heatmap",
+        heatmap_rows,
+        database_fields,
+        lambda path: _write_heatmap_svg(path, heatmap_rows, "Database diversity by sample", "assembly_accession", "database", "unique_features"),
+        lambda path: _write_heatmap_png(path, heatmap_rows, "assembly_accession", "database", "unique_features"),
+        [f"{len(heatmap_samples)} samples x {len(databases)} databases; complete TSV preserved."],
+    )
+
+    class_plot_rows = []
+    for row in summary_rows:
+        for feature_class in ["core", "common", "accessory", "rare"]:
+            class_plot_rows.append({
+                "database": row["database"],
+                "feature_class": feature_class,
+                "label": f"{row['database']} {feature_class}",
+                "feature_count": row[f"{feature_class}_features"],
+            })
+    add_standard_figure(
+        "diversity_core_common_accessory_rare_by_database",
+        class_plot_rows,
+        ["database", "feature_class", "label", "feature_count"],
+        lambda path: _write_heatmap_svg(path, class_plot_rows, "Core/common/accessory/rare by database", "database", "feature_class", "feature_count"),
+        lambda path: _write_heatmap_png(path, class_plot_rows, "database", "feature_class", "feature_count"),
+        [f"{row.get('database')}: {row.get('total_unique_features')} unique features" for row in summary_rows],
+    )
+
+    add_standard_figure(
+        "diversity_pan_feature_accumulation",
+        accumulation_rows,
+        accumulation_fields,
+        lambda path: _write_line_svg(path, accumulation_rows, "Pan-feature accumulation", "genomes_included", "cumulative_unique_features"),
+        lambda path: _write_line_png(path, accumulation_rows, "cumulative_unique_features"),
+        [f"Final cumulative unique features: {accumulation_rows[-1]['cumulative_unique_features'] if accumulation_rows else 0}"],
+    )
+
+    jaccard_figure_rows = []
+    if sample_count <= jaccard_heatmap_cap:
+        jaccard_figure_rows = jaccard_rows
+    elif samples:
+        capped_samples = set(heatmap_samples[: min(len(heatmap_samples), jaccard_heatmap_cap)])
+        jaccard_figure_rows = [row for row in jaccard_rows if row["sample_a"] in capped_samples and row["sample_b"] in capped_samples]
+    add_standard_figure(
+        "diversity_jaccard_heatmap",
+        jaccard_figure_rows,
+        jaccard_fields,
+        lambda path: _write_heatmap_svg(path, jaccard_figure_rows, "Jaccard feature-profile distance", "sample_a", "sample_b", "jaccard_distance"),
+        lambda path: _write_heatmap_png(path, jaccard_figure_rows, "sample_a", "sample_b", "jaccard_distance"),
+        [f"Static heatmap rows: {len(jaccard_figure_rows)}. Complete Jaccard matrix preserved."],
+    )
+
+    default_metadata = "isolation_source" if any(row.get("metadata_column") == "isolation_source" for row in metadata_group_rows) else ("country" if any(row.get("metadata_column") == "country" for row in metadata_group_rows) else (metadata_group_rows[0]["metadata_column"] if metadata_group_rows else "metadata"))
+    box_rows = [row for row in metadata_group_rows if row.get("metadata_column") == default_metadata and row.get("database") == "all"]
+    box_rows = sorted(box_rows, key=lambda row: (-int(_float_or_none(row.get("group_n", "")) or 0), row.get("metadata_group", "")))[:20]
+    box_data_rows = [
+        {
+            "metadata_group": row["metadata_group"],
+            "n": row["group_n"],
+            "min": row["min_richness"],
+            "q1": row["min_richness"],
+            "median": row["median_richness"],
+            "q3": row["max_richness"],
+            "max": row["max_richness"],
+            "mean": row["mean_richness"],
+            "warning_flags": row["warning_flags"],
+        }
+        for row in box_rows
+    ]
+    metadata_stem = f"diversity_richness_by_metadata_{_safe_filename(default_metadata)}"
+    add_standard_figure(
+        metadata_stem,
+        box_data_rows,
+        ["metadata_group", "n", "min", "q1", "median", "q3", "max", "mean", "warning_flags"],
+        lambda path: _write_burden_boxplot_svg(path, box_data_rows, f"Feature richness by {default_metadata}"),
+        lambda path: _write_burden_boxplot_png(path, box_data_rows),
+        [f"{default_metadata}: {len(box_data_rows)} groups shown."],
+    )
+
+    final_added = sum(int(row.get("new_features_added", "0") or 0) for row in accumulation_rows[-max(1, math.ceil(sample_count * 0.10)):] if accumulation_rows)
+    total_unique = len({key for key in feature_rows_by_key})
+    open_label = "open_pan_feature_space" if total_unique and final_added / total_unique > 0.05 else "plateauing_pan_feature_space"
+    written_rows = [
+        {
+            "section": "overall_diversity_summary",
+            "summary": (
+                f"Diversity analysis found {total_unique} unique standardized features across {sample_count} genome(s). "
+                f"The median genome carried {_median([float(v) for v in richness_values]):.1f} unique feature(s), with a maximum of {max(richness_values) if richness_values else 0}."
+            ),
+        },
+        {
+            "section": "database_diversity_summary",
+            "summary": (
+                f"Database diversity was summarized across {len(databases)} detected database(s). "
+                f"The most feature-rich database by unique feature count was {max(summary_rows, key=lambda row: int(row.get('total_unique_features', '0') or 0)).get('database', 'not available') if summary_rows else 'not available'}."
+            ),
+        },
+        {
+            "section": "core_accessory_summary",
+            "summary": (
+                f"Feature classes included {sum(class_counts[db].get('core', 0) for db in databases)} core, "
+                f"{sum(class_counts[db].get('common', 0) for db in databases)} common, "
+                f"{sum(class_counts[db].get('accessory', 0) for db in databases)} accessory, and "
+                f"{sum(class_counts[db].get('rare', 0) for db in databases)} rare feature(s)."
+            ),
+        },
+        {
+            "section": "pan_feature_summary",
+            "summary": (
+                f"The pan-feature accumulation curve is labeled {open_label}; the final 10% of genomes added {final_added} new feature(s). "
+                "This depends on database selection, genome quality, and sampling diversity."
+            ),
+        },
+        {
+            "section": "jaccard_feature_profile_summary",
+            "summary": (
+                f"Jaccard feature-profile distances were generated for {sample_count} genome(s). "
+                "These distances reflect annotation feature presence/absence, not whole-genome phylogeny."
+            ),
+        },
+    ]
+    written_path = tables / "diversity_written_summaries.tsv"
+    write_rows(written_path, written_rows, ["section", "summary"])
+
+    summary_stat_rows = [
+        {"metric": "total_genomes", "value": str(sample_count), "message": "Genomes included in diversity summaries."},
+        {"metric": "total_feature_rows", "value": str(len(features)), "message": "Feature rows included in diversity summaries."},
+        {"metric": "unique_features", "value": str(total_unique), "message": "Unique database-feature pairs."},
+        {"metric": "median_features_per_genome", "value": f"{_median([float(v) for v in richness_values]):.2f}" if richness_values else "0", "message": "Median unique features per genome."},
+        {"metric": "max_features_in_one_genome", "value": str(max(richness_values) if richness_values else 0), "message": "Maximum unique features in one genome."},
+        {"metric": "core_features", "value": str(sum(class_counts[db].get("core", 0) for db in databases)), "message": "Features present in at least 95% of genomes."},
+        {"metric": "common_features", "value": str(sum(class_counts[db].get("common", 0) for db in databases)), "message": "Features present in 50-95% of genomes."},
+        {"metric": "accessory_features", "value": str(sum(class_counts[db].get("accessory", 0) for db in databases)), "message": "Features present in 5-50% of genomes."},
+        {"metric": "rare_features", "value": str(sum(class_counts[db].get("rare", 0) for db in databases)), "message": "Features present in less than 5% of genomes."},
+        {"metric": "databases_represented", "value": str(len(databases)), "message": ",".join(databases)},
+        {"metric": "jaccard_matrix_available", "value": "yes", "message": f"{len(jaccard_rows)} matrix rows generated."},
+        {"metric": "pan_feature_curve_available", "value": "yes", "message": f"{len(accumulation_rows)} accumulation rows generated."},
+        {"metric": "pan_feature_space_label", "value": open_label, "message": "Simple final-10%-genomes heuristic."},
+        {"metric": "jaccard_heatmap_cap", "value": str(jaccard_heatmap_cap), "message": "Static Jaccard heatmap cap; complete TSV is preserved."},
+    ]
+    report_summary_path = tables / "diversity_report_summary.tsv"
+    write_rows(report_summary_path, summary_stat_rows, ["metric", "value", "message"])
+
+    table_paths = [richness_path, database_path, wide_path, class_path, summary_path, accumulation_path, jaccard_path, pairs_path, metadata_group_path, written_path, report_summary_path]
+    tables_zip = important_dir / "diversity_tables.zip"
+    figures_zip = important_dir / "diversity_figures.zip"
+    _write_zip_bundle(tables_zip, table_paths, important_dir)
+    _write_zip_bundle(figures_zip, figure_paths, important_dir)
+
+    written_html = "".join(
+        f"<p><strong>{html.escape(row.get('section', '').replace('_', ' ').title())}:</strong> {html.escape(row.get('summary', ''))}</p>"
+        for row in written_rows
+    )
+    interactive_html = figures / "diversity_analysis.html"
+    interactive_html.write_text(
+        f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>Diversity / Pan-feature Summary</title>
+<style>
+body {{ font-family: Arial, sans-serif; color: #1f2933; margin: 1.5rem; }}
+label {{ font-weight: 700; margin-right: 0.35rem; }}
+select {{ margin: 0 1rem 0.75rem 0; padding: 0.35rem; }}
+.warning {{ background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; margin: 0.75rem 0; }}
+.panel {{ border: 1px solid #d9e2ec; background: #f8fafc; padding: 0.75rem; margin: 0.75rem 0; }}
+.cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; }}
+.card {{ border: 1px solid #d9e2ec; background: white; border-radius: 6px; padding: 0.65rem; }}
+.card span {{ display: block; color: #52606d; font-size: 0.82rem; }}
+.card strong {{ display: block; font-size: 1.25rem; margin-top: 0.25rem; }}
+.figure-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }}
+.figure-row img {{ max-width: 100%; border: 1px solid #d9e2ec; background: white; }}
+table {{ border-collapse: collapse; width: 100%; font-size: 0.88rem; }}
+th, td {{ border: 1px solid #d9e2ec; padding: 0.35rem; text-align: left; }}
+th {{ background: #f0f4f8; }}
+.scrollbox {{ max-height: 620px; overflow: auto; border: 1px solid #d9e2ec; background: white; }}
+</style></head><body>
+<h1>Diversity / Pan-feature Summary</h1>
+<div class="warning">Diversity summaries reflect detected annotation features, not complete biological diversity. Results depend on selected databases, genome quality, sample composition, and feature-calling tools.</div>
+<label for="scope">Diversity scope</label><select id="scope"></select>
+<label for="view">Diversity view</label><select id="view"><option value="richness">Feature richness</option><option value="database">Database diversity</option><option value="classes">Core/common/accessory/rare</option><option value="pan">Pan-feature accumulation</option><option value="jaccard">Jaccard similarity/distance</option><option value="metadata">Metadata-stratified diversity</option></select>
+<label for="metadata">Metadata color/group</label><select id="metadata"></select>
+<label for="display">Display</label><select id="display"><option value="10">Top 10</option><option value="20" selected>Top 20</option><option value="50">Top 50</option><option value="99999">Complete</option></select>
+<label for="sort">Sort</label><select id="sort"><option value="total">total feature richness</option><option value="selected">selected database richness</option><option value="sample">sample name</option><option value="metadata">metadata group</option><option value="lineage">lineage</option></select>
+<div id="cards" class="cards"></div>
+<div class="panel"><h2>Written Summaries</h2>{written_html}</div>
+<div class="panel"><h2>Default Visuals</h2><div class="figure-row">
+<div><h3>Feature richness by genome</h3><img src="diversity_feature_richness_by_sample.svg" alt="Feature richness by sample"></div>
+<div><h3>Database diversity heatmap</h3><img src="diversity_database_by_sample_heatmap.svg" alt="Database diversity heatmap"></div>
+<div><h3>Core/common/accessory/rare</h3><img src="diversity_core_common_accessory_rare_by_database.svg" alt="Core common accessory rare"></div>
+<div><h3>Pan-feature accumulation</h3><img src="diversity_pan_feature_accumulation.svg" alt="Pan-feature accumulation"></div>
+<div><h3>Jaccard distance heatmap</h3><img src="diversity_jaccard_heatmap.svg" alt="Jaccard distance heatmap"></div>
+<div><h3>Richness by metadata</h3><img src="{html.escape(metadata_stem)}.svg" alt="Richness by metadata"></div>
+</div></div>
+<h2>Filtered Table</h2><div id="table" class="scrollbox"></div>
+<p><a href="../tables/diversity_feature_richness_by_sample.tsv">Download feature richness</a> | <a href="../tables/diversity_database_by_sample.tsv">Download database diversity</a> | <a href="../tables/diversity_core_common_accessory_rare_features.tsv">Download feature classes</a> | <a href="../tables/diversity_pan_feature_accumulation.tsv">Download pan-feature accumulation</a> | <a href="../tables/diversity_jaccard_distance_matrix.tsv">Download Jaccard matrix</a> | <a href="../tables/diversity_by_metadata_group.tsv">Download metadata diversity</a> | <a href="../diversity_tables.zip">Download diversity tables ZIP</a> | <a href="../diversity_figures.zip">Download diversity figures ZIP</a></p>
+<script>
+const richnessRows = {json.dumps(richness_rows[:5000])};
+const databaseRows = {json.dumps(database_rows[:8000])};
+const classRows = {json.dumps(class_rows[:8000])};
+const metadataRows = {json.dumps(metadata_group_rows[:8000])};
+const summaryRows = {json.dumps(summary_stat_rows)};
+const databases = {json.dumps(databases)};
+const scope = document.getElementById('scope'), view = document.getElementById('view'), metadata = document.getElementById('metadata'), display = document.getElementById('display'), sort = document.getElementById('sort');
+function fill(select, values, preferred) {{ const items = Array.from(new Set(values.filter(Boolean))).sort(); select.innerHTML = items.map(v => `<option value="${{v}}">${{v}}</option>`).join(''); if (items.includes(preferred)) select.value = preferred; }}
+fill(scope, ['all'].concat(databases), 'all');
+fill(metadata, metadataRows.map(r => r.metadata_column), {json.dumps(default_metadata)});
+function value(row, key) {{ const n = Number(row[key] || 0); return Number.isFinite(n) ? n : 0; }}
+function rowsForView() {{
+  let rows = [];
+  if (view.value === 'database') rows = databaseRows.filter(r => scope.value === 'all' || r.database === scope.value);
+  else if (view.value === 'classes') rows = classRows.filter(r => scope.value === 'all' || r.database === scope.value);
+  else if (view.value === 'metadata') rows = metadataRows.filter(r => r.metadata_column === metadata.value && (scope.value === 'all' || r.database === scope.value));
+  else rows = richnessRows;
+  if (sort.value === 'sample') rows.sort((a,b) => String(a.assembly_accession || a.sample_id || '').localeCompare(String(b.assembly_accession || b.sample_id || '')));
+  else if (sort.value === 'metadata') rows.sort((a,b) => String(a.metadata_source || a.metadata_group || '').localeCompare(String(b.metadata_source || b.metadata_group || '')));
+  else if (sort.value === 'lineage') rows.sort((a,b) => String(a.lineage_mlst_ST || a.lineage_ani_cluster || '').localeCompare(String(b.lineage_mlst_ST || b.lineage_ani_cluster || '')));
+  else if (sort.value === 'selected' && scope.value !== 'all') rows.sort((a,b) => value(b, `${{scope.value}}_richness`) - value(a, `${{scope.value}}_richness`));
+  else rows.sort((a,b) => value(b, 'total_unique_features') - value(a, 'total_unique_features') || value(b, 'unique_features') - value(a, 'unique_features') || value(b, 'positive_genomes') - value(a, 'positive_genomes'));
+  return rows.slice(0, Number(display.value));
+}}
+function columnsForRows(rows) {{
+  if (view.value === 'database') return ['assembly_accession','database','unique_features','feature_rows','positive','metadata_country','metadata_source','lineage_mlst_ST','lineage_ani_cluster','warning_flags'];
+  if (view.value === 'classes') return ['database','feature_id','feature_name','positive_genomes','total_genomes','prevalence_percent','feature_class','feature_rows','median_identity','median_coverage','warning_flags'];
+  if (view.value === 'metadata') return ['metadata_column','metadata_group','group_n','database','mean_richness','median_richness','min_richness','max_richness','iqr_richness','warning_flags'];
+  return ['assembly_accession','sample_id','total_unique_features','total_feature_rows','amr_richness','vfdb_richness','plasmidfinder_richness','integronfinder_richness','metadata_country','metadata_source','lineage_mlst_ST','lineage_ani_cluster','richness_label','warning_flags'];
+}}
+function render() {{
+  const rows = rowsForView();
+  const cols = columnsForRows(rows);
+  document.getElementById('cards').innerHTML = summaryRows.slice(0, 8).map(r => `<div class="card"><span>${{r.metric}}</span><strong>${{r.value}}</strong></div>`).join('');
+  document.getElementById('table').innerHTML = '<table><thead><tr>' + cols.map(c => `<th>${{c}}</th>`).join('') + '</tr></thead><tbody>' + rows.map(r => '<tr>' + cols.map(c => `<td>${{r[c] || ''}}</td>`).join('') + '</tr>').join('') + '</tbody></table>';
+}}
+[scope, view, metadata, display, sort].forEach(el => el.addEventListener('change', render));
+render();
+</script></body></html>
+""",
+        encoding="utf-8",
+    )
+    figure_paths.append(interactive_html)
+    _write_zip_bundle(figures_zip, figure_paths, important_dir)
+
+    return {
+        "important_diversity_feature_richness": str(richness_path),
+        "important_diversity_database_by_sample": str(database_path),
+        "important_diversity_database_by_sample_wide": str(wide_path),
+        "important_diversity_core_common_accessory_rare_features": str(class_path),
+        "important_diversity_core_accessory_summary": str(summary_path),
+        "important_diversity_pan_feature_accumulation": str(accumulation_path),
+        "important_diversity_jaccard_distance_matrix": str(jaccard_path),
+        "important_diversity_jaccard_pairs": str(pairs_path),
+        "important_diversity_by_metadata_group": str(metadata_group_path),
+        "important_diversity_written_summaries": str(written_path),
+        "important_diversity_report_summary": str(report_summary_path),
+        "important_diversity_html": str(interactive_html),
+        "important_diversity_tables_zip": str(tables_zip),
+        "important_diversity_figures_zip": str(figures_zip),
+    }
+
+
 def write_important_results_report(
     sample_dir: Path,
     out_dir: Path,
@@ -9510,6 +10144,7 @@ def write_important_results_report(
     cooccurrence_outputs: dict[str, str],
     metadata_association_outputs: dict[str, str],
     lineage_outputs: dict[str, str],
+    diversity_outputs: dict[str, str],
 ) -> dict[str, str]:
     important_dir.mkdir(parents=True, exist_ok=True)
     basic_csv = sample_dir / "basic" / "enriched_genome_dataset.csv"
@@ -9560,6 +10195,12 @@ def write_important_results_report(
     lineage_presence_rows = read_table(important_dir / "tables" / "lineage_feature_presence.tsv")
     lineage_adjusted_rows = read_table(important_dir / "tables" / "lineage_adjusted_top_findings.tsv")
     lineage_written_rows = read_table(important_dir / "tables" / "lineage_written_summaries.tsv")
+    diversity_summary_rows = read_table(important_dir / "tables" / "diversity_report_summary.tsv")
+    diversity_richness_rows = read_table(important_dir / "tables" / "diversity_feature_richness_by_sample.tsv")
+    diversity_database_rows = read_table(important_dir / "tables" / "diversity_database_by_sample.tsv")
+    diversity_class_rows = read_table(important_dir / "tables" / "diversity_core_common_accessory_rare_features.tsv")
+    diversity_metadata_rows = read_table(important_dir / "tables" / "diversity_by_metadata_group.tsv")
+    diversity_written_rows = read_table(important_dir / "tables" / "diversity_written_summaries.tsv")
     top_prevalence = sorted(prevalence_rows, key=lambda row: (row.get("database", ""), -(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("feature_id", "")))[:20]
     top_geographic_burden = sorted(
         [
@@ -9621,6 +10262,18 @@ def write_important_results_report(
         lineage_presence_rows,
         key=lambda row: (-(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("database", ""), row.get("feature_id", "")),
     )[:20]
+    top_diversity_richness = sorted(
+        diversity_richness_rows,
+        key=lambda row: (-int(_float_or_none(row.get("total_unique_features", "")) or 0), row.get("assembly_accession", "")),
+    )[:20]
+    top_diversity_classes = sorted(
+        diversity_class_rows,
+        key=lambda row: (row.get("feature_class", ""), -(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("database", ""), row.get("feature_id", "")),
+    )[:20]
+    top_diversity_metadata = sorted(
+        diversity_metadata_rows,
+        key=lambda row: (-int(_float_or_none(row.get("group_n", "")) or 0), row.get("metadata_column", ""), row.get("metadata_group", "")),
+    )[:20]
     qc_table_html = _html_table(qc_steps, ["step_order", "qc_step", "tool", "enabled", "pass", "warning", "fail", "skipped", "status", "notes"], max_rows=20)
     prevalence_table_html = _html_table(top_prevalence, ["database", "feature_id", "feature_category", "positive_genomes", "total_genomes", "prevalence_display", "feature_rows", "mean_hits_per_positive_genome", "prevalence_label", "warning_flags"], max_rows=20)
     variation_table_html = _html_table(top_variation, ["database", "feature_id", "total_hits", "positive_genomes", "mean_hits_per_positive_genome", "median_identity", "iqr_identity", "median_coverage", "iqr_coverage", "variation_label", "warning_flags"], max_rows=20)
@@ -9635,6 +10288,9 @@ def write_important_results_report(
     lineage_burden_table_html = _html_table(top_lineage_burden, ["lineage_type", "lineage_id", "database", "lineage_n", "positive_genomes", "prevalence_percent", "median_features_per_genome", "support_label", "warning_flags"], max_rows=20)
     lineage_enrichment_table_html = _html_table(top_lineage_enrichment, ["lineage_type", "lineage_id", "database", "feature_id", "lineage_n", "positive_in_lineage", "prevalence_in_lineage", "prevalence_difference", "odds_ratio", "q_value", "support_label", "interpretation_label", "warning_flags"], max_rows=20)
     lineage_presence_table_html = _html_table(top_lineage_presence, ["database", "feature_id", "lineage_type", "lineage_id", "lineage_n", "positive_genomes", "prevalence_display", "top_country", "top_source", "top_bioproject", "warning_flags"], max_rows=20)
+    diversity_richness_table_html = _html_table(top_diversity_richness, ["assembly_accession", "sample_id", "total_unique_features", "total_feature_rows", "amr_richness", "vfdb_richness", "plasmidfinder_richness", "integronfinder_richness", "metadata_country", "metadata_source", "lineage_mlst_ST", "lineage_ani_cluster", "richness_label", "warning_flags"], max_rows=20)
+    diversity_class_table_html = _html_table(top_diversity_classes, ["database", "feature_id", "positive_genomes", "total_genomes", "prevalence_percent", "feature_class", "feature_rows", "median_identity", "median_coverage", "warning_flags"], max_rows=20)
+    diversity_metadata_table_html = _html_table(top_diversity_metadata, ["metadata_column", "metadata_group", "group_n", "database", "mean_richness", "median_richness", "min_richness", "max_richness", "iqr_richness", "warning_flags"], max_rows=20)
     prevalence_total_rows = sum(int(_float_or_none(row.get("feature_rows", "")) or 0) for row in prevalence_rows)
     prevalence_unique_features = len(prevalence_rows)
     prevalence_databases = len({row.get("database", "") for row in prevalence_rows if row.get("database", "")})
@@ -9903,6 +10559,43 @@ def write_important_results_report(
             f"<p><a href='figures/{html.escape(stem)}.png'>PNG</a> | <a href='figures/{html.escape(figure_path.name)}'>SVG</a> | <a href='figures/{html.escape(stem)}.pdf'>PDF</a> | <a href='figures/{html.escape(stem)}.data.tsv'>Data TSV</a></p></div>"
         )
     lineage_figures_html = "<div class='figure-row'>" + "".join(lineage_figure_items) + "</div>" if lineage_figure_items else "<p>No lineage figures were generated because lineage context was unavailable.</p>"
+    diversity_summary = {row.get("metric", ""): row.get("value", "") for row in diversity_summary_rows}
+    diversity_cards_html = (
+        "<div class='cards'>"
+        f"<div class='card'><span>Total genomes</span><strong>{html.escape(diversity_summary.get('total_genomes', '0'))}</strong></div>"
+        f"<div class='card'><span>Unique features</span><strong>{html.escape(diversity_summary.get('unique_features', '0'))}</strong></div>"
+        f"<div class='card'><span>Median features/genome</span><strong>{html.escape(diversity_summary.get('median_features_per_genome', '0'))}</strong></div>"
+        f"<div class='card'><span>Core / common</span><strong>{html.escape(diversity_summary.get('core_features', '0'))} / {html.escape(diversity_summary.get('common_features', '0'))}</strong></div>"
+        f"<div class='card'><span>Accessory / rare</span><strong>{html.escape(diversity_summary.get('accessory_features', '0'))} / {html.escape(diversity_summary.get('rare_features', '0'))}</strong></div>"
+        f"<div class='card'><span>Pan-feature space</span><strong>{html.escape(diversity_summary.get('pan_feature_space_label', '')) or 'NA'}</strong></div>"
+        "</div>"
+    )
+    diversity_written_html = "".join(
+        f"<p><strong>{html.escape(row.get('section', '').replace('_', ' ').title())}:</strong> {html.escape(row.get('summary', ''))}</p>"
+        for row in diversity_written_rows
+    ) or "<p>No diversity written summary was generated.</p>"
+    diversity_figure_items = []
+    for figure_name, title in [
+        ("diversity_feature_richness_by_sample", "Feature richness by genome"),
+        ("diversity_database_by_sample_heatmap", "Database diversity by sample"),
+        ("diversity_core_common_accessory_rare_by_database", "Core/common/accessory/rare features"),
+        ("diversity_pan_feature_accumulation", "Pan-feature accumulation"),
+        ("diversity_jaccard_heatmap", "Jaccard feature-profile distance"),
+    ]:
+        svg_path = important_dir / "figures" / f"{figure_name}.svg"
+        if not svg_path.exists():
+            continue
+        diversity_figure_items.append(
+            f"<div><h3>{html.escape(title)}</h3><img src='figures/{html.escape(svg_path.name)}' alt='{html.escape(title)}'>"
+            f"<p><a href='figures/{html.escape(figure_name)}.png'>PNG</a> | <a href='figures/{html.escape(figure_name)}.svg'>SVG</a> | <a href='figures/{html.escape(figure_name)}.pdf'>PDF</a> | <a href='figures/{html.escape(figure_name)}.data.tsv'>Data TSV</a></p></div>"
+        )
+    for svg_path in sorted((important_dir / "figures").glob("diversity_richness_by_metadata_*.svg"))[:1]:
+        stem = svg_path.stem
+        diversity_figure_items.append(
+            f"<div><h3>{html.escape(stem.replace('_', ' '))}</h3><img src='figures/{html.escape(svg_path.name)}' alt='{html.escape(stem)}'>"
+            f"<p><a href='figures/{html.escape(stem)}.png'>PNG</a> | <a href='figures/{html.escape(svg_path.name)}'>SVG</a> | <a href='figures/{html.escape(stem)}.pdf'>PDF</a> | <a href='figures/{html.escape(stem)}.data.tsv'>Data TSV</a></p></div>"
+        )
+    diversity_figures_html = "<div class='figure-row'>" + "".join(diversity_figure_items) + "</div>" if diversity_figure_items else "<p>No diversity figures were generated because feature rows were unavailable.</p>"
     report_path = important_dir / "results.html"
     report_path.write_text(
         f"""<!doctype html>
@@ -9940,6 +10633,7 @@ th {{ background: #f0f4f8; }}
 <a href="#cooccurrence">Co-occurrence / Genomic Context</a>
 <a href="#metadata-associations">Metadata Associations</a>
 <a href="#lineage">Lineage / Clonal Structure</a>
+<a href="#diversity">Diversity / Pan-feature Summary</a>
 <a href="#files">Important Files</a>
 <a href="#warnings">Warnings</a>
 </nav>
@@ -10028,6 +10722,18 @@ th {{ background: #f0f4f8; }}
 <h3>Selected feature lineage report</h3>
 {lineage_presence_table_html}
 <div class="downloads"><a href="figures/lineage_clonal_structure.html">Open interactive lineage report</a><a href="lineage_tables.zip">Download lineage tables ZIP</a><a href="lineage_figures.zip">Download lineage figures ZIP</a><a href="tables/lineage_summary.tsv">Download sample lineage summary</a><a href="tables/lineage_distribution.tsv">Download lineage distribution</a><a href="tables/lineage_metadata_overlap.tsv">Download metadata-lineage overlap</a><a href="tables/lineage_feature_burden.tsv">Download lineage feature burden</a><a href="tables/lineage_feature_enrichment.tsv">Download lineage feature enrichment</a><a href="tables/lineage_adjusted_top_findings.tsv">Download lineage-adjusted top findings</a><a href="tables/lineage_feature_presence.tsv">Download selected feature lineage table</a><a href="tables/lineage_written_summaries.tsv">Download written summaries</a></div></section>
+<section id="diversity"><h2>Diversity / Pan-feature Summary</h2><div class="warning">Diversity summaries reflect detected annotation features, not complete biological diversity. Results depend on selected databases, genome quality, sample composition, and feature-calling tools.</div>
+{diversity_cards_html}
+{diversity_written_html}
+<iframe src="figures/diversity_analysis.html" title="Diversity and pan-feature summary interactive report"></iframe>
+{diversity_figures_html}
+<h3>Feature richness by genome</h3>
+{diversity_richness_table_html}
+<h3>Core/common/accessory/rare features</h3>
+{diversity_class_table_html}
+<h3>Metadata-stratified diversity</h3>
+{diversity_metadata_table_html}
+<div class="downloads"><a href="figures/diversity_analysis.html">Open interactive diversity report</a><a href="diversity_tables.zip">Download diversity tables ZIP</a><a href="diversity_figures.zip">Download diversity figures ZIP</a><a href="tables/diversity_feature_richness_by_sample.tsv">Download feature richness by sample</a><a href="tables/diversity_database_by_sample.tsv">Download database diversity by sample</a><a href="tables/diversity_database_by_sample_wide.tsv">Download wide database diversity</a><a href="tables/diversity_core_common_accessory_rare_features.tsv">Download feature class table</a><a href="tables/diversity_core_accessory_summary_by_database.tsv">Download core/accessory summary</a><a href="tables/diversity_pan_feature_accumulation.tsv">Download pan-feature accumulation</a><a href="tables/diversity_jaccard_distance_matrix.tsv">Download Jaccard matrix</a><a href="tables/diversity_jaccard_pairs.tsv">Download Jaccard pairs</a><a href="tables/diversity_by_metadata_group.tsv">Download metadata-stratified diversity</a><a href="tables/diversity_written_summaries.tsv">Download written summaries</a></div></section>
 <section id="files"><h2>Important Files</h2><ul>
 <li><a href="../basic/enriched_genome_dataset.csv">Enriched genome dataset CSV</a></li>
 <li><a href="key_tables/qc_step_summary.tsv">QC step summary</a></li>
@@ -10054,6 +10760,11 @@ th {{ background: #f0f4f8; }}
 <li><a href="tables/lineage_feature_enrichment.tsv">Lineage feature enrichment</a></li>
 <li><a href="tables/lineage_adjusted_top_findings.tsv">Lineage-adjusted top findings</a></li>
 <li><a href="tables/lineage_written_summaries.tsv">Lineage written summaries</a></li>
+<li><a href="figures/diversity_analysis.html">Interactive diversity / pan-feature summary report</a></li>
+<li><a href="tables/diversity_feature_richness_by_sample.tsv">Diversity feature richness by sample</a></li>
+<li><a href="tables/diversity_core_common_accessory_rare_features.tsv">Diversity core/common/accessory/rare features</a></li>
+<li><a href="tables/diversity_pan_feature_accumulation.tsv">Diversity pan-feature accumulation</a></li>
+<li><a href="tables/diversity_jaccard_distance_matrix.tsv">Diversity Jaccard matrix</a></li>
 <li><a href="../panr2_inputs/features/all_features.tsv">Complete standardized feature table</a></li>
 <li><a href="../panr2_inputs/manifest/schema_validation_summary.txt">Feature-contract validation summary</a></li>
 </ul></section>
@@ -10072,6 +10783,7 @@ th {{ background: #f0f4f8; }}
         **cooccurrence_outputs,
         **metadata_association_outputs,
         **lineage_outputs,
+        **diversity_outputs,
     }
 
 
@@ -10099,7 +10811,8 @@ def write_user_output_bundles(
         cooccurrence_outputs = write_important_cooccurrence_context_outputs(sample_dir, out_dir, important_dir)
         metadata_association_outputs = write_important_metadata_association_outputs(sample_dir, out_dir, important_dir)
         lineage_outputs = write_important_lineage_outputs(sample_dir, out_dir, important_dir)
-        outputs.update(write_important_results_report(sample_dir, out_dir, important_dir, geographic_outputs, qc_outputs, prevalence_outputs, variation_outputs, temporal_outputs, cooccurrence_outputs, metadata_association_outputs, lineage_outputs))
+        diversity_outputs = write_important_diversity_outputs(sample_dir, out_dir, important_dir)
+        outputs.update(write_important_results_report(sample_dir, out_dir, important_dir, geographic_outputs, qc_outputs, prevalence_outputs, variation_outputs, temporal_outputs, cooccurrence_outputs, metadata_association_outputs, lineage_outputs, diversity_outputs))
         write_rows(
             manifest_dir / "important_output_manifest.tsv",
             [
