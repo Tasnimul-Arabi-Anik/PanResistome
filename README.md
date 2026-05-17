@@ -115,7 +115,7 @@ Database setup automation is documented in [`docs/database_automation_matrix.md`
 
 For large runs, add `--large_dataset true` or combine a resource profile with `large`, for example `-profile conda,mamba,desktop_parallel,large`. Large-dataset mode still writes complete feature TSV outputs, but caps report-facing matrices/co-occurrence/proximity summaries, switches the handoff pages to compact mode, summarizes top features per database, and records the applied limits in `panr2_inputs/manifest/report_controls.tsv`. Complete proximity evidence is preserved separately as `panr2_inputs/cross_database/feature_proximity_all.tsv`.
 
-Use `--output_mode basic|important|all` to control the final user-facing bundle. The default is `all`, preserving the complete advanced output tree. `basic` is intentionally minimal: the final sample directory contains only `basic/enriched_genome_dataset.csv` and `basic/enriched_genome_dataset.tsv`, one row per genome with metadata, QC summaries, annotation burdens, compact annotation lists, lineage labels, and module provenance. `important` publishes the enriched dataset plus `important/results.html`, a curated report with Featured Results, Run Overview, QC Summary, Prevalence, Geographic Distribution, Variations, Temporal Trends, Co-occurrence / Genomic Context, Metadata Associations, Warnings, and Important Files sections; it includes portable PNG/SVG/PDF/TSV figure outputs, key tables, an interactive prevalence viewer with database/metric/top-N/sort/filter controls, an interactive geographic viewer with database/feature/burden/geographic-level/metric/minimum-group-size controls, an interactive variation viewer with database/metric/top-N/sort controls, an interactive temporal trend viewer with database/trend/support/feature controls, an interactive co-occurrence/context viewer with database/support/effect controls, an interactive metadata-association viewer with database/group/significance/effect/display/support controls, and links to the complete `panr2_inputs/` handoff bundle.
+Use `--output_mode basic|important|all` to control the final user-facing bundle. The default is `all`, preserving the complete advanced output tree. `basic` is intentionally minimal: the final sample directory contains only `basic/enriched_genome_dataset.csv` and `basic/enriched_genome_dataset.tsv`, one row per genome with metadata, QC summaries, annotation burdens, compact annotation lists, lineage labels, and module provenance. `important` publishes the enriched dataset plus `important/results.html`, a curated report with Featured Results, Run Overview, QC Summary, Prevalence, Geographic Distribution, Variations, Temporal Trends, Co-occurrence / Genomic Context, Metadata Associations, Lineage / Clonal Structure, Warnings, and Important Files sections; it includes portable PNG/SVG/PDF/TSV figure outputs, key tables, an interactive prevalence viewer with database/metric/top-N/sort/filter controls, an interactive geographic viewer with database/feature/burden/geographic-level/metric/minimum-group-size controls, an interactive variation viewer with database/metric/top-N/sort controls, an interactive temporal trend viewer with database/trend/support/feature controls, an interactive co-occurrence/context viewer with database/support/effect controls, an interactive metadata-association viewer with database/group/significance/effect/display/support controls, an interactive lineage viewer with MLST ST/ANI cluster/BioProject/combined-lineage controls, and links to the complete `panr2_inputs/` handoff bundle.
 
 For 300+ genome desktop validations, start with CheckM2, ANI, and AMRFinderPlus disabled, then add those heavier stages intentionally. The documented 300-record Klebsiella large-mode run used `--run_checkm2 false --run_ani false --run_amrfinderplus false` and still validated FetchM2, sequence QC, QUAST, Mash, ABRicate AMR/VFDB/PlasmidFinder, IntegronFinder, MLST, PanR2 feature contracts, and compact report safeguards. FastANI all-vs-all and AMRFinderPlus nucleotide `tblastn` were the observed long-running optional stages at this scale. If ANI is enabled with `--large_dataset true`, the default `--ani_large_run_strategy auto` skips all-vs-all ANI above `--ani_max_all_vs_all_genomes` and writes an ANI status audit instead of accidentally launching a long all-vs-all run.
 
@@ -709,6 +709,13 @@ results/
     │   ├── tables/metadata_usability_summary.tsv
     │   ├── tables/metadata_burden_omnibus.tsv
     │   ├── tables/metadata_category_omnibus.tsv
+    │   ├── tables/lineage_summary.tsv
+    │   ├── tables/lineage_distribution.tsv
+    │   ├── tables/lineage_metadata_overlap.tsv
+    │   ├── tables/lineage_feature_burden.tsv
+    │   ├── tables/lineage_feature_enrichment.tsv
+    │   ├── tables/lineage_feature_presence.tsv
+    │   ├── tables/lineage_adjusted_top_findings.tsv
     │   ├── cooccurrence_tables.zip
     │   ├── cooccurrence_figures.zip
     │   ├── prevalence_tables.zip
@@ -717,6 +724,8 @@ results/
     │   ├── geographic_figures.zip
     │   ├── metadata_association_tables.zip
     │   ├── metadata_association_figures.zip
+    │   ├── lineage_tables.zip
+    │   ├── lineage_figures.zip
     │   ├── variation_figures.zip
     │   ├── figures/qc_funnel.png
     │   ├── figures/qc_funnel.svg
@@ -768,7 +777,15 @@ results/
     │   ├── figures/metadata_burden_boxplot_<db>_<metadata>.svg
     │   ├── figures/metadata_burden_boxplot_<db>_<metadata>.pdf
     │   ├── figures/metadata_category_enrichment_<db>_<metadata>.svg
-    │   └── figures/metadata_category_enrichment_<db>_<metadata>.pdf
+    │   ├── figures/metadata_category_enrichment_<db>_<metadata>.pdf
+    │   ├── figures/lineage_clonal_structure.html
+    │   ├── figures/lineage_distribution_<lineage_type>.svg
+    │   ├── figures/lineage_metadata_overlap_<lineage_type>_<metadata>.svg
+    │   ├── figures/lineage_database_burden_<db>_<lineage_type>.svg
+    │   ├── figures/lineage_feature_heatmap_<db>_<lineage_type>.svg
+    │   ├── figures/lineage_feature_enrichment_<db>_<lineage_type>.svg
+    │   ├── figures/lineage_feature_presence_<db>_<feature>_<lineage_type>.svg
+    │   └── figures/lineage_confounding_top_findings.svg
     └── panr2_inputs/
 
 --output_mode all

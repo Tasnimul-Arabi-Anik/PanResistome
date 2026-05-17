@@ -8598,6 +8598,796 @@ refreshControls(); render();
     }
 
 
+def _lineage_support_label(lineage_n: int, outside_n: int | None = None) -> str:
+    minimum = lineage_n if outside_n is None else min(lineage_n, outside_n)
+    if minimum < 5:
+        return "insufficient_support"
+    if minimum < 10:
+        return "descriptive_only"
+    if minimum < 30:
+        return "exploratory"
+    if minimum >= 100:
+        return "strong_support"
+    return "standard_support"
+
+
+def _lineage_dominance_label(fraction: float | None) -> str:
+    if fraction is None:
+        return "insufficient_lineage_data"
+    if fraction >= 0.90:
+        return "severe_lineage_confounding"
+    if fraction >= 0.70:
+        return "strong_lineage_confounding"
+    if fraction >= 0.50:
+        return "possible_lineage_confounding"
+    return "not_lineage_dominated"
+
+
+def _lineage_interpretation_label(
+    q_value: float | None,
+    lineage_n: int,
+    outside_n: int,
+    prevalence_in: float,
+    prevalence_outside: float,
+    warning_flags: str,
+) -> str:
+    support = _lineage_support_label(lineage_n, outside_n)
+    flags = {flag for flag in str(warning_flags or "").split(";") if flag}
+    if support == "insufficient_support":
+        return "insufficient_support"
+    if support == "descriptive_only":
+        return "descriptive_only"
+    if prevalence_in >= 0.80 and prevalence_outside <= 0.20 and lineage_n >= 10:
+        return "feature_lineage_specific"
+    if q_value is not None and q_value <= 0.05 and abs(prevalence_in - prevalence_outside) >= 0.20 and not {"BioProject_lineage_overlap", "small_lineage_group"}.intersection(flags):
+        return "feature_lineage_enriched"
+    if support == "exploratory" or (q_value is not None and q_value <= 0.10):
+        return "exploratory"
+    return "descriptive_only"
+
+
+def write_important_lineage_outputs(
+    sample_dir: Path,
+    out_dir: Path,
+    important_dir: Path,
+    top_n: int = 20,
+    max_features_per_database: int = 200,
+) -> dict[str, str]:
+    tables = important_dir / "tables"
+    figures = important_dir / "figures"
+    tables.mkdir(parents=True, exist_ok=True)
+    figures.mkdir(parents=True, exist_ok=True)
+
+    features = read_table(out_dir / "features" / "all_features.tsv")
+    metadata_rows = read_table(sample_dir / "basic" / "enriched_genome_dataset.csv")
+    if not metadata_rows:
+        metadata_rows = normalize_metadata_rows(load_metadata_rows(sample_dir))
+    metadata_by_sample = {row.get("assembly_accession", ""): row for row in metadata_rows if row.get("assembly_accession")}
+    samples = sorted(set(metadata_by_sample) | {row.get("assembly_accession", "") or row.get("sample_id", "") for row in features if row.get("assembly_accession") or row.get("sample_id")})
+    for sample in samples:
+        metadata_by_sample.setdefault(sample, {"assembly_accession": sample, "sample_id": sample})
+    sample_count = len(samples)
+
+    def clean_metadata_value(value: str) -> str:
+        text = str(value or "").strip()
+        return "" if is_missing_value(text) else text
+
+    def extract_mlst_st(feature_id: str) -> str:
+        text = str(feature_id or "").strip()
+        if is_placeholder_mlst_feature(text):
+            return ""
+        if text.startswith("ST_"):
+            return text
+        match = re.search(r"ST[-_: ]*([A-Za-z0-9]+)", text, flags=re.IGNORECASE)
+        if match:
+            st_value = match.group(1).strip("_:- ")
+            if st_value and not is_missing_value(st_value):
+                return f"ST_{st_value}"
+        return ""
+
+    mlst_by_sample: dict[str, str] = {}
+    for sample, row in metadata_by_sample.items():
+        value = clean_metadata_value(row.get("mlst_ST", ""))
+        if value:
+            mlst_by_sample[sample] = value
+    for row in features:
+        if row.get("database") != "mlst" or row.get("presence", "1") != "1":
+            continue
+        sample = row.get("assembly_accession", "") or row.get("sample_id", "")
+        feature_id = row.get("feature_id", "")
+        category = row.get("feature_category", "")
+        st_value = extract_mlst_st(feature_id)
+        if sample and st_value and (category == "sequence_type" or "ST" in feature_id.upper()):
+            mlst_by_sample.setdefault(sample, st_value)
+
+    ani_by_sample = {sample: clean_metadata_value(row.get("ani_cluster", "")) for sample, row in metadata_by_sample.items() if clean_metadata_value(row.get("ani_cluster", ""))}
+    ani_by_sample.update({sample: cluster for sample, cluster in _ani_cluster_by_sample(out_dir).items() if cluster})
+    bioproject_by_sample = {sample: clean_metadata_value(row.get("bioproject", "")) for sample, row in metadata_by_sample.items() if clean_metadata_value(row.get("bioproject", ""))}
+    combined_by_sample = {
+        sample: mlst_by_sample.get(sample) or ani_by_sample.get(sample) or bioproject_by_sample.get(sample, "")
+        for sample in samples
+    }
+    lineage_maps = {
+        "mlst_ST": mlst_by_sample,
+        "ani_cluster": ani_by_sample,
+        "bioproject": bioproject_by_sample,
+        "combined_lineage_label": {sample: value for sample, value in combined_by_sample.items() if value},
+    }
+    available_lineage_types = [
+        lineage_type
+        for lineage_type in ["mlst_ST", "ani_cluster", "bioproject", "combined_lineage_label"]
+        if any(lineage_maps[lineage_type].get(sample, "") for sample in samples)
+    ]
+    default_lineage_type = "mlst_ST" if "mlst_ST" in available_lineage_types else ("ani_cluster" if "ani_cluster" in available_lineage_types else (available_lineage_types[0] if available_lineage_types else "bioproject"))
+
+    summary_rows = []
+    for sample in samples:
+        mlst = mlst_by_sample.get(sample, "")
+        ani = ani_by_sample.get(sample, "")
+        bioproject = bioproject_by_sample.get(sample, "")
+        combined = combined_by_sample.get(sample, "")
+        status_flags = []
+        if not mlst:
+            status_flags.append("missing_MLST")
+        if not ani:
+            status_flags.append("missing_ANI")
+        if not combined:
+            status_flags.append("lineage_data_unavailable")
+        summary_rows.append({
+            "assembly_accession": sample,
+            "sample_id": metadata_by_sample.get(sample, {}).get("sample_id", sample),
+            "mlst_ST": mlst,
+            "ani_cluster": ani,
+            "bioproject": bioproject,
+            "combined_lineage_label": combined,
+            "lineage_data_status": "lineage_context_available" if combined else "lineage_data_unavailable",
+            "warning_flags": _flag_string(status_flags),
+        })
+    summary_path = tables / "lineage_summary.tsv"
+    summary_fields = ["assembly_accession", "sample_id", "mlst_ST", "ani_cluster", "bioproject", "combined_lineage_label", "lineage_data_status", "warning_flags"]
+    write_rows(summary_path, summary_rows, summary_fields)
+
+    def group_samples_by_lineage(lineage_type: str) -> dict[str, set[str]]:
+        groups: dict[str, set[str]] = defaultdict(set)
+        values = lineage_maps.get(lineage_type, {})
+        for sample in samples:
+            value = values.get(sample, "")
+            if value and not is_missing_value(value):
+                groups[value].add(sample)
+        return dict(groups)
+
+    def top_value(sample_set: set[str], column: str) -> tuple[str, int, float]:
+        values = [metadata_by_sample.get(sample, {}).get(column, "") for sample in sample_set]
+        values = [value for value in values if value and not is_missing_value(value)]
+        if not values:
+            return "", 0, 0.0
+        value, count = Counter(values).most_common(1)[0]
+        return value, count, count / len(values) if values else 0.0
+
+    distribution_rows = []
+    for lineage_type in available_lineage_types:
+        groups = group_samples_by_lineage(lineage_type)
+        for lineage_id, lineage_samples in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0])):
+            lineage_n = len(lineage_samples)
+            top_country, _, top_country_fraction = top_value(lineage_samples, "country")
+            top_source, _, top_source_fraction = top_value(lineage_samples, "isolation_source")
+            top_project, _, top_project_fraction = top_value(lineage_samples, "bioproject")
+            dataset_fraction = lineage_n / sample_count if sample_count else 0.0
+            flags = []
+            if lineage_n < 5:
+                flags.append("small_lineage_group")
+            if dataset_fraction >= 0.50:
+                flags.append("single_lineage_dominance")
+                if lineage_type == "mlst_ST":
+                    flags.append("dominant_ST")
+                if lineage_type == "ani_cluster":
+                    flags.append("dominant_ANI_cluster")
+            if top_project_fraction >= 0.70 and lineage_n >= 3:
+                flags.append("BioProject_lineage_overlap")
+            distribution_rows.append({
+                "lineage_type": lineage_type,
+                "lineage_id": lineage_id,
+                "total_genomes": str(lineage_n),
+                "fraction_of_dataset": f"{dataset_fraction:.4f}",
+                "fraction_display": f"{dataset_fraction * 100:.1f}% ({lineage_n}/{sample_count})" if sample_count else "",
+                "typed_or_clustered_status": "typed_or_clustered",
+                "top_country": top_country,
+                "top_country_fraction": f"{top_country_fraction:.4f}",
+                "top_source": top_source,
+                "top_source_fraction": f"{top_source_fraction:.4f}",
+                "top_bioproject": top_project,
+                "top_bioproject_fraction": f"{top_project_fraction:.4f}",
+                "warning_flags": _flag_string(flags),
+            })
+    distribution_path = tables / "lineage_distribution.tsv"
+    distribution_fields = [
+        "lineage_type", "lineage_id", "total_genomes", "fraction_of_dataset", "fraction_display", "typed_or_clustered_status",
+        "top_country", "top_country_fraction", "top_source", "top_source_fraction", "top_bioproject", "top_bioproject_fraction", "warning_flags",
+    ]
+    write_rows(distribution_path, distribution_rows, distribution_fields)
+
+    metadata_columns = [
+        column
+        for column in ["country", "continent", "host", "isolation_source", "sample_type", "collection_year", "bioproject"]
+        if any(clean_metadata_value(metadata_by_sample.get(sample, {}).get(column, "")) for sample in samples)
+    ]
+    default_metadata_column = "isolation_source" if "isolation_source" in metadata_columns else ("country" if "country" in metadata_columns else (metadata_columns[0] if metadata_columns else "bioproject"))
+
+    overlap_rows = []
+    for lineage_type in available_lineage_types:
+        values = lineage_maps.get(lineage_type, {})
+        for metadata_column in metadata_columns:
+            groups: dict[str, set[str]] = defaultdict(set)
+            for sample in samples:
+                group_value = clean_metadata_value(metadata_by_sample.get(sample, {}).get(metadata_column, ""))
+                if group_value:
+                    groups[group_value].add(sample)
+            for metadata_group, group_samples in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0])):
+                lineage_counts = Counter(values.get(sample, "") for sample in group_samples if values.get(sample, ""))
+                if not lineage_counts:
+                    continue
+                dominant_lineage, dominant_count = lineage_counts.most_common(1)[0]
+                dominant_fraction = dominant_count / len(group_samples) if group_samples else 0.0
+                dominance_label = _lineage_dominance_label(dominant_fraction)
+                for lineage_id, lineage_count in sorted(lineage_counts.items(), key=lambda item: (-item[1], item[0])):
+                    fraction = lineage_count / len(group_samples) if group_samples else 0.0
+                    flags = []
+                    if dominance_label != "not_lineage_dominated":
+                        flags.append("metadata_lineage_confounding")
+                    if dominance_label in {"strong_lineage_confounding", "severe_lineage_confounding"}:
+                        flags.append("single_lineage_dominance")
+                    if len(group_samples) < 5:
+                        flags.append("small_lineage_group")
+                    overlap_rows.append({
+                        "lineage_type": lineage_type,
+                        "metadata_column": metadata_column,
+                        "metadata_group": metadata_group,
+                        "lineage_id": lineage_id,
+                        "group_total_genomes": str(len(group_samples)),
+                        "lineage_genomes_in_group": str(lineage_count),
+                        "lineage_fraction_in_group": f"{fraction:.4f}",
+                        "lineage_fraction_percent": f"{fraction * 100:.2f}",
+                        "dominant_lineage": dominant_lineage,
+                        "dominant_lineage_fraction": f"{dominant_fraction:.4f}",
+                        "dominance_label": dominance_label,
+                        "warning_flags": _flag_string(flags),
+                    })
+    overlap_path = tables / "lineage_metadata_overlap.tsv"
+    overlap_fields = [
+        "lineage_type", "metadata_column", "metadata_group", "lineage_id", "group_total_genomes", "lineage_genomes_in_group",
+        "lineage_fraction_in_group", "lineage_fraction_percent", "dominant_lineage", "dominant_lineage_fraction", "dominance_label", "warning_flags",
+    ]
+    write_rows(overlap_path, overlap_rows, overlap_fields)
+
+    presence = feature_presence(features)
+    feature_name_by_key = {}
+    category_by_key = {}
+    feature_rows_by_sample_database: dict[tuple[str, str], int] = defaultdict(int)
+    feature_rows_by_sample_database_feature: dict[tuple[str, str, str], int] = defaultdict(int)
+    feature_samples_by_database: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for row in features:
+        if row.get("presence", "1") != "1":
+            continue
+        sample = row.get("assembly_accession", "") or row.get("sample_id", "")
+        database = row.get("database", "")
+        feature_id = row.get("feature_id", "")
+        if not sample or not database or not feature_id:
+            continue
+        feature_name_by_key[(database, feature_id)] = row.get("feature_name", "")
+        category_by_key[(database, feature_id)] = row.get("feature_category", "")
+        feature_rows_by_sample_database[(sample, database)] += 1
+        feature_rows_by_sample_database_feature[(sample, database, feature_id)] += 1
+        feature_samples_by_database[(sample, database)].add(feature_id)
+    databases = sorted({database for database, _ in presence})
+    default_database = "amr" if "amr" in databases else (databases[0] if databases else "")
+
+    by_database: dict[str, list[tuple[tuple[str, str], set[str]]]] = defaultdict(list)
+    for key, present_samples in presence.items():
+        by_database[key[0]].append((key, present_samples))
+    limited_presence: dict[tuple[str, str], set[str]] = {}
+    capped_databases = []
+    for database, items in by_database.items():
+        ranked = sorted(items, key=lambda item: (-len(item[1]), item[0][1]))
+        if len(ranked) > max_features_per_database:
+            capped_databases.append(database)
+        for key, present_samples in ranked[:max_features_per_database]:
+            limited_presence[key] = present_samples
+
+    burden_rows = []
+    for lineage_type in available_lineage_types:
+        groups = group_samples_by_lineage(lineage_type)
+        for lineage_id, lineage_samples in groups.items():
+            lineage_n = len(lineage_samples)
+            for database in databases:
+                counts = [feature_rows_by_sample_database.get((sample, database), 0) for sample in sorted(lineage_samples)]
+                positive_samples = {sample for sample in lineage_samples if feature_samples_by_database.get((sample, database), set())}
+                unique_features = set()
+                for sample in lineage_samples:
+                    unique_features.update(feature_samples_by_database.get((sample, database), set()))
+                flags = []
+                if lineage_n < 5:
+                    flags.append("small_lineage_group")
+                burden_rows.append({
+                    "lineage_type": lineage_type,
+                    "lineage_id": lineage_id,
+                    "database": database,
+                    "lineage_n": str(lineage_n),
+                    "total_feature_rows": str(sum(counts)),
+                    "unique_features": str(len(unique_features)),
+                    "positive_genomes": str(len(positive_samples)),
+                    "prevalence_percent": f"{(len(positive_samples) / lineage_n * 100) if lineage_n else 0.0:.2f}",
+                    "mean_features_per_genome": f"{_mean([float(value) for value in counts]):.4f}",
+                    "median_features_per_genome": f"{_median([float(value) for value in counts]):.4f}",
+                    "max_features_per_genome": str(max(counts) if counts else 0),
+                    "support_label": _lineage_support_label(lineage_n),
+                    "warning_flags": _flag_string(flags),
+                })
+    burden_path = tables / "lineage_feature_burden.tsv"
+    burden_fields = [
+        "lineage_type", "lineage_id", "database", "lineage_n", "total_feature_rows", "unique_features", "positive_genomes",
+        "prevalence_percent", "mean_features_per_genome", "median_features_per_genome", "max_features_per_genome", "support_label", "warning_flags",
+    ]
+    write_rows(burden_path, burden_rows, burden_fields)
+
+    presence_rows = []
+    for lineage_type in available_lineage_types:
+        groups = group_samples_by_lineage(lineage_type)
+        for lineage_id, lineage_samples in groups.items():
+            lineage_n = len(lineage_samples)
+            for (database, feature_id), present_samples in sorted(presence.items(), key=lambda item: (item[0][0], item[0][1])):
+                positive_samples = present_samples & lineage_samples
+                if not positive_samples:
+                    continue
+                feature_rows_count = sum(feature_rows_by_sample_database_feature.get((sample, database, feature_id), 0) for sample in positive_samples)
+                top_country, _, _ = top_value(positive_samples, "country")
+                top_source, _, _ = top_value(positive_samples, "isolation_source")
+                top_project, _, top_project_fraction = top_value(positive_samples, "bioproject")
+                flags = []
+                if lineage_n < 5:
+                    flags.append("small_lineage_group")
+                if top_project_fraction >= 0.70 and len(positive_samples) >= 3:
+                    flags.append("BioProject_lineage_overlap")
+                prevalence_percent = (len(positive_samples) / lineage_n * 100) if lineage_n else 0.0
+                presence_rows.append({
+                    "database": database,
+                    "feature_id": feature_id,
+                    "feature_name": feature_name_by_key.get((database, feature_id), ""),
+                    "lineage_type": lineage_type,
+                    "lineage_id": lineage_id,
+                    "lineage_n": str(lineage_n),
+                    "positive_genomes": str(len(positive_samples)),
+                    "prevalence_percent": f"{prevalence_percent:.2f}",
+                    "prevalence_display": f"{prevalence_percent:.1f}% ({len(positive_samples)}/{lineage_n})" if lineage_n else "",
+                    "feature_rows": str(feature_rows_count),
+                    "mean_hits_per_positive_genome": f"{(feature_rows_count / len(positive_samples)) if positive_samples else 0.0:.4f}",
+                    "top_country": top_country,
+                    "top_source": top_source,
+                    "top_bioproject": top_project,
+                    "warning_flags": _flag_string(flags),
+                })
+    presence_path = tables / "lineage_feature_presence.tsv"
+    presence_fields = [
+        "database", "feature_id", "feature_name", "lineage_type", "lineage_id", "lineage_n", "positive_genomes",
+        "prevalence_percent", "prevalence_display", "feature_rows", "mean_hits_per_positive_genome", "top_country", "top_source", "top_bioproject", "warning_flags",
+    ]
+    write_rows(presence_path, presence_rows, presence_fields)
+
+    enrichment_rows = []
+    for lineage_type in available_lineage_types:
+        groups = group_samples_by_lineage(lineage_type)
+        lineage_samples_any = set().union(*groups.values()) if groups else set()
+        for lineage_id, lineage_samples in groups.items():
+            outside_samples = lineage_samples_any - lineage_samples
+            lineage_n = len(lineage_samples)
+            outside_n = len(outside_samples)
+            if lineage_n == 0 or outside_n == 0:
+                continue
+            for (database, feature_id), present_samples in sorted(limited_presence.items(), key=lambda item: (item[0][0], item[0][1])):
+                positive_lineage = present_samples & lineage_samples
+                positive_outside = present_samples & outside_samples
+                a = len(positive_lineage)
+                b = lineage_n - a
+                c = len(positive_outside)
+                d = outside_n - c
+                if a + c < 1:
+                    continue
+                prevalence_in = a / lineage_n if lineage_n else 0.0
+                prevalence_out = c / outside_n if outside_n else 0.0
+                support_label = _lineage_support_label(lineage_n, outside_n)
+                p_value = None
+                test_name = "descriptive_only"
+                if support_label not in {"insufficient_support", "descriptive_only"} and (a + c) >= 3:
+                    test_name, p_value = _binary_test_for_counts(a, b, c, d)
+                flags = ["multiple_testing", "exploratory_only"]
+                if lineage_n < 5:
+                    flags.append("small_lineage_group")
+                if a + c < 3:
+                    flags.append("low_positive_count")
+                top_project, _, top_project_fraction = top_value(positive_lineage, "bioproject")
+                if top_project_fraction >= 0.70 and len(positive_lineage) >= 3:
+                    flags.append("BioProject_lineage_overlap")
+                enrichment_rows.append({
+                    "lineage_type": lineage_type,
+                    "lineage_id": lineage_id,
+                    "database": database,
+                    "feature_id": feature_id,
+                    "feature_name": feature_name_by_key.get((database, feature_id), ""),
+                    "feature_category": category_by_key.get((database, feature_id), ""),
+                    "lineage_n": str(lineage_n),
+                    "outside_lineage_n": str(outside_n),
+                    "positive_in_lineage": str(a),
+                    "positive_outside_lineage": str(c),
+                    "prevalence_in_lineage": f"{prevalence_in:.4f}",
+                    "prevalence_outside_lineage": f"{prevalence_out:.4f}",
+                    "prevalence_difference": f"{prevalence_in - prevalence_out:.4f}",
+                    "prevalence_difference_percent": f"{(prevalence_in - prevalence_out) * 100:.2f}",
+                    "odds_ratio": f"{_odds_ratio(a, b, c, d):.6g}",
+                    "test_name": test_name,
+                    "p_value": _format_pvalue(p_value),
+                    "q_value": "",
+                    "support_label": support_label,
+                    "warning_flags": _flag_string(flags),
+                    "interpretation_label": "",
+                })
+    add_bh_qvalues(enrichment_rows)
+    for row in enrichment_rows:
+        q_value = _float_or_none(row.get("q_value", ""))
+        row["interpretation_label"] = _lineage_interpretation_label(
+            q_value,
+            int(row.get("lineage_n", "0") or 0),
+            int(row.get("outside_lineage_n", "0") or 0),
+            _float_or_none(row.get("prevalence_in_lineage", "")) or 0.0,
+            _float_or_none(row.get("prevalence_outside_lineage", "")) or 0.0,
+            row.get("warning_flags", ""),
+        )
+    enrichment_rows = sorted(
+        enrichment_rows,
+        key=lambda row: (
+            row.get("interpretation_label", "") not in {"feature_lineage_specific", "feature_lineage_enriched"},
+            -abs(_float_or_none(row.get("prevalence_difference", "")) or 0.0),
+            row.get("lineage_type", ""),
+            row.get("database", ""),
+            row.get("feature_id", ""),
+        ),
+    )
+    enrichment_path = tables / "lineage_feature_enrichment.tsv"
+    enrichment_fields = [
+        "lineage_type", "lineage_id", "database", "feature_id", "feature_name", "feature_category", "lineage_n", "outside_lineage_n",
+        "positive_in_lineage", "positive_outside_lineage", "prevalence_in_lineage", "prevalence_outside_lineage", "prevalence_difference",
+        "prevalence_difference_percent", "odds_ratio", "test_name", "p_value", "q_value", "support_label", "warning_flags", "interpretation_label",
+    ]
+    write_rows(enrichment_path, enrichment_rows, enrichment_fields)
+
+    adjusted_source = read_table(out_dir / "metadata_feature_analysis" / "lineage_adjusted_warnings.tsv")
+    adjusted_rows = []
+    for idx, row in enumerate(adjusted_source, start=1):
+        st_fraction = _float_or_none(row.get("dominant_ST_fraction", ""))
+        ani_fraction = _float_or_none(row.get("dominant_ani_cluster_fraction", "") or row.get("dominant_ANI_cluster_fraction", ""))
+        best_fraction = max([value for value in [st_fraction, ani_fraction] if value is not None] or [0.0])
+        lineage_label = _lineage_dominance_label(best_fraction)
+        flags = row.get("lineage_warning_flags", "")
+        adjusted_rows.append({
+            "finding_id": str(idx),
+            "database": row.get("database", ""),
+            "feature_id": row.get("feature_id", ""),
+            "metadata_column": row.get("metadata_column", ""),
+            "metadata_group": row.get("metadata_value", "") or row.get("metadata_group", ""),
+            "original_interpretation_label": row.get("finding_type", ""),
+            "supporting_samples": row.get("supporting_samples", ""),
+            "dominant_ST": row.get("dominant_ST", ""),
+            "dominant_ST_fraction": row.get("dominant_ST_fraction", ""),
+            "dominant_ANI_cluster": row.get("dominant_ani_cluster", "") or row.get("dominant_ANI_cluster", ""),
+            "dominant_ANI_cluster_fraction": row.get("dominant_ani_cluster_fraction", "") or row.get("dominant_ANI_cluster_fraction", ""),
+            "dominant_BioProject": "",
+            "dominant_BioProject_fraction": "",
+            "lineage_warning_flags": flags,
+            "lineage_adjusted_interpretation": lineage_label,
+            "recommended_interpretation": "treat_as_lineage_caution" if lineage_label != "not_lineage_dominated" else "lineage_not_dominant_in_supporting_samples",
+        })
+    adjusted_path = tables / "lineage_adjusted_top_findings.tsv"
+    adjusted_fields = [
+        "finding_id", "database", "feature_id", "metadata_column", "metadata_group", "original_interpretation_label", "supporting_samples",
+        "dominant_ST", "dominant_ST_fraction", "dominant_ANI_cluster", "dominant_ANI_cluster_fraction", "dominant_BioProject", "dominant_BioProject_fraction",
+        "lineage_warning_flags", "lineage_adjusted_interpretation", "recommended_interpretation",
+    ]
+    write_rows(adjusted_path, adjusted_rows, adjusted_fields)
+
+    figure_paths: list[Path] = []
+
+    def write_bar_figure(base_name: str, title: str, rows: list[dict[str, str]], label_field: str, value_field: str, fields: list[str]) -> tuple[Path, Path, Path, Path]:
+        data_path = figures / f"{base_name}.data.tsv"
+        svg_path = figures / f"{base_name}.svg"
+        png_path = figures / f"{base_name}.png"
+        pdf_path = figures / f"{base_name}.pdf"
+        write_rows(data_path, rows, fields)
+        _write_bar_svg(svg_path, rows, title, label_field, value_field)
+        _write_bar_png(png_path, rows, value_field)
+        _write_simple_pdf(pdf_path, title, [f"{row.get(label_field, '')}: {row.get(value_field, '')}" for row in rows[:60]])
+        figure_paths.extend([data_path, svg_path, png_path, pdf_path])
+        return data_path, svg_path, png_path, pdf_path
+
+    default_distribution_svg = figures / f"lineage_distribution_{_safe_filename(default_lineage_type)}.svg"
+    for lineage_type in available_lineage_types or [default_lineage_type]:
+        rows = [
+            row for row in distribution_rows
+            if row.get("lineage_type") == lineage_type
+        ][:top_n]
+        write_bar_figure(
+            f"lineage_distribution_{_safe_filename(lineage_type)}",
+            f"Lineage Distribution: {lineage_type}",
+            rows,
+            "lineage_id",
+            "total_genomes",
+            distribution_fields,
+        )
+
+    default_overlap_svg = figures / f"lineage_metadata_overlap_{_safe_filename(default_lineage_type)}_{_safe_filename(default_metadata_column)}.svg"
+    for lineage_type in available_lineage_types or [default_lineage_type]:
+        rows = [
+            row for row in overlap_rows
+            if row.get("lineage_type") == lineage_type and row.get("metadata_column") == default_metadata_column
+        ]
+        top_groups = {row.get("metadata_group", "") for row in sorted(rows, key=lambda row: (-int(row.get("group_total_genomes", "0") or 0), row.get("metadata_group", "")))[:10]}
+        top_lineages = {row.get("lineage_id", "") for row in sorted(rows, key=lambda row: (-int(row.get("lineage_genomes_in_group", "0") or 0), row.get("lineage_id", "")))[:10]}
+        plot_rows = [row for row in rows if row.get("metadata_group") in top_groups and row.get("lineage_id") in top_lineages]
+        base = f"lineage_metadata_overlap_{_safe_filename(lineage_type)}_{_safe_filename(default_metadata_column)}"
+        data_path = figures / f"{base}.data.tsv"
+        svg_path = figures / f"{base}.svg"
+        png_path = figures / f"{base}.png"
+        pdf_path = figures / f"{base}.pdf"
+        write_rows(data_path, plot_rows, overlap_fields)
+        _write_heatmap_svg(svg_path, plot_rows, f"{lineage_type} vs {default_metadata_column}", "metadata_group", "lineage_id", "lineage_fraction_percent")
+        _write_heatmap_png(png_path, plot_rows, "metadata_group", "lineage_id", "lineage_fraction_percent")
+        _write_simple_pdf(pdf_path, f"{lineage_type} vs {default_metadata_column}", [f"{row.get('metadata_group', '')}/{row.get('lineage_id', '')}: {row.get('lineage_fraction_percent', '')}%" for row in plot_rows[:60]])
+        figure_paths.extend([data_path, svg_path, png_path, pdf_path])
+
+    default_burden_svg = figures / f"lineage_database_burden_{_safe_filename(default_database)}_{_safe_filename(default_lineage_type)}.svg"
+    for lineage_type in available_lineage_types or [default_lineage_type]:
+        rows = [
+            row for row in burden_rows
+            if row.get("lineage_type") == lineage_type and row.get("database") == default_database
+        ]
+        rows = sorted(rows, key=lambda row: (-(_float_or_none(row.get("median_features_per_genome", "")) or 0.0), row.get("lineage_id", "")))[:top_n]
+        write_bar_figure(
+            f"lineage_database_burden_{_safe_filename(default_database)}_{_safe_filename(lineage_type)}",
+            f"{default_database} Burden by {lineage_type}",
+            rows,
+            "lineage_id",
+            "median_features_per_genome",
+            burden_fields,
+        )
+
+    heatmap_feature_rows = [
+        row for row in presence_rows
+        if row.get("database") == default_database and row.get("lineage_type") == default_lineage_type
+    ]
+    top_heatmap_features = {row.get("feature_id", "") for row in sorted(heatmap_feature_rows, key=lambda row: (-(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("feature_id", "")))[:top_n]}
+    top_heatmap_lineages = {row.get("lineage_id", "") for row in sorted(heatmap_feature_rows, key=lambda row: (-int(row.get("lineage_n", "0") or 0), row.get("lineage_id", "")))[:top_n]}
+    heatmap_rows = [row for row in heatmap_feature_rows if row.get("feature_id") in top_heatmap_features and row.get("lineage_id") in top_heatmap_lineages]
+    heatmap_base = f"lineage_feature_heatmap_{_safe_filename(default_database)}_{_safe_filename(default_lineage_type)}"
+    heatmap_data = figures / f"{heatmap_base}.data.tsv"
+    heatmap_svg = figures / f"{heatmap_base}.svg"
+    heatmap_png = figures / f"{heatmap_base}.png"
+    heatmap_pdf = figures / f"{heatmap_base}.pdf"
+    write_rows(heatmap_data, heatmap_rows, presence_fields)
+    _write_heatmap_svg(heatmap_svg, heatmap_rows, f"{default_database} Feature Prevalence by {default_lineage_type}", "feature_id", "lineage_id", "prevalence_percent")
+    _write_heatmap_png(heatmap_png, heatmap_rows, "feature_id", "lineage_id", "prevalence_percent")
+    _write_simple_pdf(heatmap_pdf, f"{default_database} Feature Prevalence by {default_lineage_type}", [f"{row.get('feature_id', '')}/{row.get('lineage_id', '')}: {row.get('prevalence_display', '')}" for row in heatmap_rows[:60]])
+    figure_paths.extend([heatmap_data, heatmap_svg, heatmap_png, heatmap_pdf])
+
+    enrichment_plot_rows = [
+        {
+            **row,
+            "feature_lineage": f"{row.get('feature_id', '')} / {row.get('lineage_id', '')}",
+            "abs_prevalence_difference_percent": f"{abs(_float_or_none(row.get('prevalence_difference_percent', '')) or 0.0):.2f}",
+        }
+        for row in enrichment_rows
+        if row.get("database") == default_database and row.get("lineage_type") == default_lineage_type
+    ][:top_n]
+    enrichment_base = f"lineage_feature_enrichment_{_safe_filename(default_database)}_{_safe_filename(default_lineage_type)}"
+    enrichment_data = figures / f"{enrichment_base}.data.tsv"
+    enrichment_svg = figures / f"{enrichment_base}.svg"
+    enrichment_png = figures / f"{enrichment_base}.png"
+    enrichment_pdf = figures / f"{enrichment_base}.pdf"
+    enrichment_plot_fields = [*enrichment_fields, "feature_lineage", "abs_prevalence_difference_percent"]
+    write_rows(enrichment_data, enrichment_plot_rows, enrichment_plot_fields)
+    _write_bar_svg(enrichment_svg, enrichment_plot_rows, f"{default_database} Lineage Enrichment", "feature_lineage", "abs_prevalence_difference_percent", "Absolute prevalence difference (%)")
+    _write_bar_png(enrichment_png, enrichment_plot_rows, "abs_prevalence_difference_percent")
+    _write_simple_pdf(enrichment_pdf, f"{default_database} Lineage Enrichment", [f"{row.get('feature_lineage', '')}: {row.get('prevalence_difference_percent', '')} pp" for row in enrichment_plot_rows])
+    figure_paths.extend([enrichment_data, enrichment_svg, enrichment_png, enrichment_pdf])
+
+    default_feature = ""
+    for row in sorted(presence_rows, key=lambda row: (row.get("database", "") != default_database, -(_float_or_none(row.get("positive_genomes", "")) or 0.0), row.get("feature_id", ""))):
+        if row.get("database") == default_database:
+            default_feature = row.get("feature_id", "")
+            break
+    selected_presence_rows = [
+        row for row in presence_rows
+        if row.get("database") == default_database and row.get("feature_id") == default_feature and row.get("lineage_type") == default_lineage_type
+    ]
+    selected_presence_rows = sorted(selected_presence_rows, key=lambda row: (-(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("lineage_id", "")))[:top_n]
+    selected_base = f"lineage_feature_presence_{_safe_filename(default_database)}_{_safe_filename(default_feature or 'feature')}_{_safe_filename(default_lineage_type)}"
+    selected_data = figures / f"{selected_base}.data.tsv"
+    selected_svg = figures / f"{selected_base}.svg"
+    selected_png = figures / f"{selected_base}.png"
+    selected_pdf = figures / f"{selected_base}.pdf"
+    write_rows(selected_data, selected_presence_rows, presence_fields)
+    _write_bar_svg(selected_svg, selected_presence_rows, f"{default_feature or default_database} by {default_lineage_type}", "lineage_id", "prevalence_percent", "Prevalence (%)")
+    _write_bar_png(selected_png, selected_presence_rows, "prevalence_percent")
+    _write_simple_pdf(selected_pdf, f"{default_feature or default_database} by {default_lineage_type}", [f"{row.get('lineage_id', '')}: {row.get('prevalence_display', '')}" for row in selected_presence_rows])
+    figure_paths.extend([selected_data, selected_svg, selected_png, selected_pdf])
+
+    confounding_plot_rows = []
+    severity_score = {
+        "not_lineage_dominated": 0,
+        "possible_lineage_confounding": 1,
+        "strong_lineage_confounding": 2,
+        "severe_lineage_confounding": 3,
+        "insufficient_lineage_data": 1,
+    }
+    for row in adjusted_rows[:top_n]:
+        label = row.get("lineage_adjusted_interpretation", "")
+        confounding_plot_rows.append({
+            **row,
+            "finding_label": f"{row.get('feature_id', '')} / {row.get('metadata_group', '')}"[:80],
+            "lineage_warning_score": str(severity_score.get(label, 0)),
+        })
+    confounding_base = "lineage_confounding_top_findings"
+    confounding_data = figures / f"{confounding_base}.data.tsv"
+    confounding_svg = figures / f"{confounding_base}.svg"
+    confounding_png = figures / f"{confounding_base}.png"
+    confounding_pdf = figures / f"{confounding_base}.pdf"
+    write_rows(confounding_data, confounding_plot_rows, [*adjusted_fields, "finding_label", "lineage_warning_score"])
+    _write_bar_svg(confounding_svg, confounding_plot_rows, "Lineage Confounding In Top Findings", "finding_label", "lineage_warning_score", "Warning severity")
+    _write_bar_png(confounding_png, confounding_plot_rows, "lineage_warning_score")
+    _write_simple_pdf(confounding_pdf, "Lineage Confounding In Top Findings", [f"{row.get('finding_label', '')}: {row.get('lineage_adjusted_interpretation', '')}" for row in confounding_plot_rows])
+    figure_paths.extend([confounding_data, confounding_svg, confounding_png, confounding_pdf])
+
+    lineage_warning_count = sum(1 for row in distribution_rows + overlap_rows + burden_rows + presence_rows + enrichment_rows + adjusted_rows if row.get("warning_flags") or row.get("lineage_warning_flags"))
+    dominant_st = next((row for row in distribution_rows if row.get("lineage_type") == "mlst_ST"), {})
+    dominant_ani = next((row for row in distribution_rows if row.get("lineage_type") == "ani_cluster"), {})
+    summary_stat_rows = [
+        {"metric": "samples", "value": str(sample_count), "message": "Samples represented in the important lineage report."},
+        {"metric": "lineage_types_available", "value": ",".join(available_lineage_types) or "none", "message": "Lineage/context views available for this run."},
+        {"metric": "genomes_with_mlst_ST", "value": str(sum(1 for sample in samples if mlst_by_sample.get(sample))), "message": "Genomes with MLST sequence type context."},
+        {"metric": "unique_STs", "value": str(len(set(mlst_by_sample.values()))), "message": "Unique MLST sequence types detected."},
+        {"metric": "dominant_ST", "value": dominant_st.get("lineage_id", ""), "message": dominant_st.get("fraction_display", "")},
+        {"metric": "genomes_with_ANI_cluster", "value": str(sum(1 for sample in samples if ani_by_sample.get(sample))), "message": "Genomes with ANI/skani cluster context."},
+        {"metric": "unique_ANI_clusters", "value": str(len(set(ani_by_sample.values()))), "message": "Unique ANI clusters detected."},
+        {"metric": "dominant_ANI_cluster", "value": dominant_ani.get("lineage_id", ""), "message": dominant_ani.get("fraction_display", "")},
+        {"metric": "bioprojects_detected", "value": str(len(set(bioproject_by_sample.values()))), "message": "BioProject identifiers represented in metadata."},
+        {"metric": "lineage_distribution_rows", "value": str(len(distribution_rows)), "message": "Lineage distribution rows."},
+        {"metric": "metadata_lineage_overlap_rows", "value": str(len(overlap_rows)), "message": "Metadata-lineage overlap rows."},
+        {"metric": "lineage_feature_burden_rows", "value": str(len(burden_rows)), "message": "Database-burden by lineage rows."},
+        {"metric": "lineage_feature_enrichment_rows", "value": str(len(enrichment_rows)), "message": "Feature-lineage enrichment comparisons."},
+        {"metric": "lineage_adjusted_top_findings_rows", "value": str(len(adjusted_rows)), "message": "Top findings with lineage-aware caution labels."},
+        {"metric": "warning_rows", "value": str(lineage_warning_count), "message": "Rows carrying lineage/context warning flags."},
+        {"metric": "feature_cap", "value": str(max_features_per_database), "message": f"Lineage enrichment feature cap per database. Capped databases: {','.join(sorted(capped_databases)) or 'none'}."},
+        {"metric": "default_view", "value": f"{default_lineage_type}|{default_database}|{default_metadata_column}|{default_feature}", "message": "Default lineage report controls."},
+    ]
+    summary_stats_path = tables / "lineage_report_summary.tsv"
+    write_rows(summary_stats_path, summary_stat_rows, ["metric", "value", "message"])
+
+    table_paths = [summary_path, distribution_path, overlap_path, burden_path, enrichment_path, adjusted_path, presence_path, summary_stats_path]
+    tables_zip = important_dir / "lineage_tables.zip"
+    figures_zip = important_dir / "lineage_figures.zip"
+    _write_zip_bundle(tables_zip, table_paths, important_dir)
+    _write_zip_bundle(figures_zip, figure_paths, important_dir)
+
+    interactive_html = figures / "lineage_clonal_structure.html"
+    interactive_html.write_text(
+        f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>Lineage / Clonal Structure</title>
+<style>
+body {{ font-family: Arial, sans-serif; color: #1f2933; margin: 1.5rem; }}
+label {{ font-weight: 700; margin-right: 0.35rem; }}
+select {{ margin: 0 1rem 0.75rem 0; padding: 0.35rem; }}
+.warning {{ background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; margin: 0.75rem 0; }}
+.panel {{ border: 1px solid #d9e2ec; background: #f8fafc; padding: 0.75rem; margin: 0.75rem 0; }}
+.figure-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }}
+.figure-row img {{ max-width: 100%; border: 1px solid #d9e2ec; background: white; }}
+table {{ border-collapse: collapse; width: 100%; font-size: 0.88rem; }}
+th, td {{ border: 1px solid #d9e2ec; padding: 0.35rem; text-align: left; }}
+th {{ background: #f0f4f8; }}
+.scrollbox {{ max-height: 620px; overflow: auto; border: 1px solid #d9e2ec; }}
+</style></head><body>
+<h1>Lineage / Clonal Structure</h1>
+<div class="warning">Lineage summaries are exploratory and do not replace phylogenetic analysis. Apparent metadata associations may reflect clonal structure, BioProject sampling, geography, or temporal sampling.</div>
+<label for="lineageType">Lineage type</label><select id="lineageType"></select>
+<label for="database">Database</label><select id="database"></select>
+<label for="featureMode">Feature mode</label><select id="featureMode"><option value="burden" selected>Database burden</option><option value="feature">Individual feature</option><option value="enrichment">Top lineage-enriched features</option></select>
+<label for="feature">Feature</label><select id="feature"></select>
+<label for="metadataOverlay">Metadata overlay</label><select id="metadataOverlay"></select>
+<label for="minLineage">Minimum lineage size</label><select id="minLineage"><option value="0">All</option><option value="3" selected>n >= 3</option><option value="5">n >= 5</option><option value="10">n >= 10</option></select>
+<label for="displayCount">Display</label><select id="displayCount"><option value="10">Top 10</option><option value="20" selected>Top 20</option><option value="50">Top 50</option><option value="99999">Complete</option></select>
+<div id="summary"></div>
+<div class="panel"><h2>Default Visuals</h2><div class="figure-row">
+<div><h3>Lineage distribution</h3><img src="{html.escape(default_distribution_svg.name)}" alt="Lineage distribution"></div>
+<div><h3>Metadata-lineage overlap</h3><img src="{html.escape(default_overlap_svg.name)}" alt="Metadata-lineage overlap"></div>
+<div><h3>Database burden by lineage</h3><img src="{html.escape(default_burden_svg.name)}" alt="Database burden by lineage"></div>
+<div><h3>Feature prevalence heatmap</h3><img src="{html.escape(heatmap_svg.name)}" alt="Feature prevalence by lineage"></div>
+<div><h3>Lineage enrichment</h3><img src="{html.escape(enrichment_svg.name)}" alt="Lineage enrichment"></div>
+<div><h3>Selected feature prevalence</h3><img src="{html.escape(selected_svg.name)}" alt="Selected feature lineage prevalence"></div>
+<div><h3>Lineage-adjusted top findings</h3><img src="{html.escape(confounding_svg.name)}" alt="Lineage-adjusted top findings"></div>
+</div></div>
+<h2>Filtered Results</h2><div id="table" class="scrollbox"></div>
+<p><a href="../tables/lineage_summary.tsv">Download lineage summary</a> | <a href="../tables/lineage_distribution.tsv">Download distribution</a> | <a href="../tables/lineage_metadata_overlap.tsv">Download metadata overlap</a> | <a href="../tables/lineage_feature_burden.tsv">Download burden table</a> | <a href="../tables/lineage_feature_enrichment.tsv">Download enrichment table</a> | <a href="../tables/lineage_feature_presence.tsv">Download selected-feature lineage table</a> | <a href="../tables/lineage_adjusted_top_findings.tsv">Download lineage-adjusted top findings</a> | <a href="../lineage_tables.zip">Download lineage tables ZIP</a> | <a href="../lineage_figures.zip">Download lineage figures ZIP</a></p>
+<script>
+const distributionRows = {json.dumps(distribution_rows[:3000])};
+const overlapRows = {json.dumps(overlap_rows[:5000])};
+const burdenRows = {json.dumps(burden_rows[:5000])};
+const enrichmentRows = {json.dumps(enrichment_rows[:5000])};
+const presenceRows = {json.dumps(presence_rows[:5000])};
+const adjustedRows = {json.dumps(adjusted_rows[:2000])};
+const defaultLineageType = {json.dumps(default_lineage_type)};
+const defaultDatabase = {json.dumps(default_database)};
+const defaultFeature = {json.dumps(default_feature)};
+const defaultMetadataColumn = {json.dumps(default_metadata_column)};
+function num(value) {{ const n = Number(value); return Number.isFinite(n) ? n : 0; }}
+const lineageType = document.getElementById('lineageType'), database = document.getElementById('database'), featureMode = document.getElementById('featureMode'), feature = document.getElementById('feature'), metadataOverlay = document.getElementById('metadataOverlay'), minLineage = document.getElementById('minLineage'), displayCount = document.getElementById('displayCount');
+function fillSelect(select, values, preferred) {{ const unique = Array.from(new Set(values.filter(Boolean))).sort(); select.innerHTML = unique.map(v => `<option value="${{v}}">${{v}}</option>`).join(''); if (unique.includes(preferred)) select.value = preferred; }}
+function refreshControls() {{
+  fillSelect(lineageType, distributionRows.map(r => r.lineage_type), defaultLineageType);
+  fillSelect(database, burdenRows.map(r => r.database), defaultDatabase);
+  fillSelect(metadataOverlay, overlapRows.map(r => r.metadata_column), defaultMetadataColumn);
+  refreshFeatures();
+}}
+function refreshFeatures() {{
+  fillSelect(feature, presenceRows.filter(r => r.database === database.value).map(r => r.feature_id), defaultFeature);
+}}
+function currentRows() {{
+  if (featureMode.value === 'feature') return presenceRows.filter(r => r.feature_id === feature.value);
+  if (featureMode.value === 'enrichment') return enrichmentRows;
+  return burdenRows;
+}}
+function passes(row) {{
+  if (row.lineage_type !== lineageType.value) return false;
+  if (row.database && row.database !== database.value) return false;
+  if (num(row.lineage_n || row.total_genomes) < num(minLineage.value)) return false;
+  return true;
+}}
+function render() {{
+  const rows = currentRows().filter(passes).slice(0, Number(displayCount.value));
+  const cols = featureMode.value === 'feature'
+    ? ['database','feature_id','lineage_type','lineage_id','lineage_n','positive_genomes','prevalence_display','feature_rows','top_country','top_source','top_bioproject','warning_flags']
+    : (featureMode.value === 'enrichment'
+      ? ['lineage_type','lineage_id','database','feature_id','lineage_n','positive_in_lineage','prevalence_in_lineage','prevalence_difference','odds_ratio','q_value','support_label','interpretation_label','warning_flags']
+      : ['lineage_type','lineage_id','database','lineage_n','total_feature_rows','unique_features','positive_genomes','prevalence_percent','median_features_per_genome','support_label','warning_flags']);
+  const overlap = overlapRows.filter(r => r.lineage_type === lineageType.value && r.metadata_column === metadataOverlay.value).slice(0, 10);
+  document.getElementById('summary').innerHTML = `<p>${{rows.length}} rows shown. Metadata overlay preview: ${{overlap.map(r => `${{r.metadata_group}}/${{r.lineage_id}}=${{r.lineage_fraction_percent}}%`).join('; ') || 'none available'}}.</p>`;
+  document.getElementById('table').innerHTML = '<table><thead><tr>' + cols.map(c => `<th>${{c}}</th>`).join('') + '</tr></thead><tbody>' + rows.map(r => '<tr>' + cols.map(c => `<td>${{r[c] || ''}}</td>`).join('') + '</tr>').join('') + '</tbody></table>';
+}}
+featureMode.addEventListener('change', render);
+database.addEventListener('change', () => {{ refreshFeatures(); render(); }});
+[lineageType, feature, metadataOverlay, minLineage, displayCount].forEach(el => el.addEventListener('change', render));
+refreshControls(); render();
+</script></body></html>
+""",
+        encoding="utf-8",
+    )
+
+    return {
+        "important_lineage_summary": str(summary_path),
+        "important_lineage_distribution": str(distribution_path),
+        "important_lineage_metadata_overlap": str(overlap_path),
+        "important_lineage_feature_burden": str(burden_path),
+        "important_lineage_feature_enrichment": str(enrichment_path),
+        "important_lineage_adjusted_top_findings": str(adjusted_path),
+        "important_lineage_feature_presence": str(presence_path),
+        "important_lineage_report_summary": str(summary_stats_path),
+        "important_lineage_distribution_svg": str(default_distribution_svg),
+        "important_lineage_metadata_overlap_svg": str(default_overlap_svg),
+        "important_lineage_database_burden_svg": str(default_burden_svg),
+        "important_lineage_feature_heatmap_svg": str(heatmap_svg),
+        "important_lineage_feature_enrichment_svg": str(enrichment_svg),
+        "important_lineage_feature_presence_svg": str(selected_svg),
+        "important_lineage_confounding_top_findings_svg": str(confounding_svg),
+        "important_lineage_html": str(interactive_html),
+        "important_lineage_tables_zip": str(tables_zip),
+        "important_lineage_figures_zip": str(figures_zip),
+    }
+
+
 def write_important_results_report(
     sample_dir: Path,
     out_dir: Path,
@@ -8609,6 +9399,7 @@ def write_important_results_report(
     temporal_outputs: dict[str, str],
     cooccurrence_outputs: dict[str, str],
     metadata_association_outputs: dict[str, str],
+    lineage_outputs: dict[str, str],
 ) -> dict[str, str]:
     important_dir.mkdir(parents=True, exist_ok=True)
     basic_csv = sample_dir / "basic" / "enriched_genome_dataset.csv"
@@ -8651,6 +9442,13 @@ def write_important_results_report(
     metadata_category_omnibus_rows = read_table(important_dir / "tables" / "metadata_category_omnibus.tsv")
     metadata_summary_rows = read_table(important_dir / "tables" / "metadata_association_summary.tsv")
     metadata_usability_rows = read_table(important_dir / "tables" / "metadata_usability_summary.tsv")
+    lineage_summary_rows = read_table(important_dir / "tables" / "lineage_report_summary.tsv")
+    lineage_distribution_rows = read_table(important_dir / "tables" / "lineage_distribution.tsv")
+    lineage_overlap_rows = read_table(important_dir / "tables" / "lineage_metadata_overlap.tsv")
+    lineage_burden_rows = read_table(important_dir / "tables" / "lineage_feature_burden.tsv")
+    lineage_enrichment_rows = read_table(important_dir / "tables" / "lineage_feature_enrichment.tsv")
+    lineage_presence_rows = read_table(important_dir / "tables" / "lineage_feature_presence.tsv")
+    lineage_adjusted_rows = read_table(important_dir / "tables" / "lineage_adjusted_top_findings.tsv")
     top_prevalence = sorted(prevalence_rows, key=lambda row: (row.get("database", ""), -(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("feature_id", "")))[:20]
     top_geographic_burden = sorted(
         [
@@ -8687,6 +9485,31 @@ def write_important_results_report(
         metadata_burden_omnibus_rows + metadata_category_omnibus_rows,
         key=lambda row: (-abs(_float_or_none(row.get("burden_range_median", "")) or 0.0), row.get("database", ""), row.get("metadata_column", "")),
     )[:20]
+    top_lineage_distribution = sorted(
+        lineage_distribution_rows,
+        key=lambda row: (-int(_float_or_none(row.get("total_genomes", "")) or 0), row.get("lineage_type", ""), row.get("lineage_id", "")),
+    )[:20]
+    top_lineage_overlap = sorted(
+        lineage_overlap_rows,
+        key=lambda row: (-(_float_or_none(row.get("dominant_lineage_fraction", "")) or 0.0), row.get("metadata_column", ""), row.get("metadata_group", "")),
+    )[:20]
+    top_lineage_burden = sorted(
+        lineage_burden_rows,
+        key=lambda row: (-(_float_or_none(row.get("median_features_per_genome", "")) or 0.0), row.get("database", ""), row.get("lineage_id", "")),
+    )[:20]
+    top_lineage_enrichment = sorted(
+        lineage_enrichment_rows,
+        key=lambda row: (
+            row.get("interpretation_label", "") not in {"feature_lineage_specific", "feature_lineage_enriched"},
+            -abs(_float_or_none(row.get("prevalence_difference", "")) or 0.0),
+            row.get("database", ""),
+            row.get("feature_id", ""),
+        ),
+    )[:20]
+    top_lineage_presence = sorted(
+        lineage_presence_rows,
+        key=lambda row: (-(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("database", ""), row.get("feature_id", "")),
+    )[:20]
     qc_table_html = _html_table(qc_steps, ["step_order", "qc_step", "tool", "enabled", "pass", "warning", "fail", "skipped", "status", "notes"], max_rows=20)
     prevalence_table_html = _html_table(top_prevalence, ["database", "feature_id", "feature_category", "positive_genomes", "total_genomes", "prevalence_display", "feature_rows", "mean_hits_per_positive_genome", "prevalence_label", "warning_flags"], max_rows=20)
     variation_table_html = _html_table(top_variation, ["database", "feature_id", "total_hits", "positive_genomes", "mean_hits_per_positive_genome", "median_identity", "iqr_identity", "median_coverage", "iqr_coverage", "variation_label", "warning_flags"], max_rows=20)
@@ -8696,6 +9519,11 @@ def write_important_results_report(
     metadata_feature_table_html = _html_table(top_metadata_features, ["database", "feature_id", "metadata_column", "metadata_group", "group_n", "positive_in_group", "prevalence_in_group", "prevalence_difference", "odds_ratio", "q_value", "effect_size_label", "support_label", "interpretation_label", "warning_flags"], max_rows=20)
     metadata_burden_table_html = _html_table(top_metadata_burden, ["database", "metadata_column", "metadata_group", "group_n", "median_burden_group", "median_burden_outside", "burden_difference", "q_value", "support_label", "interpretation_label", "warning_flags"], max_rows=20)
     metadata_omnibus_table_html = _html_table(top_metadata_omnibus, ["database", "feature_category", "metadata_column", "groups_tested", "samples_tested", "burden_range_median", "test_name", "test_statistic", "q_value", "support_label", "interpretation_label", "warning_flags"], max_rows=20)
+    lineage_distribution_table_html = _html_table(top_lineage_distribution, ["lineage_type", "lineage_id", "total_genomes", "fraction_display", "top_country", "top_source", "top_bioproject", "warning_flags"], max_rows=20)
+    lineage_overlap_table_html = _html_table(top_lineage_overlap, ["lineage_type", "metadata_column", "metadata_group", "dominant_lineage", "dominant_lineage_fraction", "dominance_label", "warning_flags"], max_rows=20)
+    lineage_burden_table_html = _html_table(top_lineage_burden, ["lineage_type", "lineage_id", "database", "lineage_n", "positive_genomes", "prevalence_percent", "median_features_per_genome", "support_label", "warning_flags"], max_rows=20)
+    lineage_enrichment_table_html = _html_table(top_lineage_enrichment, ["lineage_type", "lineage_id", "database", "feature_id", "lineage_n", "positive_in_lineage", "prevalence_in_lineage", "prevalence_difference", "odds_ratio", "q_value", "support_label", "interpretation_label", "warning_flags"], max_rows=20)
+    lineage_presence_table_html = _html_table(top_lineage_presence, ["database", "feature_id", "lineage_type", "lineage_id", "lineage_n", "positive_genomes", "prevalence_display", "top_country", "top_source", "top_bioproject", "warning_flags"], max_rows=20)
     prevalence_total_rows = sum(int(_float_or_none(row.get("feature_rows", "")) or 0) for row in prevalence_rows)
     prevalence_unique_features = len(prevalence_rows)
     prevalence_databases = len({row.get("database", "") for row in prevalence_rows if row.get("database", "")})
@@ -8921,6 +9749,45 @@ def write_important_results_report(
             f"<p><a href='figures/{html.escape(stem)}.png'>PNG</a> | <a href='figures/{html.escape(figure_path.name)}'>SVG</a> | <a href='figures/{html.escape(stem)}.pdf'>PDF</a> | <a href='figures/{html.escape(stem)}.data.tsv'>Data TSV</a></p></div>"
         )
     metadata_figures_html = "<div class='figure-row'>" + "".join(metadata_figure_items) + "</div>" if metadata_figure_items else "<p>No metadata association figures were generated because metadata groups or feature rows were unavailable.</p>"
+    lineage_summary = {row.get("metric", ""): row.get("value", "") for row in lineage_summary_rows}
+    lineage_cards_html = (
+        "<div class='cards'>"
+        f"<div class='card'><span>Genomes with MLST ST</span><strong>{html.escape(lineage_summary.get('genomes_with_mlst_ST', '0'))}</strong></div>"
+        f"<div class='card'><span>Unique STs</span><strong>{html.escape(lineage_summary.get('unique_STs', '0'))}</strong></div>"
+        f"<div class='card'><span>Dominant ST</span><strong>{html.escape(lineage_summary.get('dominant_ST', '')) or 'NA'}</strong></div>"
+        f"<div class='card'><span>ANI clusters</span><strong>{html.escape(lineage_summary.get('unique_ANI_clusters', '0'))}</strong></div>"
+        f"<div class='card'><span>BioProjects</span><strong>{html.escape(lineage_summary.get('bioprojects_detected', '0'))}</strong></div>"
+        f"<div class='card'><span>Lineage warnings</span><strong>{html.escape(lineage_summary.get('warning_rows', '0'))}</strong></div>"
+        "</div>"
+    )
+    lineage_summary_html = (
+        "<p>"
+        f"Lineage reporting found {html.escape(lineage_summary.get('lineage_types_available', 'none'))} context, "
+        f"{html.escape(lineage_summary.get('genomes_with_mlst_ST', '0'))} genome(s) with MLST ST calls, and "
+        f"{html.escape(lineage_summary.get('genomes_with_ANI_cluster', '0'))} genome(s) with ANI cluster context. "
+        f"The default view is {html.escape(lineage_summary.get('default_view', ''))}. "
+        "Use this section to check whether feature, geography, temporal, or metadata patterns are concentrated in one ST, ANI cluster, or BioProject."
+        "</p>"
+    )
+    lineage_figure_items = []
+    for key, title in [
+        ("important_lineage_distribution_svg", "Lineage distribution"),
+        ("important_lineage_metadata_overlap_svg", "Metadata-lineage overlap"),
+        ("important_lineage_database_burden_svg", "Database burden by lineage"),
+        ("important_lineage_feature_heatmap_svg", "Feature prevalence by lineage"),
+        ("important_lineage_feature_enrichment_svg", "Lineage feature enrichment"),
+        ("important_lineage_feature_presence_svg", "Selected feature by lineage"),
+        ("important_lineage_confounding_top_findings_svg", "Lineage-adjusted top findings"),
+    ]:
+        figure_path = Path(lineage_outputs.get(key, ""))
+        if not figure_path.exists():
+            continue
+        stem = figure_path.stem
+        lineage_figure_items.append(
+            f"<div><h3>{html.escape(title)}</h3><img src='figures/{html.escape(figure_path.name)}' alt='{html.escape(title)}'>"
+            f"<p><a href='figures/{html.escape(stem)}.png'>PNG</a> | <a href='figures/{html.escape(figure_path.name)}'>SVG</a> | <a href='figures/{html.escape(stem)}.pdf'>PDF</a> | <a href='figures/{html.escape(stem)}.data.tsv'>Data TSV</a></p></div>"
+        )
+    lineage_figures_html = "<div class='figure-row'>" + "".join(lineage_figure_items) + "</div>" if lineage_figure_items else "<p>No lineage figures were generated because lineage context was unavailable.</p>"
     report_path = important_dir / "results.html"
     report_path.write_text(
         f"""<!doctype html>
@@ -8957,6 +9824,7 @@ th {{ background: #f0f4f8; }}
 <a href="#temporal">Temporal Trends</a>
 <a href="#cooccurrence">Co-occurrence / Genomic Context</a>
 <a href="#metadata-associations">Metadata Associations</a>
+<a href="#lineage">Lineage / Clonal Structure</a>
 <a href="#files">Important Files</a>
 <a href="#warnings">Warnings</a>
 </nav>
@@ -9028,6 +9896,22 @@ th {{ background: #f0f4f8; }}
 <h3>Top multi-group burden tests</h3>
 {metadata_omnibus_table_html}
 <div class="downloads"><a href="figures/metadata_associations.html">Open interactive metadata association report</a><a href="metadata_association_tables.zip">Download all metadata association tables ZIP</a><a href="metadata_association_figures.zip">Download all metadata association figures ZIP</a><a href="tables/metadata_usability_summary.tsv">Download metadata usability summary</a><a href="tables/metadata_feature_enrichment.tsv">Download feature enrichment</a><a href="tables/metadata_burden_associations.tsv">Download burden associations</a><a href="tables/metadata_category_enrichment.tsv">Download category enrichment</a><a href="tables/metadata_burden_omnibus.tsv">Download burden omnibus tests</a><a href="tables/metadata_category_omnibus.tsv">Download category omnibus tests</a><a href="tables/metadata_association_summary.tsv">Download metadata association summary</a></div></section>
+<section id="lineage"><h2>Lineage / Clonal Structure</h2><div class="warning">Lineage summaries are exploratory and do not replace phylogenetic analysis. Apparent metadata associations may reflect clonal structure, BioProject sampling, geography, or temporal sampling.</div>
+{lineage_cards_html}
+{lineage_summary_html}
+<iframe src="figures/lineage_clonal_structure.html" title="Lineage and clonal structure interactive report"></iframe>
+{lineage_figures_html}
+<h3>Lineage distribution</h3>
+{lineage_distribution_table_html}
+<h3>Metadata-lineage overlap</h3>
+{lineage_overlap_table_html}
+<h3>Feature burden by lineage</h3>
+{lineage_burden_table_html}
+<h3>Feature enrichment by lineage</h3>
+{lineage_enrichment_table_html}
+<h3>Selected feature lineage report</h3>
+{lineage_presence_table_html}
+<div class="downloads"><a href="figures/lineage_clonal_structure.html">Open interactive lineage report</a><a href="lineage_tables.zip">Download lineage tables ZIP</a><a href="lineage_figures.zip">Download lineage figures ZIP</a><a href="tables/lineage_summary.tsv">Download sample lineage summary</a><a href="tables/lineage_distribution.tsv">Download lineage distribution</a><a href="tables/lineage_metadata_overlap.tsv">Download metadata-lineage overlap</a><a href="tables/lineage_feature_burden.tsv">Download lineage feature burden</a><a href="tables/lineage_feature_enrichment.tsv">Download lineage feature enrichment</a><a href="tables/lineage_adjusted_top_findings.tsv">Download lineage-adjusted top findings</a><a href="tables/lineage_feature_presence.tsv">Download selected feature lineage table</a></div></section>
 <section id="files"><h2>Important Files</h2><ul>
 <li><a href="../basic/enriched_genome_dataset.csv">Enriched genome dataset CSV</a></li>
 <li><a href="key_tables/qc_step_summary.tsv">QC step summary</a></li>
@@ -9048,6 +9932,11 @@ th {{ background: #f0f4f8; }}
 <li><a href="tables/metadata_usability_summary.tsv">Metadata usability summary</a></li>
 <li><a href="tables/metadata_burden_omnibus.tsv">Metadata burden omnibus tests</a></li>
 <li><a href="tables/metadata_category_omnibus.tsv">Metadata category omnibus tests</a></li>
+<li><a href="figures/lineage_clonal_structure.html">Interactive lineage / clonal structure report</a></li>
+<li><a href="tables/lineage_distribution.tsv">Lineage distribution</a></li>
+<li><a href="tables/lineage_metadata_overlap.tsv">Metadata-lineage overlap</a></li>
+<li><a href="tables/lineage_feature_enrichment.tsv">Lineage feature enrichment</a></li>
+<li><a href="tables/lineage_adjusted_top_findings.tsv">Lineage-adjusted top findings</a></li>
 <li><a href="../panr2_inputs/features/all_features.tsv">Complete standardized feature table</a></li>
 <li><a href="../panr2_inputs/manifest/schema_validation_summary.txt">Feature-contract validation summary</a></li>
 </ul></section>
@@ -9065,6 +9954,7 @@ th {{ background: #f0f4f8; }}
         **temporal_outputs,
         **cooccurrence_outputs,
         **metadata_association_outputs,
+        **lineage_outputs,
     }
 
 
@@ -9091,7 +9981,8 @@ def write_user_output_bundles(
         temporal_outputs = write_important_temporal_outputs(sample_dir, out_dir, important_dir)
         cooccurrence_outputs = write_important_cooccurrence_context_outputs(sample_dir, out_dir, important_dir)
         metadata_association_outputs = write_important_metadata_association_outputs(sample_dir, out_dir, important_dir)
-        outputs.update(write_important_results_report(sample_dir, out_dir, important_dir, geographic_outputs, qc_outputs, prevalence_outputs, variation_outputs, temporal_outputs, cooccurrence_outputs, metadata_association_outputs))
+        lineage_outputs = write_important_lineage_outputs(sample_dir, out_dir, important_dir)
+        outputs.update(write_important_results_report(sample_dir, out_dir, important_dir, geographic_outputs, qc_outputs, prevalence_outputs, variation_outputs, temporal_outputs, cooccurrence_outputs, metadata_association_outputs, lineage_outputs))
         write_rows(
             manifest_dir / "important_output_manifest.tsv",
             [

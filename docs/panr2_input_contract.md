@@ -180,9 +180,10 @@ advanced PanR2 contract tree and publishes only `basic/enriched_genome_dataset`
 CSV/TSV in the final output directory. `important` adds a curated
 `important/results.html` entry point with Featured Results, Run Overview, QC
 Summary, Prevalence, Geographic Distribution, Variations, Temporal Trends,
-Co-occurrence / Genomic Context, Metadata Associations, Warnings, and Important
-Files sections. It writes key QC, prevalence, geography, variation, temporal
-trend, co-occurrence, genomic-context, and metadata-association tables plus
+Co-occurrence / Genomic Context, Metadata Associations, Lineage / Clonal
+Structure, Warnings, and Important Files sections. It writes key QC,
+prevalence, geography, variation, temporal trend, co-occurrence,
+genomic-context, metadata-association, and lineage/clonal-structure tables plus
 portable PNG/SVG/PDF/TSV figures without adding new runtime plotting
 dependencies. Prevalence includes an interactive HTML viewer with database,
 Top 10/20/50/Complete, metric, sort, minimum-prevalence, minimum-genome, and
@@ -210,8 +211,12 @@ multi-group burden tests, volcano plots, enrichment heatmaps, burden boxplots,
 warning flags, and conservative interpretation labels. These metadata
 associations are
 exploratory and may reflect sampling, BioProject, lineage, geography,
-collection-year, or missing-metadata bias. `all` preserves the full advanced
-output tree and includes both user-facing bundles.
+collection-year, or missing-metadata bias. Lineage / Clonal Structure adds an
+interactive report with MLST ST, ANI cluster, BioProject, and combined-lineage
+views; metadata-lineage overlap; feature burden and feature enrichment by
+lineage; selected-feature lineage prevalence; and lineage-adjusted top-finding
+warnings. `all` preserves the full advanced output tree and includes both
+user-facing bundles.
 
 `manifest/report_controls.tsv` records report density settings such as `large_dataset`, `report_mode`, feature caps for handoff matrices/co-occurrence/proximity summaries, metadata row caps for HTML pages, and whether heavy interactive plots were skipped or deprioritized. Complete feature TSVs remain available even when large-dataset safeguards cap report-facing summaries.
 

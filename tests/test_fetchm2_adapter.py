@@ -12,7 +12,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from normalize_fetchm2_output import normalize_fetchm2_output
 from export_panr2_inputs import parse_version_line
-from panr2_contract import export_contract, _kruskal_wallis, write_important_geographic_outputs, write_important_prevalence_outputs
+from panr2_contract import export_contract, _kruskal_wallis, write_important_geographic_outputs, write_important_lineage_outputs, write_important_prevalence_outputs
 from check_genomad_readiness import resolve_database_dir
 from check_container_readiness import as_list as container_as_list
 from check_container_readiness import image_exec_command
@@ -112,6 +112,58 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue({"total_feature_rows", "unique_features", "median_features_per_genome", "top_feature_id"}.issubset(summary.columns))
             html = (sample_dir / "important" / "figures" / "prevalence_analysis.html").read_text(encoding="utf-8")
             for control in ["Database", "Top 20", "Complete", "Genome prevalence %", "Positive genome count", "Feature row count", "Minimum prevalence %"]:
+                self.assertIn(control, html)
+
+    def test_important_lineage_report_counts_and_warnings(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            sample_dir = root / "Sample"
+            basic_dir = sample_dir / "basic"
+            features_dir = root / "panr2_inputs" / "features"
+            basic_dir.mkdir(parents=True)
+            features_dir.mkdir(parents=True)
+            pd.DataFrame(
+                [
+                    {"assembly_accession": f"G{i}", "sample_id": f"s{i}", "country": "CountryA" if i <= 3 else "CountryB", "isolation_source": "clinical" if i <= 3 else "environmental", "bioproject": f"PRJ{i}", "ani_cluster": "ANI_1" if i <= 3 else f"ANI_{i}"}
+                    for i in range(1, 7)
+                ]
+            ).to_csv(basic_dir / "enriched_genome_dataset.csv", index=False)
+            feature_rows = []
+            for i in range(1, 7):
+                st = "ST_11" if i <= 3 else f"ST_{20 + i}"
+                feature_rows.append({"assembly_accession": f"G{i}", "sample_id": f"s{i}", "database": "mlst", "feature_id": st, "feature_name": st, "feature_category": "sequence_type", "presence": "1"})
+                feature_rows.append({"assembly_accession": f"G{i}", "sample_id": f"s{i}", "database": "amr", "feature_id": "coreGene", "feature_name": "coreGene", "feature_category": "core", "presence": "1"})
+                if i <= 3:
+                    feature_rows.append({"assembly_accession": f"G{i}", "sample_id": f"s{i}", "database": "amr", "feature_id": "lineageGene", "feature_name": "lineageGene", "feature_category": "lineage", "presence": "1"})
+            feature_rows.append({"assembly_accession": "G1", "sample_id": "s1", "database": "amr", "feature_id": "lineageGene", "feature_name": "lineageGene", "feature_category": "lineage", "presence": "1"})
+            pd.DataFrame(feature_rows).to_csv(features_dir / "all_features.tsv", sep="\t", index=False)
+
+            outputs = write_important_lineage_outputs(sample_dir, root / "panr2_inputs", sample_dir / "important", top_n=3)
+            self.assertTrue(Path(outputs["important_lineage_summary"]).exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "lineage_clonal_structure.html").exists())
+            self.assertTrue((sample_dir / "important" / "lineage_tables.zip").exists())
+
+            distribution = pd.read_csv(sample_dir / "important" / "tables" / "lineage_distribution.tsv", sep="\t")
+            st11 = distribution[(distribution["lineage_type"] == "mlst_ST") & (distribution["lineage_id"] == "ST_11")].iloc[0]
+            self.assertEqual(int(st11["total_genomes"]), 3)
+            self.assertAlmostEqual(float(st11["fraction_of_dataset"]), 0.5)
+
+            overlap = pd.read_csv(sample_dir / "important" / "tables" / "lineage_metadata_overlap.tsv", sep="\t")
+            country_a = overlap[(overlap["lineage_type"] == "mlst_ST") & (overlap["metadata_column"] == "country") & (overlap["metadata_group"] == "CountryA") & (overlap["lineage_id"] == "ST_11")].iloc[0]
+            self.assertAlmostEqual(float(country_a["lineage_fraction_in_group"]), 1.0)
+            self.assertEqual(country_a["dominance_label"], "severe_lineage_confounding")
+            self.assertIn("metadata_lineage_confounding", str(country_a["warning_flags"]))
+
+            presence = pd.read_csv(sample_dir / "important" / "tables" / "lineage_feature_presence.tsv", sep="\t")
+            lin = presence[(presence["database"] == "amr") & (presence["feature_id"] == "lineageGene") & (presence["lineage_type"] == "mlst_ST") & (presence["lineage_id"] == "ST_11")].iloc[0]
+            self.assertEqual(int(lin["positive_genomes"]), 3)
+            self.assertEqual(int(lin["feature_rows"]), 4)
+            self.assertAlmostEqual(float(lin["prevalence_percent"]), 100.0)
+
+            enrichment = pd.read_csv(sample_dir / "important" / "tables" / "lineage_feature_enrichment.tsv", sep="\t")
+            self.assertTrue({"odds_ratio", "p_value", "q_value", "support_label", "interpretation_label", "warning_flags"}.issubset(enrichment.columns))
+            html = (sample_dir / "important" / "figures" / "lineage_clonal_structure.html").read_text(encoding="utf-8")
+            for control in ["Lineage type", "Database", "Feature mode", "Feature", "Metadata overlay", "Minimum lineage size", "Display"]:
                 self.assertIn(control, html)
 
     def test_kruskal_wallis_detects_multi_group_burden_difference(self):
@@ -366,6 +418,19 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue(any((sample_dir / "important" / "figures").glob("metadata_volcano_*_*.svg")))
             self.assertTrue(any((sample_dir / "important" / "figures").glob("metadata_enrichment_heatmap_*_*.pdf")))
             self.assertTrue(any((sample_dir / "important" / "figures").glob("metadata_burden_boxplot_*_*.png")))
+            self.assertTrue((sample_dir / "important" / "tables" / "lineage_summary.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "lineage_distribution.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "lineage_metadata_overlap.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "lineage_feature_burden.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "lineage_feature_enrichment.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "lineage_adjusted_top_findings.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "tables" / "lineage_feature_presence.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "lineage_clonal_structure.html").exists())
+            self.assertTrue((sample_dir / "important" / "lineage_tables.zip").exists())
+            self.assertTrue((sample_dir / "important" / "lineage_figures.zip").exists())
+            self.assertTrue(any((sample_dir / "important" / "figures").glob("lineage_distribution_*.svg")))
+            self.assertTrue(any((sample_dir / "important" / "figures").glob("lineage_metadata_overlap_*_*.png")))
+            self.assertTrue(any((sample_dir / "important" / "figures").glob("lineage_feature_enrichment_*_*.pdf")))
             temporal_summary = pd.read_csv(sample_dir / "important" / "key_tables" / "temporal_trend_summary.tsv", sep="\t")
             self.assertTrue({"trend_label", "support_label", "temporal_pattern_label", "warning_flags"}.issubset(temporal_summary.columns))
             prevalence = pd.read_csv(sample_dir / "important" / "tables" / "feature_prevalence.tsv", sep="\t")
@@ -420,6 +485,13 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue({"metadata_column", "non_missing_count", "missing_fraction", "eligible_for_testing", "recommended_use"}.issubset(metadata_usability.columns))
             metadata_omnibus = pd.read_csv(sample_dir / "important" / "tables" / "metadata_burden_omnibus.tsv", sep="\t")
             self.assertTrue({"test_name", "test_statistic", "p_value", "q_value", "support_label", "interpretation_label"}.issubset(metadata_omnibus.columns))
+            lineage_html = (sample_dir / "important" / "figures" / "lineage_clonal_structure.html").read_text(encoding="utf-8")
+            for control in ["Lineage type", "Database", "Feature mode", "Feature", "Metadata overlay", "Minimum lineage size", "Display"]:
+                self.assertIn(control, lineage_html)
+            lineage_distribution = pd.read_csv(sample_dir / "important" / "tables" / "lineage_distribution.tsv", sep="\t")
+            self.assertTrue({"lineage_type", "lineage_id", "total_genomes", "fraction_of_dataset", "warning_flags"}.issubset(lineage_distribution.columns))
+            lineage_enrichment = pd.read_csv(sample_dir / "important" / "tables" / "lineage_feature_enrichment.tsv", sep="\t")
+            self.assertTrue({"odds_ratio", "p_value", "q_value", "support_label", "interpretation_label", "warning_flags"}.issubset(lineage_enrichment.columns))
             report_html = (sample_dir / "important" / "results.html").read_text(encoding="utf-8")
             for section in [
                 "Featured Results",
@@ -431,6 +503,7 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "Temporal Trends",
                 "Co-occurrence / Genomic Context",
                 "Metadata Associations",
+                "Lineage / Clonal Structure",
                 "Warnings And Limitations",
                 "Important Files",
             ]:
@@ -1011,6 +1084,12 @@ class FetchM2AdapterTests(unittest.TestCase):
             lineage = pd.read_csv(outputs["lineage_summary"], sep="\t")
             self.assertIn("ST_11", set(lineage["mlst_ST"]))
             self.assertTrue(Path(outputs["lineage_context_html"]).exists())
+            important_lineage = pd.read_csv(sample_dir / "important" / "tables" / "lineage_distribution.tsv", sep="\t")
+            self.assertIn("ST_11", set(important_lineage["lineage_id"]))
+            important_presence = pd.read_csv(sample_dir / "important" / "tables" / "lineage_feature_presence.tsv", sep="\t")
+            lineage_gene = important_presence[(important_presence["feature_id"] == "lineageGene") & (important_presence["lineage_id"] == "ST_11")].iloc[0]
+            self.assertEqual(int(lineage_gene["positive_genomes"]), 3)
+            self.assertIn("Lineage type", (sample_dir / "important" / "figures" / "lineage_clonal_structure.html").read_text(encoding="utf-8"))
 
             core = pd.read_csv(outputs["core_accessory_rare_features"], sep="\t")
             class_by_feature = dict(zip(core["feature_id"], core["feature_class"]))
