@@ -512,6 +512,36 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue((sample_dir / "important" / "figures" / "diversity_feature_richness_by_sample.svg").exists())
             self.assertTrue((sample_dir / "important" / "figures" / "diversity_database_by_sample_heatmap.png").exists())
             self.assertTrue((sample_dir / "important" / "figures" / "diversity_pan_feature_accumulation.data.tsv").exists())
+            for table_name in [
+                "notable_genomes.tsv",
+                "notable_genome_score_components.tsv",
+                "feature_profile_ordination.tsv",
+                "database_concordance_summary.tsv",
+                "amr_concordance_feature_level.tsv",
+                "amr_concordance_by_sample.tsv",
+                "evidence_summary.tsv",
+                "finding_confidence_summary.tsv",
+                "evidence_by_section.tsv",
+                "warnings_and_limitations.tsv",
+                "warnings_by_section.tsv",
+                "module_warning_summary.tsv",
+                "report_cap_summary.tsv",
+                "important_file_index.tsv",
+                "download_manifest.tsv",
+            ]:
+                self.assertTrue((sample_dir / "important" / "tables" / table_name).exists())
+            self.assertTrue((sample_dir / "important" / "downloads" / "important_tables.zip").exists())
+            self.assertTrue((sample_dir / "important" / "downloads" / "important_figures.zip").exists())
+            self.assertTrue((sample_dir / "important" / "downloads" / "important_report_assets.zip").exists())
+            for figure_name in [
+                "notable_genomes_ranked.svg",
+                "notable_genome_score_heatmap.png",
+                "feature_profile_pcoa_by_lineage.svg",
+                "amr_concordance_summary.svg",
+                "evidence_confidence_summary.svg",
+                "warnings_summary.svg",
+            ]:
+                self.assertTrue((sample_dir / "important" / "figures" / figure_name).exists())
             temporal_summary = pd.read_csv(sample_dir / "important" / "key_tables" / "temporal_trend_summary.tsv", sep="\t")
             self.assertTrue({"trend_label", "support_label", "temporal_pattern_label", "warning_flags"}.issubset(temporal_summary.columns))
             prevalence = pd.read_csv(sample_dir / "important" / "tables" / "feature_prevalence.tsv", sep="\t")
@@ -586,6 +616,24 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue({"sample_a", "sample_b", "jaccard_distance", "jaccard_similarity"}.issubset(diversity_jaccard.columns))
             diversity_summary = pd.read_csv(sample_dir / "important" / "tables" / "diversity_report_summary.tsv", sep="\t")
             self.assertTrue({"total_feature_rows", "max_features_in_one_genome", "databases_represented", "jaccard_matrix_available", "pan_feature_curve_available"}.issubset(set(diversity_summary["metric"])))
+            notable = pd.read_csv(sample_dir / "important" / "tables" / "notable_genomes.tsv", sep="\t")
+            self.assertTrue({"notable_genome_score", "notable_label", "score_explanation", "warning_flags"}.issubset(notable.columns))
+            self.assertNotIn("clinical risk", " ".join(notable["score_explanation"].fillna("").astype(str)).lower())
+            components = pd.read_csv(sample_dir / "important" / "tables" / "notable_genome_score_components.tsv", sep="\t")
+            top_sample = notable.sort_values("rank").iloc[0]["assembly_accession"]
+            component_sum = components[components["assembly_accession"] == top_sample]["component_score"].astype(float).sum()
+            top_score = float(notable[notable["assembly_accession"] == top_sample]["notable_genome_score"].iloc[0])
+            self.assertAlmostEqual(component_sum, top_score, places=2)
+            ordination = pd.read_csv(sample_dir / "important" / "tables" / "feature_profile_ordination.tsv", sep="\t")
+            self.assertTrue({"PCoA1", "PCoA2", "explained_variance_PCoA1", "explained_variance_PCoA2"}.issubset(ordination.columns))
+            concordance = pd.read_csv(sample_dir / "important" / "tables" / "amr_concordance_feature_level.tsv", sep="\t")
+            self.assertTrue({"called_by_both", "abricate_only", "amrfinderplus_only", "concordance_label"}.issubset(concordance.columns))
+            confidence = pd.read_csv(sample_dir / "important" / "tables" / "finding_confidence_summary.tsv", sep="\t")
+            self.assertTrue({"confidence_label", "recommended_interpretation"}.issubset(confidence.columns))
+            warnings = pd.read_csv(sample_dir / "important" / "tables" / "warnings_and_limitations.tsv", sep="\t")
+            self.assertTrue({"warning_id", "section", "severity", "warning_type", "recommended_action"}.issubset(warnings.columns))
+            download_manifest = pd.read_csv(sample_dir / "important" / "tables" / "download_manifest.tsv", sep="\t")
+            self.assertIn("basic/enriched_genome_dataset.csv", set(download_manifest["file_path"]))
             report_controls = pd.read_csv(outputs["report_controls"], sep="\t")
             self.assertIn("important_lineage_feature_cap_per_database", set(report_controls["setting"]))
             self.assertIn("important_diversity_jaccard_heatmap_cap", set(report_controls["setting"]))
@@ -602,8 +650,12 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "Metadata Associations",
                 "Lineage / Clonal Structure",
                 "Diversity / Pan-feature Summary",
-                "Warnings And Limitations",
-                "Important Files",
+                "Notable Genomes / Genome Prioritization",
+                "Feature-profile Ordination",
+                "Concordance / Database Agreement",
+                "Evidence & Confidence",
+                "Warnings & Limitations",
+                "Downloads / Important Files",
             ]:
                 self.assertIn(section, report_html)
 

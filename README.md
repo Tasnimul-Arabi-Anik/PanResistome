@@ -115,7 +115,7 @@ Database setup automation is documented in [`docs/database_automation_matrix.md`
 
 For large runs, add `--large_dataset true` or combine a resource profile with `large`, for example `-profile conda,mamba,desktop_parallel,large`. Large-dataset mode still writes complete feature TSV outputs, but caps report-facing matrices/co-occurrence/proximity summaries, switches the handoff pages to compact mode, summarizes top features per database, and records the applied limits in `panr2_inputs/manifest/report_controls.tsv`. Complete proximity evidence is preserved separately as `panr2_inputs/cross_database/feature_proximity_all.tsv`.
 
-Use `--output_mode basic|important|all` to control the final user-facing bundle. The default is `all`, preserving the complete advanced output tree. `basic` is intentionally minimal: the final sample directory contains only `basic/enriched_genome_dataset.csv` and `basic/enriched_genome_dataset.tsv`, one row per genome with metadata, QC summaries, annotation burdens, compact annotation lists, lineage labels, and module provenance. `important` publishes the enriched dataset plus `important/results.html`, a curated report with Featured Results, Run Overview, QC Summary, Prevalence, Geographic Distribution, Variations, Temporal Trends, Co-occurrence / Genomic Context, Metadata Associations, Lineage / Clonal Structure, Diversity / Pan-feature Summary, Warnings, and Important Files sections; it includes portable PNG/SVG/PDF/TSV figure outputs, key tables, an interactive prevalence viewer with database/metric/top-N/sort/filter controls, an interactive geographic viewer with database/feature/burden/geographic-level/metric/minimum-group-size controls, an interactive variation viewer with database/metric/top-N/sort controls, an interactive temporal trend viewer with database/trend/support/feature controls, an interactive co-occurrence/context viewer with database/support/effect controls, an interactive metadata-association viewer with database/group/significance/effect/display/support controls, an interactive lineage viewer with MLST ST/ANI cluster/BioProject/combined-lineage controls, feature search, custom lineage-size filtering, lineage burden boxplots, lineage enrichment volcano-style plots, an interactive diversity viewer with feature richness, database diversity, core/common/accessory/rare classes, pan-feature accumulation, Jaccard distance, and metadata-stratified diversity controls, and links to the complete `panr2_inputs/` handoff bundle.
+Use `--output_mode basic|important|all` to control the final user-facing bundle. The default is `all`, preserving the complete advanced output tree. `basic` is intentionally minimal: the final sample directory contains only `basic/enriched_genome_dataset.csv` and `basic/enriched_genome_dataset.tsv`, one row per genome with metadata, QC summaries, annotation burdens, compact annotation lists, lineage labels, and module provenance. `important` publishes the enriched dataset plus `important/results.html`, a curated report with Featured Results, Run Overview, QC Summary, Prevalence, Geographic Distribution, Variations, Temporal Trends, Co-occurrence / Genomic Context, Metadata Associations, Lineage / Clonal Structure, Diversity / Pan-feature Summary, Notable Genomes, Feature-profile Ordination, Concordance / Database Agreement, Evidence & Confidence, Warnings & Limitations, and Downloads / Important Files sections; it includes portable PNG/SVG/PDF/TSV figure outputs, key tables, an interactive prevalence viewer with database/metric/top-N/sort/filter controls, an interactive geographic viewer with database/feature/burden/geographic-level/metric/minimum-group-size controls, an interactive variation viewer with database/metric/top-N/sort controls, an interactive temporal trend viewer with database/trend/support/feature controls, an interactive co-occurrence/context viewer with database/support/effect controls, an interactive metadata-association viewer with database/group/significance/effect/display/support controls, an interactive lineage viewer with MLST ST/ANI cluster/BioProject/combined-lineage controls, feature search, custom lineage-size filtering, lineage burden boxplots, lineage enrichment volcano-style plots, an interactive diversity viewer with feature richness, database diversity, core/common/accessory/rare classes, pan-feature accumulation, Jaccard distance, and metadata-stratified diversity controls, final interpretation tables for notable-genome research prioritization, confidence labels, warning summaries, AMR concordance, feature-profile ordination, and download manifests, and links to the complete `panr2_inputs/` handoff bundle.
 
 For 300+ genome desktop validations, start with CheckM2, ANI, and AMRFinderPlus disabled, then add those heavier stages intentionally. The documented 300-record Klebsiella large-mode run used `--run_checkm2 false --run_ani false --run_amrfinderplus false` and still validated FetchM2, sequence QC, QUAST, Mash, ABRicate AMR/VFDB/PlasmidFinder, IntegronFinder, MLST, PanR2 feature contracts, and compact report safeguards. FastANI all-vs-all and AMRFinderPlus nucleotide `tblastn` were the observed long-running optional stages at this scale. If ANI is enabled with `--large_dataset true`, the default `--ani_large_run_strategy auto` skips all-vs-all ANI above `--ani_max_all_vs_all_genomes` and writes an ANI status audit instead of accidentally launching a long all-vs-all run.
 
@@ -727,6 +727,24 @@ results/
     │   ├── tables/diversity_jaccard_pairs.tsv
     │   ├── tables/diversity_by_metadata_group.tsv
     │   ├── tables/diversity_written_summaries.tsv
+    │   ├── tables/notable_genomes.tsv
+    │   ├── tables/notable_genome_score_components.tsv
+    │   ├── tables/feature_profile_ordination.tsv
+    │   ├── tables/database_concordance_summary.tsv
+    │   ├── tables/amr_concordance_feature_level.tsv
+    │   ├── tables/amr_concordance_by_sample.tsv
+    │   ├── tables/evidence_summary.tsv
+    │   ├── tables/finding_confidence_summary.tsv
+    │   ├── tables/evidence_by_section.tsv
+    │   ├── tables/warnings_and_limitations.tsv
+    │   ├── tables/warnings_by_section.tsv
+    │   ├── tables/module_warning_summary.tsv
+    │   ├── tables/report_cap_summary.tsv
+    │   ├── tables/important_file_index.tsv
+    │   ├── tables/download_manifest.tsv
+    │   ├── downloads/important_tables.zip
+    │   ├── downloads/important_figures.zip
+    │   ├── downloads/important_report_assets.zip
     │   ├── cooccurrence_tables.zip
     │   ├── cooccurrence_figures.zip
     │   ├── prevalence_tables.zip
@@ -805,7 +823,19 @@ results/
     │   ├── figures/diversity_core_common_accessory_rare_by_database.svg
     │   ├── figures/diversity_pan_feature_accumulation.svg
     │   ├── figures/diversity_jaccard_heatmap.svg
-    │   └── figures/diversity_richness_by_metadata_<metadata>.svg
+    │   ├── figures/diversity_richness_by_metadata_<metadata>.svg
+    │   ├── figures/notable_genomes_ranked.svg
+    │   ├── figures/notable_genome_score_heatmap.svg
+    │   ├── figures/feature_profile_pcoa_by_lineage.svg
+    │   ├── figures/feature_profile_pcoa_by_country.svg
+    │   ├── figures/feature_profile_pcoa_by_source.svg
+    │   ├── figures/feature_profile_pcoa_by_bioproject.svg
+    │   ├── figures/amr_concordance_summary.svg
+    │   ├── figures/amr_concordance_by_feature.svg
+    │   ├── figures/evidence_confidence_summary.svg
+    │   ├── figures/evidence_by_section.svg
+    │   ├── figures/warnings_summary.svg
+    │   └── figures/warnings_by_section.svg
     └── panr2_inputs/
 
 --output_mode all

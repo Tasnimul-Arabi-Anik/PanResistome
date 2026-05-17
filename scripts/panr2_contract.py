@@ -10137,6 +10137,810 @@ render();
     }
 
 
+def write_important_final_interpretation_outputs(
+    sample_dir: Path,
+    out_dir: Path,
+    important_dir: Path,
+    top_n: int = 20,
+) -> dict[str, str]:
+    tables = important_dir / "tables"
+    figures = important_dir / "figures"
+    downloads = important_dir / "downloads"
+    tables.mkdir(parents=True, exist_ok=True)
+    figures.mkdir(parents=True, exist_ok=True)
+    downloads.mkdir(parents=True, exist_ok=True)
+
+    dataset_rows = read_table(sample_dir / "basic" / "enriched_genome_dataset.csv")
+    metadata_by_sample = {row.get("assembly_accession", ""): row for row in dataset_rows if row.get("assembly_accession")}
+    features = [row for row in read_table(out_dir / "features" / "all_features.tsv") if row.get("presence", "1") == "1"]
+    all_samples = sorted(set(metadata_by_sample) | {row.get("assembly_accession", "") or row.get("sample_id", "") for row in features if row.get("assembly_accession") or row.get("sample_id")})
+    for sample in all_samples:
+        metadata_by_sample.setdefault(sample, {"assembly_accession": sample, "sample_id": sample})
+
+    def clean(value: str) -> str:
+        text = str(value or "").strip()
+        return "" if is_missing_value(text) else text
+
+    def meta(sample: str, column: str) -> str:
+        return clean(metadata_by_sample.get(sample, {}).get(column, ""))
+
+    def sample_id(sample: str) -> str:
+        return meta(sample, "sample_id") or sample
+
+    def number(value: str) -> float:
+        return _float_or_none(value) or 0.0
+
+    def first_existing(paths: list[Path]) -> Path | None:
+        return next((path for path in paths if path.exists()), None)
+
+    figure_paths: list[Path] = []
+
+    def add_standard_figure(stem: str, data_rows: list[dict[str, str]], fields: list[str], svg_writer, png_writer, pdf_lines: list[str]) -> None:
+        data_path = figures / f"{stem}.data.tsv"
+        write_rows(data_path, data_rows, fields)
+        svg_path = figures / f"{stem}.svg"
+        png_path = figures / f"{stem}.png"
+        pdf_path = figures / f"{stem}.pdf"
+        svg_writer(svg_path)
+        png_writer(png_path)
+        _write_simple_pdf(pdf_path, stem.replace("_", " ").title(), pdf_lines or [f"{len(data_rows)} rows"])
+        figure_paths.extend([data_path, svg_path, png_path, pdf_path])
+
+    # Notable genomes / research prioritization.
+    diversity_wide = read_table(tables / "diversity_database_by_sample_wide.tsv")
+    wide_by_sample = {row.get("assembly_accession", ""): row for row in diversity_wide if row.get("assembly_accession")}
+    richness_rows = read_table(tables / "diversity_feature_richness_by_sample.tsv")
+    richness_by_sample = {row.get("assembly_accession", ""): row for row in richness_rows if row.get("assembly_accession")}
+    feature_classes = read_table(tables / "diversity_core_common_accessory_rare_features.tsv")
+    rare_features = {(row.get("database", ""), row.get("feature_id", "")) for row in feature_classes if row.get("feature_class") == "rare"}
+    variation_rows = read_table(tables / "feature_variation_summary.tsv") or read_table(important_dir / "key_tables" / "feature_variation_summary.tsv")
+    high_variation_features = {
+        (row.get("database", ""), row.get("feature_id", ""))
+        for row in variation_rows
+        if "high_variation" in row.get("warning_flags", "") or row.get("variation_label") == "high_variation"
+    }
+    temporal_rows = read_table(tables / "temporal_trend_summary.tsv") or read_table(important_dir / "key_tables" / "temporal_trend_summary.tsv")
+    increasing_features = {
+        (row.get("database", ""), row.get("feature_id", ""))
+        for row in temporal_rows
+        if "increasing" in row.get("trend_label", "")
+    }
+    context_rows = read_table(tables / "genomic_context_evidence.tsv")
+    context_by_sample: dict[str, Counter[str]] = defaultdict(Counter)
+    for row in context_rows:
+        sample = row.get("assembly_accession", "") or row.get("sample_id", "")
+        evidence = row.get("evidence_level", "")
+        if sample:
+            if evidence and evidence != "same_genome":
+                context_by_sample[sample]["same_contig_context_count"] += 1
+            if evidence in {"within_10kb", "overlap_or_adjacent", "overlapping", "adjacent"}:
+                context_by_sample[sample]["within_10kb_context_count"] += 1
+    feature_sets_by_sample: dict[str, set[tuple[str, str]]] = defaultdict(set)
+    for row in features:
+        sample = row.get("assembly_accession", "") or row.get("sample_id", "")
+        database = row.get("database", "")
+        feature_id = row.get("feature_id", "")
+        if sample and database and feature_id:
+            feature_sets_by_sample[sample].add((database, feature_id))
+    lineage_rows = read_table(tables / "lineage_summary.tsv")
+    lineage_warnings = {row.get("assembly_accession", ""): row.get("warning_flags", "") for row in lineage_rows if row.get("assembly_accession")}
+    notable_rows = []
+    component_rows = []
+    for sample in all_samples:
+        wide = wide_by_sample.get(sample, {})
+        richness = richness_by_sample.get(sample, {})
+        sample_features = feature_sets_by_sample.get(sample, set())
+        amr_count = int(number(wide.get("amr_unique_features", richness.get("amr_richness", "0"))))
+        vfdb_count = int(number(wide.get("vfdb_unique_features", richness.get("vfdb_richness", "0"))))
+        plasmid_count = int(number(wide.get("plasmidfinder_unique_features", richness.get("plasmidfinder_richness", "0"))))
+        integron_count = int(number(wide.get("integronfinder_unique_features", richness.get("integronfinder_richness", "0"))))
+        mge_count = int(number(wide.get("mge_unique_features", richness.get("mge_richness", "0")))) + int(number(wide.get("prophage_unique_features", richness.get("prophage_richness", "0"))))
+        rare_count = len(sample_features & rare_features)
+        temporal_count = len(sample_features & increasing_features)
+        variation_count = len(sample_features & high_variation_features)
+        same_contig_count = context_by_sample.get(sample, Counter()).get("same_contig_context_count", 0)
+        within_10kb_count = context_by_sample.get(sample, Counter()).get("within_10kb_context_count", 0)
+        lineage_penalty = 5 if lineage_warnings.get(sample) else 0
+        qc_warning = 0
+        if metadata_by_sample.get(sample, {}).get("qc_pass") == "false" or metadata_by_sample.get(sample, {}).get("modules_warning"):
+            qc_warning = 5
+        components = {
+            "amr_burden_score": min(amr_count, 20),
+            "vfdb_burden_score": min(vfdb_count / 2.0, 15),
+            "plasmid_burden_score": min(plasmid_count * 2.0, 12),
+            "integron_burden_score": min(integron_count * 2.0, 12),
+            "mge_or_prophage_burden_score": min(mge_count * 1.5, 12),
+            "same_contig_context_score": min(same_contig_count * 2.0, 16),
+            "within_10kb_context_score": min(within_10kb_count * 3.0, 18),
+            "rare_feature_score": min(rare_count * 1.5, 15),
+            "temporal_increasing_feature_score": min(temporal_count * 2.0, 10),
+            "high_variation_feature_score": min(variation_count * 1.5, 10),
+            "lineage_warning_penalty": -float(lineage_penalty),
+            "qc_warning_penalty": -float(qc_warning),
+        }
+        score = sum(components.values())
+        explanations = []
+        if amr_count:
+            explanations.append("AMR burden")
+        if plasmid_count:
+            explanations.append("plasmid features")
+        if integron_count:
+            explanations.append("integron features")
+        if same_contig_count:
+            explanations.append("same-contig context evidence")
+        if within_10kb_count:
+            explanations.append("within-10kb context evidence")
+        if rare_count:
+            explanations.append("rare features")
+        if temporal_count:
+            explanations.append("features with increasing temporal trends")
+        if variation_count:
+            explanations.append("high-variation features")
+        flags = []
+        if lineage_penalty:
+            flags.append("lineage_warning_penalty")
+        if qc_warning:
+            flags.append("qc_warning_penalty")
+        label = "highest_priority_review" if score >= 50 else ("elevated_review" if score >= 25 else "routine_review")
+        notable_rows.append({
+            "rank": "0",
+            "assembly_accession": sample,
+            "sample_id": sample_id(sample),
+            "organism_name": meta(sample, "organism_name") or meta(sample, "organism"),
+            "notable_genome_score": f"{score:.2f}",
+            "notable_label": label,
+            "score_explanation": "; ".join(explanations) or "No high-interest annotation pattern detected by the report-facing screen.",
+            "qc_status": "pass" if metadata_by_sample.get(sample, {}).get("qc_pass") == "true" else (metadata_by_sample.get(sample, {}).get("qc_pass") or "not_reported"),
+            "country": meta(sample, "country"),
+            "collection_year": meta(sample, "collection_year"),
+            "host": meta(sample, "host"),
+            "isolation_source": meta(sample, "isolation_source") or meta(sample, "sample_type"),
+            "bioproject": meta(sample, "bioproject"),
+            "mlst_ST": meta(sample, "mlst_ST"),
+            "ani_cluster": meta(sample, "ani_cluster"),
+            "amr_gene_count": str(amr_count),
+            "vfdb_feature_count": str(vfdb_count),
+            "plasmid_replicon_count": str(plasmid_count),
+            "integron_feature_count": str(integron_count),
+            "mge_feature_count": str(mge_count),
+            "rare_feature_count": str(rare_count),
+            "same_contig_context_count": str(same_contig_count),
+            "within_10kb_context_count": str(within_10kb_count),
+            "temporal_increasing_feature_count": str(temporal_count),
+            "warning_flags": _flag_string(flags),
+        })
+        for component, value in components.items():
+            component_rows.append({
+                "assembly_accession": sample,
+                "sample_id": sample_id(sample),
+                "component": component,
+                "component_score": f"{value:.2f}",
+                "component_value": f"{value:.2f}",
+            })
+    notable_rows.sort(key=lambda row: (-number(row.get("notable_genome_score", "0")), row.get("assembly_accession", "")))
+    for idx, row in enumerate(notable_rows, start=1):
+        row["rank"] = str(idx)
+    notable_path = tables / "notable_genomes.tsv"
+    notable_fields = [
+        "rank", "assembly_accession", "sample_id", "organism_name", "notable_genome_score", "notable_label", "score_explanation",
+        "qc_status", "country", "collection_year", "host", "isolation_source", "bioproject", "mlst_ST", "ani_cluster",
+        "amr_gene_count", "vfdb_feature_count", "plasmid_replicon_count", "integron_feature_count", "mge_feature_count",
+        "rare_feature_count", "same_contig_context_count", "within_10kb_context_count", "temporal_increasing_feature_count", "warning_flags",
+    ]
+    write_rows(notable_path, notable_rows, notable_fields)
+    components_path = tables / "notable_genome_score_components.tsv"
+    component_fields = ["assembly_accession", "sample_id", "component", "component_score", "component_value"]
+    write_rows(components_path, component_rows, component_fields)
+    top_notable = notable_rows[:top_n]
+    add_standard_figure(
+        "notable_genomes_ranked",
+        top_notable,
+        notable_fields,
+        lambda path: _write_bar_svg(path, top_notable, "Notable genomes for research review", "assembly_accession", "notable_genome_score", "Research prioritization score"),
+        lambda path: _write_bar_png(path, top_notable, "notable_genome_score"),
+        ["Research prioritization only; not a clinical risk score."] + [f"{row['rank']}. {row['assembly_accession']}: {row['notable_genome_score']}" for row in top_notable[:10]],
+    )
+    component_heatmap_rows = [
+        {**row, "component_plot_score": f"{max(number(row.get('component_score', '0')), 0.0):.2f}"}
+        for row in component_rows
+        if row["assembly_accession"] in {item["assembly_accession"] for item in top_notable}
+    ]
+    component_heatmap_fields = [*component_fields, "component_plot_score"]
+    add_standard_figure(
+        "notable_genome_score_heatmap",
+        component_heatmap_rows,
+        component_heatmap_fields,
+        lambda path: _write_heatmap_svg(path, component_heatmap_rows, "Notable genome score components", "assembly_accession", "component", "component_plot_score"),
+        lambda path: _write_heatmap_png(path, component_heatmap_rows, "assembly_accession", "component", "component_plot_score"),
+        ["Score components are transparent and additive; penalties are negative."],
+    )
+
+    # Feature-profile ordination from Jaccard distances, using dependency-free classical MDS/PCoA.
+    jaccard_rows = read_table(tables / "diversity_jaccard_distance_matrix.tsv")
+    ordered_samples = sorted({row.get("sample_a", "") for row in jaccard_rows if row.get("sample_a")} | {row.get("sample_b", "") for row in jaccard_rows if row.get("sample_b")})
+    if len(ordered_samples) > 300:
+        ordered_samples = ordered_samples[:300]
+    index = {sample: idx for idx, sample in enumerate(ordered_samples)}
+    n = len(ordered_samples)
+    distances = [[0.0 for _ in range(n)] for _ in range(n)]
+    for row in jaccard_rows:
+        a = row.get("sample_a", "")
+        b = row.get("sample_b", "")
+        if a in index and b in index:
+            distances[index[a]][index[b]] = number(row.get("jaccard_distance", "0"))
+    coords: dict[str, tuple[float, float, float]] = {sample: (0.0, 0.0, 0.0) for sample in ordered_samples}
+    explained = [0.0, 0.0, 0.0]
+    if n >= 2:
+        squared = [[distances[i][j] ** 2 for j in range(n)] for i in range(n)]
+        row_means = [sum(row) / n for row in squared]
+        col_means = [sum(squared[i][j] for i in range(n)) / n for j in range(n)]
+        grand_mean = sum(row_means) / n
+        matrix = [[-0.5 * (squared[i][j] - row_means[i] - col_means[j] + grand_mean) for j in range(n)] for i in range(n)]
+
+        def mat_vec(mat: list[list[float]], vec: list[float]) -> list[float]:
+            return [sum(mat[i][j] * vec[j] for j in range(len(vec))) for i in range(len(mat))]
+
+        def norm(vec: list[float]) -> float:
+            return math.sqrt(sum(value * value for value in vec))
+
+        eigens: list[tuple[float, list[float]]] = []
+        work = [row[:] for row in matrix]
+        for axis in range(3):
+            vec = [1.0 + ((idx + axis) % 7) / 10.0 for idx in range(n)]
+            scale = norm(vec) or 1.0
+            vec = [value / scale for value in vec]
+            for _ in range(80):
+                new_vec = mat_vec(work, vec)
+                scale = norm(new_vec)
+                if scale <= 1e-12:
+                    break
+                vec = [value / scale for value in new_vec]
+            mv = mat_vec(work, vec)
+            eigen = sum(vec[i] * mv[i] for i in range(n))
+            if eigen <= 1e-9:
+                break
+            eigens.append((eigen, vec[:]))
+            for i in range(n):
+                for j in range(n):
+                    work[i][j] -= eigen * vec[i] * vec[j]
+        total_positive_eigen = sum(value for value, _vec in eigens if value > 0) or 1.0
+        explained = [(eigens[i][0] / total_positive_eigen) if i < len(eigens) else 0.0 for i in range(3)]
+        for idx, sample in enumerate(ordered_samples):
+            values = []
+            for axis in range(3):
+                if axis < len(eigens):
+                    eigen, vec = eigens[axis]
+                    values.append(vec[idx] * math.sqrt(max(eigen, 0.0)))
+                else:
+                    values.append(0.0)
+            coords[sample] = (values[0], values[1], values[2])
+    ordination_rows = []
+    for sample in ordered_samples:
+        wide = wide_by_sample.get(sample, {})
+        coord = coords.get(sample, (0.0, 0.0, 0.0))
+        ordination_rows.append({
+            "assembly_accession": sample,
+            "sample_id": sample_id(sample),
+            "PCoA1": f"{coord[0]:.6f}",
+            "PCoA2": f"{coord[1]:.6f}",
+            "PCoA3": f"{coord[2]:.6f}",
+            "explained_variance_PCoA1": f"{explained[0]:.6f}",
+            "explained_variance_PCoA2": f"{explained[1]:.6f}",
+            "country": meta(sample, "country"),
+            "host": meta(sample, "host"),
+            "isolation_source": meta(sample, "isolation_source") or meta(sample, "sample_type"),
+            "bioproject": meta(sample, "bioproject"),
+            "mlst_ST": meta(sample, "mlst_ST"),
+            "ani_cluster": meta(sample, "ani_cluster"),
+            "amr_burden": wide.get("amr_unique_features", "0"),
+            "vfdb_burden": wide.get("vfdb_unique_features", "0"),
+            "plasmid_burden": wide.get("plasmidfinder_unique_features", "0"),
+            "integron_burden": wide.get("integronfinder_unique_features", "0"),
+            "warning_flags": "" if jaccard_rows else "jaccard_matrix_unavailable",
+        })
+    ordination_path = tables / "feature_profile_ordination.tsv"
+    ordination_fields = [
+        "assembly_accession", "sample_id", "PCoA1", "PCoA2", "PCoA3", "explained_variance_PCoA1", "explained_variance_PCoA2",
+        "country", "host", "isolation_source", "bioproject", "mlst_ST", "ani_cluster", "amr_burden", "vfdb_burden", "plasmid_burden", "integron_burden", "warning_flags",
+    ]
+    write_rows(ordination_path, ordination_rows, ordination_fields)
+
+    def write_scatter_svg(path: Path, rows: list[dict[str, str]], title: str, color_field: str) -> None:
+        width, height = 860, 560
+        left, top, plot_w, plot_h = 80, 60, 700, 400
+        xs = [number(row.get("PCoA1", "0")) for row in rows]
+        ys = [number(row.get("PCoA2", "0")) for row in rows]
+        min_x, max_x = (min(xs), max(xs)) if xs else (-1, 1)
+        min_y, max_y = (min(ys), max(ys)) if ys else (-1, 1)
+        if min_x == max_x:
+            min_x -= 1
+            max_x += 1
+        if min_y == max_y:
+            min_y -= 1
+            max_y += 1
+        palette = ["#0f766e", "#be123c", "#1d4ed8", "#a16207", "#7c3aed", "#15803d", "#db2777", "#475569"]
+        groups = {value: palette[idx % len(palette)] for idx, value in enumerate(sorted({row.get(color_field, "") or "unknown" for row in rows}))}
+        parts = [
+            f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
+            "<rect width='100%' height='100%' fill='#f8fafc'/>",
+            f"<text x='20' y='30' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
+            f"<line x1='{left}' y1='{top + plot_h}' x2='{left + plot_w}' y2='{top + plot_h}' stroke='#9fb3c8'/>",
+            f"<line x1='{left}' y1='{top}' x2='{left}' y2='{top + plot_h}' stroke='#9fb3c8'/>",
+        ]
+        for row in rows:
+            x = left + (number(row.get("PCoA1", "0")) - min_x) / (max_x - min_x) * plot_w
+            y = top + plot_h - (number(row.get("PCoA2", "0")) - min_y) / (max_y - min_y) * plot_h
+            burden = number(row.get("amr_burden", "0"))
+            radius = 4 + min(burden, 20) / 5.0
+            group = row.get(color_field, "") or "unknown"
+            parts.append(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='{radius:.1f}' fill='{groups[group]}' opacity='0.82'><title>{html.escape(row.get('assembly_accession', ''))}: {html.escape(group)}</title></circle>")
+        for idx, (group, color) in enumerate(list(groups.items())[:12]):
+            y = top + idx * 20
+            parts.append(f"<rect x='{left + plot_w + 20}' y='{y}' width='12' height='12' fill='{color}'/><text x='{left + plot_w + 38}' y='{y + 11}' font-family='Arial' font-size='11' fill='#1f2933'>{html.escape(group[:32])}</text>")
+        parts.append(f"<text x='{left}' y='{height - 35}' font-family='Arial' font-size='12' fill='#52606d'>PCoA1 vs PCoA2; point size follows AMR burden. Annotation similarity, not phylogeny.</text>")
+        parts.append("</svg>\n")
+        path.write_text("".join(parts), encoding="utf-8")
+
+    def write_scatter_png(path: Path, rows: list[dict[str, str]]) -> None:
+        width, height = 860, 560
+        left, top, plot_w, plot_h = 80, 60, 700, 400
+        xs = [number(row.get("PCoA1", "0")) for row in rows]
+        ys = [number(row.get("PCoA2", "0")) for row in rows]
+        min_x, max_x = (min(xs), max(xs)) if xs else (-1, 1)
+        min_y, max_y = (min(ys), max(ys)) if ys else (-1, 1)
+        if min_x == max_x:
+            min_x -= 1
+            max_x += 1
+        if min_y == max_y:
+            min_y -= 1
+            max_y += 1
+        pixels = [bytearray([248, 250, 252] * width) for _ in range(height)]
+        colors = [(15, 118, 110), (190, 18, 60), (29, 78, 216), (161, 98, 7), (124, 58, 237), (21, 128, 61)]
+        for idx, row in enumerate(rows):
+            x = int(left + (number(row.get("PCoA1", "0")) - min_x) / (max_x - min_x) * plot_w)
+            y = int(top + plot_h - (number(row.get("PCoA2", "0")) - min_y) / (max_y - min_y) * plot_h)
+            color = colors[idx % len(colors)]
+            for yy in range(y - 4, y + 5):
+                for xx in range(x - 4, x + 5):
+                    if 0 <= xx < width and 0 <= yy < height and (xx - x) ** 2 + (yy - y) ** 2 <= 16:
+                        offset = xx * 3
+                        pixels[yy][offset:offset + 3] = bytes(color)
+        _write_png(path, width, height, pixels)
+
+    for field, stem in [
+        ("mlst_ST", "feature_profile_pcoa_by_lineage"),
+        ("country", "feature_profile_pcoa_by_country"),
+        ("isolation_source", "feature_profile_pcoa_by_source"),
+        ("bioproject", "feature_profile_pcoa_by_bioproject"),
+    ]:
+        add_standard_figure(
+            stem,
+            ordination_rows,
+            ordination_fields,
+            lambda path, field=field, stem=stem: write_scatter_svg(path, ordination_rows, stem.replace("_", " ").title(), field),
+            lambda path: write_scatter_png(path, ordination_rows),
+            ["Feature-profile ordination reflects annotation similarity, not whole-genome phylogeny."],
+        )
+
+    # Concordance / database agreement, initially focused on AMR and AMRFinderPlus.
+    features_by_tool: dict[str, dict[str, set[str]]] = {"amr": defaultdict(set), "amrfinderplus": defaultdict(set)}
+    feature_info: dict[str, dict[str, str]] = {}
+    sample_tool_features: dict[str, dict[str, set[str]]] = defaultdict(lambda: {"amr": set(), "amrfinderplus": set()})
+    for row in features:
+        database = row.get("database", "")
+        if database not in features_by_tool:
+            continue
+        feature = row.get("feature_id", "")
+        sample = row.get("assembly_accession", "") or row.get("sample_id", "")
+        if not feature or not sample:
+            continue
+        key = feature.lower()
+        features_by_tool[database][key].add(sample)
+        sample_tool_features[sample][database].add(key)
+        feature_info.setdefault(key, {
+            "feature_id": feature,
+            "feature_name": row.get("feature_name", ""),
+            "drug_class": row.get("drug_class", "") or row.get("feature_category", ""),
+        })
+    concordance_feature_rows = []
+    for key in sorted(set(features_by_tool["amr"]) | set(features_by_tool["amrfinderplus"])):
+        amr_samples = features_by_tool["amr"].get(key, set())
+        amrf_samples = features_by_tool["amrfinderplus"].get(key, set())
+        both = amr_samples & amrf_samples
+        amr_only = amr_samples - amrf_samples
+        amrf_only = amrf_samples - amr_samples
+        label = "called_by_both" if both else ("abricate_only" if amr_samples else "amrfinderplus_only")
+        info = feature_info.get(key, {"feature_id": key, "feature_name": "", "drug_class": ""})
+        concordance_feature_rows.append({
+            "feature_id": info.get("feature_id", key),
+            "feature_name": info.get("feature_name", ""),
+            "drug_class": info.get("drug_class", ""),
+            "called_by_both": str(len(both)),
+            "abricate_only": str(len(amr_only)),
+            "amrfinderplus_only": str(len(amrf_only)),
+            "possible_class_match": "false",
+            "total_positive_genomes": str(len(amr_samples | amrf_samples)),
+            "concordance_label": label,
+            "warning_flags": "tool_specific_call" if label != "called_by_both" else "",
+        })
+    concordance_feature_path = tables / "amr_concordance_feature_level.tsv"
+    concordance_feature_fields = ["feature_id", "feature_name", "drug_class", "called_by_both", "abricate_only", "amrfinderplus_only", "possible_class_match", "total_positive_genomes", "concordance_label", "warning_flags"]
+    write_rows(concordance_feature_path, concordance_feature_rows, concordance_feature_fields)
+    concordance_sample_rows = []
+    for sample in all_samples:
+        amr_set = sample_tool_features[sample]["amr"]
+        amrf_set = sample_tool_features[sample]["amrfinderplus"]
+        concordance_sample_rows.append({
+            "assembly_accession": sample,
+            "sample_id": sample_id(sample),
+            "called_by_both": str(len(amr_set & amrf_set)),
+            "abricate_only": str(len(amr_set - amrf_set)),
+            "amrfinderplus_only": str(len(amrf_set - amr_set)),
+            "total_amr_features": str(len(amr_set | amrf_set)),
+            "concordance_label": "overlap_detected" if amr_set & amrf_set else ("tool_specific_only" if amr_set or amrf_set else "no_amr_calls"),
+            "warning_flags": "",
+        })
+    concordance_sample_path = tables / "amr_concordance_by_sample.tsv"
+    concordance_sample_fields = ["assembly_accession", "sample_id", "called_by_both", "abricate_only", "amrfinderplus_only", "total_amr_features", "concordance_label", "warning_flags"]
+    write_rows(concordance_sample_path, concordance_sample_rows, concordance_sample_fields)
+    concordance_counts = Counter(row.get("concordance_label", "") for row in concordance_feature_rows)
+    concordance_summary_rows = [
+        {"comparison": "AMRFinderPlus_vs_ABRicate_AMR", "concordance_label": label, "feature_count": str(count), "warning_flags": "tool_specific_call" if label != "called_by_both" else ""}
+        for label, count in sorted(concordance_counts.items())
+    ]
+    concordance_summary_path = tables / "database_concordance_summary.tsv"
+    concordance_summary_fields = ["comparison", "concordance_label", "feature_count", "warning_flags"]
+    write_rows(concordance_summary_path, concordance_summary_rows, concordance_summary_fields)
+    add_standard_figure(
+        "amr_concordance_summary",
+        concordance_summary_rows,
+        concordance_summary_fields,
+        lambda path: _write_bar_svg(path, concordance_summary_rows, "AMR database concordance summary", "concordance_label", "feature_count", "Features"),
+        lambda path: _write_bar_png(path, concordance_summary_rows, "feature_count"),
+        ["Tool-specific calls are retained for review."],
+    )
+    top_concordance_features = sorted(concordance_feature_rows, key=lambda row: (-int(number(row.get("total_positive_genomes", "0"))), row.get("feature_id", "")))[:top_n]
+    add_standard_figure(
+        "amr_concordance_by_feature",
+        top_concordance_features,
+        concordance_feature_fields,
+        lambda path: _write_bar_svg(path, top_concordance_features, "AMR concordance by feature", "feature_id", "total_positive_genomes", "Positive genomes"),
+        lambda path: _write_bar_png(path, top_concordance_features, "total_positive_genomes"),
+        ["AMRFinderPlus-only and ABRicate-only calls may reflect scope, thresholds, naming, or partial hits."],
+    )
+
+    # Evidence and confidence synthesis.
+    confidence_rows = []
+
+    def confidence_label(section: str, support: str, interpretation: str, q_value: str, evidence_level: str, warnings: str, sample_size: str, effect_size: str) -> str:
+        flags = warnings.lower()
+        q = _float_or_none(q_value)
+        n_value = number(sample_size)
+        effect = abs(number(effect_size))
+        if "insufficient" in support or "insufficient" in interpretation:
+            return "insufficient_support"
+        if any(term in flags for term in ["severe", "dominance", "confounding", "small_group", "low_sample_support"]):
+            return "warning_heavy"
+        if q is None and section in {"Prevalence", "Diversity", "Geographic Distribution", "Genomic Context"}:
+            return "descriptive_only"
+        if q is not None and q <= 0.05 and n_value >= 30 and (effect >= 0.2 or evidence_level in {"within_10kb", "overlap_or_adjacent", "overlapping", "adjacent"}):
+            return "high_confidence"
+        if (q is not None and q <= 0.10 and n_value >= 10) or evidence_level in {"same_contig", "within_10kb", "overlap_or_adjacent", "overlapping", "adjacent"}:
+            return "moderate_confidence"
+        if n_value and n_value < 10:
+            return "descriptive_only"
+        return "exploratory"
+
+    def add_confidence(section: str, database: str, feature_id: str, finding_text: str, support: str = "", evidence_level: str = "", interpretation: str = "", sample_size: str = "", effect_size: str = "", q_value: str = "", warnings: str = "") -> None:
+        label = confidence_label(section, support, interpretation, q_value, evidence_level, warnings, sample_size, effect_size)
+        confidence_rows.append({
+            "finding_id": f"F{len(confidence_rows) + 1:05d}",
+            "section": section,
+            "database": database,
+            "feature_id": feature_id,
+            "finding_text": finding_text,
+            "support_label": support,
+            "evidence_level": evidence_level,
+            "interpretation_label": interpretation,
+            "sample_size": sample_size,
+            "effect_size": effect_size,
+            "q_value": q_value,
+            "lineage_warning": str("lineage" in warnings.lower()).lower(),
+            "bioproject_warning": str("bioproject" in warnings.lower()).lower(),
+            "small_group_warning": str("small" in warnings.lower() or "low_sample" in warnings.lower()).lower(),
+            "confidence_label": label,
+            "recommended_interpretation": "Research review; confirm with context and complete tables." if label in {"high_confidence", "moderate_confidence"} else "Exploratory or descriptive; avoid over-interpretation.",
+        })
+
+    for row in read_table(tables / "metadata_feature_enrichment.tsv")[:200]:
+        add_confidence(
+            "Metadata Associations",
+            row.get("database", ""),
+            row.get("feature_id", ""),
+            f"{row.get('feature_id', '')} vs {row.get('metadata_column', '')}={row.get('metadata_group', '')}",
+            row.get("support_label", ""),
+            "",
+            row.get("interpretation_label", ""),
+            row.get("group_n", ""),
+            row.get("prevalence_difference", ""),
+            row.get("q_value", ""),
+            row.get("warning_flags", ""),
+        )
+    cooccurrence_pair_rows = read_table(tables / "cooccurrence_pair_summary.tsv")
+    for row in cooccurrence_pair_rows[:200]:
+        add_confidence(
+            "Co-occurrence",
+            row.get("feature_a_database", ""),
+            row.get("feature_a_id", ""),
+            f"{row.get('feature_a_id', '')} with {row.get('feature_b_id', '')}",
+            row.get("support_label", ""),
+            row.get("evidence_level", "same_genome") or "same_genome",
+            row.get("significance_label", ""),
+            row.get("n_total", ""),
+            row.get("phi_correlation", ""),
+            row.get("q_value", ""),
+            row.get("warning_flags", ""),
+        )
+    for row in context_rows[:200]:
+        add_confidence(
+            "Genomic Context",
+            row.get("selected_database", ""),
+            row.get("selected_feature", ""),
+            f"{row.get('selected_feature', '')} near {row.get('context_feature', '')}",
+            "",
+            row.get("evidence_level", ""),
+            row.get("interpretation_warning", ""),
+            "1",
+            "",
+            "",
+            row.get("warning_flags", "") or row.get("interpretation_warning", ""),
+        )
+    for row in temporal_rows[:200]:
+        add_confidence(
+            "Temporal Trends",
+            row.get("database", ""),
+            row.get("feature_id", ""),
+            f"{row.get('feature_id', '')} {row.get('trend_label', '')}",
+            row.get("support_label", ""),
+            "",
+            row.get("trend_label", ""),
+            row.get("years_observed", ""),
+            row.get("change_percent_points", ""),
+            row.get("q_value", ""),
+            row.get("warning_flags", ""),
+        )
+    for row in read_table(tables / "lineage_adjusted_top_findings.tsv")[:200]:
+        add_confidence(
+            "Lineage / Clonal Structure",
+            row.get("database", ""),
+            row.get("feature_id", ""),
+            f"{row.get('feature_id', '')} lineage-adjusted finding for {row.get('metadata_group', '')}",
+            "",
+            "",
+            row.get("lineage_adjusted_interpretation", ""),
+            row.get("supporting_samples", ""),
+            "",
+            "",
+            row.get("lineage_warning_flags", ""),
+        )
+    finding_confidence_path = tables / "finding_confidence_summary.tsv"
+    confidence_fields = ["finding_id", "section", "database", "feature_id", "finding_text", "support_label", "evidence_level", "interpretation_label", "sample_size", "effect_size", "q_value", "lineage_warning", "bioproject_warning", "small_group_warning", "confidence_label", "recommended_interpretation"]
+    write_rows(finding_confidence_path, confidence_rows, confidence_fields)
+    confidence_counts = Counter(row["confidence_label"] for row in confidence_rows)
+    evidence_summary_rows = [{"confidence_label": label, "finding_count": str(count)} for label, count in sorted(confidence_counts.items())]
+    evidence_summary_path = tables / "evidence_summary.tsv"
+    write_rows(evidence_summary_path, evidence_summary_rows, ["confidence_label", "finding_count"])
+    by_section_counter: dict[tuple[str, str], int] = Counter((row["section"], row["confidence_label"]) for row in confidence_rows)
+    evidence_by_section_rows = [
+        {"section": section, "confidence_label": label, "finding_count": str(count)}
+        for (section, label), count in sorted(by_section_counter.items())
+    ]
+    evidence_by_section_path = tables / "evidence_by_section.tsv"
+    write_rows(evidence_by_section_path, evidence_by_section_rows, ["section", "confidence_label", "finding_count"])
+    add_standard_figure(
+        "evidence_confidence_summary",
+        evidence_summary_rows,
+        ["confidence_label", "finding_count"],
+        lambda path: _write_bar_svg(path, evidence_summary_rows, "Evidence confidence summary", "confidence_label", "finding_count", "Findings"),
+        lambda path: _write_bar_png(path, evidence_summary_rows, "finding_count"),
+        ["Findings are classified from support, q-values, context evidence, and warning flags."],
+    )
+    add_standard_figure(
+        "evidence_by_section",
+        evidence_by_section_rows,
+        ["section", "confidence_label", "finding_count"],
+        lambda path: _write_heatmap_svg(path, evidence_by_section_rows, "Evidence by section", "section", "confidence_label", "finding_count"),
+        lambda path: _write_heatmap_png(path, evidence_by_section_rows, "section", "confidence_label", "finding_count"),
+        ["Most report findings are expected to remain exploratory."],
+    )
+
+    # Warnings and limitations.
+    warnings_rows = []
+
+    def severity_for_warning(warning_type: str, section: str = "") -> str:
+        text = f"{warning_type} {section}".lower()
+        if any(term in text for term in ["schema validation failed", "critical", "required core module failed"]):
+            return "critical"
+        if any(term in text for term in ["dominance", "confounding", "failed", "missing metadata unavailable", "invalid", "duplicate"]):
+            return "high"
+        if any(term in text for term in ["cap", "warning", "low_support", "small", "missing", "same_genome_only", "low_identity", "low_coverage"]):
+            return "moderate"
+        if any(term in text for term in ["skipped", "preserved", "info"]):
+            return "info"
+        return "low"
+
+    def add_warning(section: str, warning_type: str, description: str, source_file: Path, affected_database: str = "", affected_feature: str = "", affected_samples: str = "", affected_rows: str = "") -> None:
+        if not warning_type:
+            return
+        for warning in [item.strip() for item in re.split(r"[;,|]", warning_type) if item.strip()]:
+            severity = severity_for_warning(warning, section)
+            warnings_rows.append({
+                "warning_id": f"W{len(warnings_rows) + 1:05d}",
+                "section": section,
+                "severity": severity,
+                "warning_type": warning,
+                "affected_database": affected_database,
+                "affected_feature": affected_feature,
+                "affected_samples": affected_samples,
+                "affected_rows": affected_rows,
+                "description": description,
+                "recommended_action": "Review denominators, complete TSVs, lineage/BioProject balance, and raw tool outputs before interpretation.",
+                "source_file": str(source_file.relative_to(important_dir)) if important_dir in source_file.parents else str(source_file),
+            })
+
+    warning_sources = [
+        ("Geographic Distribution", tables / "geographic_warning_summary.tsv", "warning_flags"),
+        ("Temporal Trends", tables / "temporal_trend_summary.tsv", "warning_flags"),
+        ("Co-occurrence / Genomic Context", tables / "cooccurrence_pair_summary.tsv", "warning_flags"),
+        ("Co-occurrence / Genomic Context", tables / "genomic_context_evidence.tsv", "warning_flags"),
+        ("Metadata Associations", tables / "metadata_feature_enrichment.tsv", "warning_flags"),
+        ("Metadata Associations", tables / "metadata_burden_associations.tsv", "warning_flags"),
+        ("Lineage / Clonal Structure", tables / "lineage_distribution.tsv", "warning_flags"),
+        ("Lineage / Clonal Structure", tables / "lineage_adjusted_top_findings.tsv", "lineage_warning_flags"),
+        ("Diversity / Pan-feature Summary", tables / "diversity_feature_richness_by_sample.tsv", "warning_flags"),
+        ("Diversity / Pan-feature Summary", tables / "diversity_by_metadata_group.tsv", "warning_flags"),
+        ("Variations", important_dir / "key_tables" / "feature_variation_summary.tsv", "warning_flags"),
+    ]
+    for section, path, flag_field in warning_sources:
+        for row in read_table(path):
+            if row.get(flag_field):
+                add_warning(section, row.get(flag_field, ""), f"Warning flags reported in {path.name}.", path, row.get("database", ""), row.get("feature_id", ""), row.get("assembly_accession", ""), "1")
+    module_status_rows = read_table(out_dir / "manifest" / "module_status_summary.tsv")
+    module_warning_rows = []
+    for row in module_status_rows:
+        status = row.get("status", "")
+        if status and status != "PASS":
+            add_warning("Run Overview", status, row.get("message", "Module status warning."), out_dir / "manifest" / "module_status_summary.tsv", row.get("module", ""), "", "", row.get("feature_rows_created", ""))
+        module_warning_rows.append({
+            "module": row.get("module", ""),
+            "status": status,
+            "enabled": row.get("enabled", ""),
+            "samples_processed": row.get("samples_processed", ""),
+            "samples_failed": row.get("samples_failed", ""),
+            "feature_rows_created": row.get("feature_rows_created", ""),
+            "severity": severity_for_warning(status, "Run Overview") if status and status != "PASS" else "info",
+            "message": row.get("message", ""),
+        })
+    module_warning_path = tables / "module_warning_summary.tsv"
+    module_warning_fields = ["module", "status", "enabled", "samples_processed", "samples_failed", "feature_rows_created", "severity", "message"]
+    write_rows(module_warning_path, module_warning_rows, module_warning_fields)
+    report_controls = read_table(out_dir / "manifest" / "report_controls.tsv")
+    cap_rows = []
+    for row in report_controls:
+        setting = row.get("setting", "")
+        if any(term in setting for term in ["cap", "max_", "large_dataset", "complete_tsvs_preserved", "report_warning"]):
+            cap_rows.append({
+                "setting": setting,
+                "value": row.get("value", ""),
+                "message": row.get("message", ""),
+                "warning_flags": "large_dataset_capped" if any(term in setting for term in ["cap", "max_", "large_dataset"]) else "complete_tsv_preserved",
+            })
+            if any(term in setting for term in ["cap", "max_", "large_dataset"]) or row.get("value"):
+                add_warning("Report Controls", cap_rows[-1]["warning_flags"], row.get("message", ""), out_dir / "manifest" / "report_controls.tsv")
+    report_cap_path = tables / "report_cap_summary.tsv"
+    write_rows(report_cap_path, cap_rows, ["setting", "value", "message", "warning_flags"])
+    schema_summary_path = out_dir / "manifest" / "schema_validation_summary.txt"
+    if schema_summary_path.exists():
+        schema_text = schema_summary_path.read_text(encoding="utf-8", errors="ignore")
+        if "invalid_feature_rows=0" not in schema_text or "unmatched_feature_rows=0" not in schema_text:
+            add_warning("Feature Contract", "schema_validation_warning", schema_text.strip().splitlines()[0] if schema_text.strip() else "Schema validation warning.", schema_summary_path)
+    warnings_path = tables / "warnings_and_limitations.tsv"
+    warning_fields = ["warning_id", "section", "severity", "warning_type", "affected_database", "affected_feature", "affected_samples", "affected_rows", "description", "recommended_action", "source_file"]
+    write_rows(warnings_path, warnings_rows, warning_fields)
+    warnings_by_section_counter: dict[tuple[str, str], int] = Counter((row["section"], row["severity"]) for row in warnings_rows)
+    warnings_by_section_rows = [
+        {"section": section, "severity": severity, "warning_count": str(count)}
+        for (section, severity), count in sorted(warnings_by_section_counter.items())
+    ]
+    warnings_by_section_path = tables / "warnings_by_section.tsv"
+    write_rows(warnings_by_section_path, warnings_by_section_rows, ["section", "severity", "warning_count"])
+    severity_rows = [{"severity": severity, "warning_count": str(count)} for severity, count in sorted(Counter(row["severity"] for row in warnings_rows).items())]
+    add_standard_figure(
+        "warnings_summary",
+        severity_rows,
+        ["severity", "warning_count"],
+        lambda path: _write_bar_svg(path, severity_rows, "Warnings by severity", "severity", "warning_count", "Warnings"),
+        lambda path: _write_bar_png(path, severity_rows, "warning_count"),
+        ["Warnings do not necessarily invalidate a run; they guide interpretation."],
+    )
+    add_standard_figure(
+        "warnings_by_section",
+        warnings_by_section_rows,
+        ["section", "severity", "warning_count"],
+        lambda path: _write_heatmap_svg(path, warnings_by_section_rows, "Warnings by section", "section", "severity", "warning_count"),
+        lambda path: _write_heatmap_png(path, warnings_by_section_rows, "section", "severity", "warning_count"),
+        ["Review warning-heavy sections before interpretation."],
+    )
+
+    # Download manifests and final ZIPs.
+    required_files = [
+        (sample_dir / "basic" / "enriched_genome_dataset.csv", "main user-facing files", "Enriched genome dataset CSV", "all users", "complete", "Open first for sample-level review."),
+        (sample_dir / "basic" / "enriched_genome_dataset.tsv", "main user-facing files", "Enriched genome dataset TSV", "all users", "complete", "Open first for sample-level review."),
+        (warnings_path, "important tables", "Warnings and limitations", "all users", "complete", "Review before interpreting findings."),
+        (notable_path, "important tables", "Notable genomes research prioritization", "research users", "complete", "Prioritize genomes for follow-up review."),
+        (finding_confidence_path, "important tables", "Finding confidence summary", "research users", "complete", "Review support and warning labels."),
+        (out_dir / "manifest" / "reproducibility_manifest.json", "reproducibility files", "Reproducibility manifest", "technical users", "complete", "Track run provenance."),
+        (out_dir / "manifest" / "feature_contract.json", "reproducibility files", "Feature contract", "technical users", "complete", "Validate downstream feature-table assumptions."),
+        (out_dir / "manifest" / "schema_validation_summary.txt", "reproducibility files", "Schema validation summary", "technical users", "complete", "Check feature contract status."),
+        (sample_dir / "all" / "file_index.tsv", "complete outputs", "Complete all-mode file index", "technical users", "complete", "Find complete outputs when available."),
+    ]
+    file_index_rows = []
+    for file_path in sorted({path for path in important_dir.rglob("*") if path.is_file()} | {item[0] for item in required_files}):
+        category = "important figures" if "figures" in file_path.parts else ("important tables" if "tables" in file_path.parts or "key_tables" in file_path.parts else ("downloads" if "downloads" in file_path.parts else "complete outputs"))
+        description = next((item[2] for item in required_files if item[0] == file_path), file_path.name)
+        audience = next((item[3] for item in required_files if item[0] == file_path), "all users")
+        complete_or_capped = next((item[4] for item in required_files if item[0] == file_path), "complete" if file_path.suffix in {".tsv", ".csv", ".json", ".txt"} else "report-facing")
+        recommended_use = next((item[5] for item in required_files if item[0] == file_path), "Open from the important report when needed.")
+        row_count = ""
+        if file_path.suffix in {".tsv", ".csv"} and file_path.exists():
+            row_count = str(len(read_table(file_path)))
+        file_index_rows.append({
+            "file_path": str(file_path.relative_to(sample_dir)) if sample_dir in file_path.parents else str(file_path),
+            "category": category,
+            "description": description,
+            "audience": audience,
+            "complete_or_capped": complete_or_capped,
+            "recommended_use": recommended_use,
+            "exists": str(file_path.exists()).lower(),
+            "row_count": row_count,
+        })
+    file_index_path = tables / "important_file_index.tsv"
+    file_index_fields = ["file_path", "category", "description", "audience", "complete_or_capped", "recommended_use", "exists", "row_count"]
+    write_rows(file_index_path, file_index_rows, file_index_fields)
+    download_manifest_path = tables / "download_manifest.tsv"
+    write_rows(download_manifest_path, file_index_rows, file_index_fields)
+    table_files = [path for path in important_dir.rglob("*") if path.is_file() and path.suffix in {".tsv", ".csv", ".txt", ".json"} and "figures" not in path.parts and "downloads" not in path.parts]
+    figure_files = [path for path in important_dir.rglob("*") if path.is_file() and path.parent == figures and path.suffix in {".png", ".svg", ".pdf", ".tsv", ".html"}]
+    asset_files = [important_dir / "results.html", *table_files, *figure_files]
+    important_tables_zip = downloads / "important_tables.zip"
+    important_figures_zip = downloads / "important_figures.zip"
+    important_assets_zip = downloads / "important_report_assets.zip"
+    _write_zip_bundle(important_tables_zip, table_files, important_dir)
+    _write_zip_bundle(important_figures_zip, figure_files, important_dir)
+    _write_zip_bundle(important_assets_zip, [path for path in asset_files if path.exists()], important_dir)
+
+    return {
+        "important_notable_genomes": str(notable_path),
+        "important_notable_genome_score_components": str(components_path),
+        "important_feature_profile_ordination": str(ordination_path),
+        "important_database_concordance_summary": str(concordance_summary_path),
+        "important_amr_concordance_feature_level": str(concordance_feature_path),
+        "important_amr_concordance_by_sample": str(concordance_sample_path),
+        "important_evidence_summary": str(evidence_summary_path),
+        "important_finding_confidence_summary": str(finding_confidence_path),
+        "important_evidence_by_section": str(evidence_by_section_path),
+        "important_warnings_and_limitations": str(warnings_path),
+        "important_warnings_by_section": str(warnings_by_section_path),
+        "important_module_warning_summary": str(module_warning_path),
+        "important_report_cap_summary": str(report_cap_path),
+        "important_file_index": str(file_index_path),
+        "important_download_manifest": str(download_manifest_path),
+        "important_tables_zip": str(important_tables_zip),
+        "important_figures_zip": str(important_figures_zip),
+        "important_report_assets_zip": str(important_assets_zip),
+    }
+
+
 def write_important_results_report(
     sample_dir: Path,
     out_dir: Path,
@@ -10150,6 +10954,7 @@ def write_important_results_report(
     metadata_association_outputs: dict[str, str],
     lineage_outputs: dict[str, str],
     diversity_outputs: dict[str, str],
+    final_outputs: dict[str, str],
 ) -> dict[str, str]:
     important_dir.mkdir(parents=True, exist_ok=True)
     basic_csv = sample_dir / "basic" / "enriched_genome_dataset.csv"
@@ -10206,6 +11011,18 @@ def write_important_results_report(
     diversity_class_rows = read_table(important_dir / "tables" / "diversity_core_common_accessory_rare_features.tsv")
     diversity_metadata_rows = read_table(important_dir / "tables" / "diversity_by_metadata_group.tsv")
     diversity_written_rows = read_table(important_dir / "tables" / "diversity_written_summaries.tsv")
+    notable_rows = read_table(important_dir / "tables" / "notable_genomes.tsv")
+    ordination_rows = read_table(important_dir / "tables" / "feature_profile_ordination.tsv")
+    concordance_summary_rows = read_table(important_dir / "tables" / "database_concordance_summary.tsv")
+    concordance_feature_rows = read_table(important_dir / "tables" / "amr_concordance_feature_level.tsv")
+    confidence_rows = read_table(important_dir / "tables" / "finding_confidence_summary.tsv")
+    evidence_summary_rows = read_table(important_dir / "tables" / "evidence_summary.tsv")
+    warnings_rows = read_table(important_dir / "tables" / "warnings_and_limitations.tsv")
+    warnings_by_section_rows = read_table(important_dir / "tables" / "warnings_by_section.tsv")
+    module_warning_rows = read_table(important_dir / "tables" / "module_warning_summary.tsv")
+    report_cap_rows = read_table(important_dir / "tables" / "report_cap_summary.tsv")
+    file_index_rows = read_table(important_dir / "tables" / "important_file_index.tsv")
+    download_manifest_rows = read_table(important_dir / "tables" / "download_manifest.tsv")
     top_prevalence = sorted(prevalence_rows, key=lambda row: (row.get("database", ""), -(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("feature_id", "")))[:20]
     top_geographic_burden = sorted(
         [
@@ -10279,6 +11096,34 @@ def write_important_results_report(
         diversity_metadata_rows,
         key=lambda row: (-int(_float_or_none(row.get("group_n", "")) or 0), row.get("metadata_column", ""), row.get("metadata_group", "")),
     )[:20]
+    top_notable = sorted(
+        notable_rows,
+        key=lambda row: (int(_float_or_none(row.get("rank", "")) or 999999), -(_float_or_none(row.get("notable_genome_score", "")) or 0.0)),
+    )[:20]
+    top_concordance_features = sorted(
+        concordance_feature_rows,
+        key=lambda row: (-int(_float_or_none(row.get("total_positive_genomes", "")) or 0), row.get("feature_id", "")),
+    )[:20]
+    top_confidence = sorted(
+        confidence_rows,
+        key=lambda row: (
+            {"high_confidence": 0, "moderate_confidence": 1, "exploratory": 2, "descriptive_only": 3, "warning_heavy": 4, "insufficient_support": 5}.get(row.get("confidence_label", ""), 9),
+            row.get("section", ""),
+            row.get("feature_id", ""),
+        ),
+    )[:20]
+    top_warnings = sorted(
+        warnings_rows,
+        key=lambda row: (
+            {"critical": 0, "high": 1, "moderate": 2, "low": 3, "info": 4}.get(row.get("severity", ""), 9),
+            row.get("section", ""),
+            row.get("warning_type", ""),
+        ),
+    )[:30]
+    top_files = sorted(
+        file_index_rows,
+        key=lambda row: (row.get("category", ""), row.get("file_path", "")),
+    )[:40]
     qc_table_html = _html_table(qc_steps, ["step_order", "qc_step", "tool", "enabled", "pass", "warning", "fail", "skipped", "status", "notes"], max_rows=20)
     prevalence_table_html = _html_table(top_prevalence, ["database", "feature_id", "feature_category", "positive_genomes", "total_genomes", "prevalence_display", "feature_rows", "mean_hits_per_positive_genome", "prevalence_label", "warning_flags"], max_rows=20)
     variation_table_html = _html_table(top_variation, ["database", "feature_id", "total_hits", "positive_genomes", "mean_hits_per_positive_genome", "median_identity", "iqr_identity", "median_coverage", "iqr_coverage", "variation_label", "warning_flags"], max_rows=20)
@@ -10296,6 +11141,16 @@ def write_important_results_report(
     diversity_richness_table_html = _html_table(top_diversity_richness, ["assembly_accession", "sample_id", "total_unique_features", "total_feature_rows", "amr_richness", "vfdb_richness", "plasmidfinder_richness", "integronfinder_richness", "metadata_country", "metadata_source", "lineage_mlst_ST", "lineage_ani_cluster", "richness_label", "warning_flags"], max_rows=20)
     diversity_class_table_html = _html_table(top_diversity_classes, ["database", "feature_id", "positive_genomes", "total_genomes", "prevalence_percent", "feature_class", "feature_rows", "median_identity", "median_coverage", "warning_flags"], max_rows=20)
     diversity_metadata_table_html = _html_table(top_diversity_metadata, ["metadata_column", "metadata_group", "group_n", "database", "mean_richness", "median_richness", "min_richness", "max_richness", "iqr_richness", "warning_flags"], max_rows=20)
+    notable_table_html = _html_table(top_notable, ["rank", "assembly_accession", "sample_id", "notable_genome_score", "notable_label", "score_explanation", "country", "collection_year", "mlst_ST", "ani_cluster", "amr_gene_count", "plasmid_replicon_count", "integron_feature_count", "same_contig_context_count", "within_10kb_context_count", "warning_flags"], max_rows=20)
+    ordination_table_html = _html_table(ordination_rows[:20], ["assembly_accession", "sample_id", "PCoA1", "PCoA2", "explained_variance_PCoA1", "explained_variance_PCoA2", "country", "isolation_source", "bioproject", "mlst_ST", "ani_cluster", "amr_burden", "warning_flags"], max_rows=20)
+    concordance_summary_table_html = _html_table(concordance_summary_rows, ["comparison", "concordance_label", "feature_count", "warning_flags"], max_rows=20)
+    concordance_feature_table_html = _html_table(top_concordance_features, ["feature_id", "feature_name", "drug_class", "called_by_both", "abricate_only", "amrfinderplus_only", "total_positive_genomes", "concordance_label", "warning_flags"], max_rows=20)
+    confidence_table_html = _html_table(top_confidence, ["finding_id", "section", "database", "feature_id", "finding_text", "support_label", "evidence_level", "sample_size", "effect_size", "q_value", "confidence_label", "recommended_interpretation"], max_rows=20)
+    warnings_table_html = _html_table(top_warnings, ["warning_id", "section", "severity", "warning_type", "affected_database", "affected_feature", "description", "recommended_action", "source_file"], max_rows=30)
+    warnings_by_section_table_html = _html_table(warnings_by_section_rows, ["section", "severity", "warning_count"], max_rows=30)
+    module_warning_table_html = _html_table(module_warning_rows, ["module", "status", "enabled", "samples_processed", "samples_failed", "feature_rows_created", "severity", "message"], max_rows=30)
+    report_cap_table_html = _html_table(report_cap_rows, ["setting", "value", "message", "warning_flags"], max_rows=30)
+    file_index_table_html = _html_table(top_files, ["file_path", "category", "description", "audience", "complete_or_capped", "recommended_use", "exists", "row_count"], max_rows=40)
     prevalence_total_rows = sum(int(_float_or_none(row.get("feature_rows", "")) or 0) for row in prevalence_rows)
     prevalence_unique_features = len(prevalence_rows)
     prevalence_databases = len({row.get("database", "") for row in prevalence_rows if row.get("database", "")})
@@ -10606,6 +11461,40 @@ def write_important_results_report(
             f"<p><a href='figures/{html.escape(stem)}.png'>PNG</a> | <a href='figures/{html.escape(svg_path.name)}'>SVG</a> | <a href='figures/{html.escape(stem)}.pdf'>PDF</a> | <a href='figures/{html.escape(stem)}.data.tsv'>Data TSV</a></p></div>"
         )
     diversity_figures_html = "<div class='figure-row'>" + "".join(diversity_figure_items) + "</div>" if diversity_figure_items else "<p>No diversity figures were generated because feature rows were unavailable.</p>"
+    def figure_cards(figure_specs: list[tuple[str, str]]) -> str:
+        items = []
+        for figure_name, title in figure_specs:
+            svg_path = important_dir / "figures" / f"{figure_name}.svg"
+            if not svg_path.exists():
+                continue
+            items.append(
+                f"<div><h3>{html.escape(title)}</h3><img src='figures/{html.escape(svg_path.name)}' alt='{html.escape(title)}'>"
+                f"<p><a href='figures/{html.escape(figure_name)}.png'>PNG</a> | <a href='figures/{html.escape(figure_name)}.svg'>SVG</a> | <a href='figures/{html.escape(figure_name)}.pdf'>PDF</a> | <a href='figures/{html.escape(figure_name)}.data.tsv'>Data TSV</a></p></div>"
+            )
+        return "<div class='figure-row'>" + "".join(items) + "</div>" if items else "<p>No figures were generated for this section.</p>"
+
+    notable_figures_html = figure_cards([
+        ("notable_genomes_ranked", "Ranked notable genomes"),
+        ("notable_genome_score_heatmap", "Notable genome score components"),
+    ])
+    ordination_figures_html = figure_cards([
+        ("feature_profile_pcoa_by_lineage", "Feature-profile PCoA by lineage"),
+        ("feature_profile_pcoa_by_country", "Feature-profile PCoA by country"),
+        ("feature_profile_pcoa_by_source", "Feature-profile PCoA by source"),
+        ("feature_profile_pcoa_by_bioproject", "Feature-profile PCoA by BioProject"),
+    ])
+    concordance_figures_html = figure_cards([
+        ("amr_concordance_summary", "AMR concordance summary"),
+        ("amr_concordance_by_feature", "AMR concordance by feature"),
+    ])
+    evidence_figures_html = figure_cards([
+        ("evidence_confidence_summary", "Evidence confidence summary"),
+        ("evidence_by_section", "Evidence by section"),
+    ])
+    warnings_figures_html = figure_cards([
+        ("warnings_summary", "Warnings by severity"),
+        ("warnings_by_section", "Warnings by section"),
+    ])
     report_path = important_dir / "results.html"
     report_path.write_text(
         f"""<!doctype html>
@@ -10644,13 +11533,17 @@ th {{ background: #f0f4f8; }}
 <a href="#metadata-associations">Metadata Associations</a>
 <a href="#lineage">Lineage / Clonal Structure</a>
 <a href="#diversity">Diversity / Pan-feature Summary</a>
-<a href="#files">Important Files</a>
-<a href="#warnings">Warnings</a>
+<a href="#notable-genomes">Notable Genomes</a>
+<a href="#ordination">Feature-profile Ordination</a>
+<a href="#concordance">Concordance / Database Agreement</a>
+<a href="#evidence">Evidence & Confidence</a>
+<a href="#warnings">Warnings & Limitations</a>
+<a href="#downloads">Downloads / Important Files</a>
 </nav>
 <main>
 <section id="featured"><h1>Featured Results</h1><div class="cards">{card_html}</div><p>{db_badges}</p></section>
 <section id="overview"><h2>Run Overview</h2><p>This curated report summarizes the key outputs while preserving complete advanced outputs in the full PanResistome bundle.</p>
-<div class="downloads"><a href="../basic/enriched_genome_dataset.csv">Download enriched dataset CSV</a><a href="../basic/enriched_genome_dataset.tsv">Download enriched dataset TSV</a><a href="../panr2_inputs/report/panr2_handoff_index.html">Open complete PanR2 handoff report</a></div></section>
+<div class="downloads"><a href="../basic/enriched_genome_dataset.csv">Download enriched dataset CSV</a><a href="downloads/important_tables.zip">Download important tables ZIP</a><a href="downloads/important_figures.zip">Download important figures ZIP</a><a href="../panr2_inputs/report/panr2_handoff_index.html">Open complete PanR2 handoff report</a><a href="../panr2_inputs/manifest/reproducibility_manifest.json">Download reproducibility manifest</a><a href="../panr2_inputs/manifest/feature_contract.json">Download feature contract</a></div></section>
 <section id="qc"><h2>QC Summary</h2><p>This section shows which QC steps were enabled, skipped, or passed before annotation.</p>
 <div class="figure-row"><div><h3>QC Funnel</h3><img src="figures/qc_funnel.svg" alt="QC funnel"></div><div><h3>QC Status</h3><img src="figures/qc_status_overview.svg" alt="QC status overview"></div></div>
 {qc_table_html}
@@ -10744,44 +11637,52 @@ th {{ background: #f0f4f8; }}
 <h3>Metadata-stratified diversity</h3>
 {diversity_metadata_table_html}
 <div class="downloads"><a href="figures/diversity_analysis.html">Open interactive diversity report</a><a href="diversity_tables.zip">Download diversity tables ZIP</a><a href="diversity_figures.zip">Download diversity figures ZIP</a><a href="tables/diversity_feature_richness_by_sample.tsv">Download feature richness by sample</a><a href="tables/diversity_database_by_sample.tsv">Download database diversity by sample</a><a href="tables/diversity_database_by_sample_wide.tsv">Download wide database diversity</a><a href="tables/diversity_core_common_accessory_rare_features.tsv">Download feature class table</a><a href="tables/diversity_core_accessory_summary_by_database.tsv">Download core/accessory summary</a><a href="tables/diversity_pan_feature_accumulation.tsv">Download pan-feature accumulation</a><a href="tables/diversity_jaccard_distance_matrix.tsv">Download Jaccard matrix</a><a href="tables/diversity_jaccard_pairs.tsv">Download Jaccard pairs</a><a href="tables/diversity_by_metadata_group.tsv">Download metadata-stratified diversity</a><a href="tables/diversity_written_summaries.tsv">Download written summaries</a></div></section>
-<section id="files"><h2>Important Files</h2><ul>
-<li><a href="../basic/enriched_genome_dataset.csv">Enriched genome dataset CSV</a></li>
-<li><a href="key_tables/qc_step_summary.tsv">QC step summary</a></li>
-<li><a href="tables/feature_prevalence.tsv">Feature prevalence table</a></li>
-<li><a href="tables/prevalence_summary_by_database.tsv">Prevalence database summary</a></li>
-<li><a href="figures/prevalence_analysis.html">Interactive prevalence report</a></li>
-<li><a href="figures/geographic_distribution.html">Interactive geographic report</a></li>
-<li><a href="tables/geographic_database_burden.tsv">Geographic database burden table</a></li>
-<li><a href="tables/geographic_feature_distribution.tsv">Geographic feature distribution table</a></li>
-<li><a href="key_tables/feature_variation_summary.tsv">Feature variation summary</a></li>
-<li><a href="key_tables/feature_variation_database_summary.tsv">Feature variation database summary</a></li>
-<li><a href="figures/variation_analysis.html">Interactive variation report</a></li>
-<li><a href="key_tables/temporal_trend_summary.tsv">Temporal trend summary</a></li>
-<li><a href="tables/cooccurrence_pair_summary.tsv">Co-occurrence pair summary</a></li>
-<li><a href="tables/genomic_context_evidence.tsv">Genomic context evidence</a></li>
-<li><a href="tables/metadata_feature_enrichment.tsv">Metadata feature enrichment</a></li>
-<li><a href="tables/metadata_burden_associations.tsv">Metadata burden associations</a></li>
-<li><a href="tables/metadata_usability_summary.tsv">Metadata usability summary</a></li>
-<li><a href="tables/metadata_burden_omnibus.tsv">Metadata burden omnibus tests</a></li>
-<li><a href="tables/metadata_category_omnibus.tsv">Metadata category omnibus tests</a></li>
-<li><a href="figures/lineage_clonal_structure.html">Interactive lineage / clonal structure report</a></li>
-<li><a href="tables/lineage_distribution.tsv">Lineage distribution</a></li>
-<li><a href="tables/lineage_metadata_overlap.tsv">Metadata-lineage overlap</a></li>
-<li><a href="tables/lineage_feature_enrichment.tsv">Lineage feature enrichment</a></li>
-<li><a href="tables/lineage_adjusted_top_findings.tsv">Lineage-adjusted top findings</a></li>
-<li><a href="tables/lineage_written_summaries.tsv">Lineage written summaries</a></li>
-<li><a href="figures/diversity_analysis.html">Interactive diversity / pan-feature summary report</a></li>
-<li><a href="tables/diversity_feature_richness_by_sample.tsv">Diversity feature richness by sample</a></li>
-<li><a href="tables/diversity_core_common_accessory_rare_features.tsv">Diversity core/common/accessory/rare features</a></li>
-<li><a href="tables/diversity_pan_feature_accumulation.tsv">Diversity pan-feature accumulation</a></li>
-<li><a href="tables/diversity_jaccard_distance_matrix.tsv">Diversity Jaccard matrix</a></li>
-<li><a href="../panr2_inputs/features/all_features.tsv">Complete standardized feature table</a></li>
-<li><a href="../panr2_inputs/manifest/schema_validation_summary.txt">Feature-contract validation summary</a></li>
-</ul></section>
-<section id="warnings"><h2>Warnings And Limitations</h2><p>Association, geography, and co-occurrence summaries are exploratory. Confirm important findings with denominator checks, lineage context, BioProject balance, and independent datasets.</p></section>
+<section id="notable-genomes"><h2>Notable Genomes / Genome Prioritization</h2><div class="warning">This prioritization is for research review only. It is not a clinical risk score.</div>
+<p>Genomes are ranked by transparent annotation-burden, genomic-context, rare-feature, temporal-trend, and variation components with warning penalties.</p>
+{notable_figures_html}
+{notable_table_html}
+<div class="downloads"><a href="tables/notable_genomes.tsv">Download notable genomes</a><a href="tables/notable_genome_score_components.tsv">Download score components</a><a href="figures/notable_genomes_ranked.data.tsv">Download plotted data</a></div></section>
+<section id="ordination"><h2>Feature-profile Ordination</h2><div class="warning">Feature-profile ordination reflects annotation similarity, not whole-genome phylogeny.</div>
+<p>PCoA coordinates are computed from Jaccard feature-profile distances when available and colored by lineage, country, source, or BioProject in companion figures.</p>
+{ordination_figures_html}
+{ordination_table_html}
+<div class="downloads"><a href="tables/feature_profile_ordination.tsv">Download ordination table</a><a href="figures/feature_profile_pcoa_by_lineage.data.tsv">Download PCoA plotted data</a></div></section>
+<section id="concordance"><h2>Concordance / Database Agreement</h2><div class="warning">Tool-specific calls are retained for review. Differences may reflect database scope, thresholds, naming, or partial hits.</div>
+{concordance_figures_html}
+<h3>Concordance summary</h3>
+{concordance_summary_table_html}
+<h3>Feature-level AMR concordance</h3>
+{concordance_feature_table_html}
+<div class="downloads"><a href="tables/database_concordance_summary.tsv">Download concordance summary</a><a href="tables/amr_concordance_feature_level.tsv">Download feature-level concordance</a><a href="tables/amr_concordance_by_sample.tsv">Download sample-level concordance</a></div></section>
+<section id="evidence"><h2>Evidence & Confidence</h2><p>This synthesis classifies report findings by sample support, statistical evidence, genomic-context level, and warning flags. Most findings should be treated as exploratory unless support and warning labels indicate otherwise.</p>
+{evidence_figures_html}
+{confidence_table_html}
+<div class="downloads"><a href="tables/evidence_summary.tsv">Download evidence summary</a><a href="tables/finding_confidence_summary.tsv">Download finding confidence summary</a><a href="tables/evidence_by_section.tsv">Download evidence by section</a></div></section>
+<section id="warnings"><h2>Warnings & Limitations</h2><div class="warning">Warnings do not necessarily invalidate the run, but they affect interpretation. Complete TSV outputs are preserved even when report-facing figures are capped.</div>
+{warnings_figures_html}
+<h3>Top warnings</h3>
+{warnings_table_html}
+<h3>Warnings by section</h3>
+{warnings_by_section_table_html}
+<h3>Module warning summary</h3>
+{module_warning_table_html}
+<h3>Report caps</h3>
+{report_cap_table_html}
+<div class="downloads"><a href="tables/warnings_and_limitations.tsv">Download warnings and limitations</a><a href="tables/warnings_by_section.tsv">Download warnings by section</a><a href="tables/module_warning_summary.tsv">Download module warning summary</a><a href="tables/report_cap_summary.tsv">Download report cap summary</a></div></section>
+<section id="downloads"><h2>Downloads / Important Files</h2><p>Use these files to navigate the report-facing outputs and complete reproducibility artifacts.</p>
+<div class="downloads"><a href="../basic/enriched_genome_dataset.csv">Download enriched dataset CSV</a><a href="../basic/enriched_genome_dataset.tsv">Download enriched dataset TSV</a><a href="downloads/important_tables.zip">Download important tables ZIP</a><a href="downloads/important_figures.zip">Download important figures ZIP</a><a href="downloads/important_report_assets.zip">Download report assets ZIP</a><a href="../panr2_inputs/report/panr2_handoff_index.html">Open complete output bundle</a><a href="../panr2_inputs/manifest/reproducibility_manifest.json">Download reproducibility manifest</a><a href="../panr2_inputs/manifest/feature_contract.json">Download feature contract</a></div>
+{file_index_table_html}
+<div class="downloads"><a href="tables/important_file_index.tsv">Download important file index</a><a href="tables/download_manifest.tsv">Download download manifest</a><a href="../panr2_inputs/features/all_features.tsv">Download complete feature table</a><a href="../panr2_inputs/manifest/schema_validation_summary.txt">Download schema validation summary</a></div></section>
 </main></body></html>
 """,
         encoding="utf-8",
+    )
+    downloads_dir = important_dir / "downloads"
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+    _write_zip_bundle(
+        downloads_dir / "important_report_assets.zip",
+        [path for path in important_dir.rglob("*") if path.is_file() and "downloads" not in path.parts],
+        important_dir,
     )
     return {
         "important_results_html": str(report_path),
@@ -10794,6 +11695,7 @@ th {{ background: #f0f4f8; }}
         **metadata_association_outputs,
         **lineage_outputs,
         **diversity_outputs,
+        **final_outputs,
     }
 
 
@@ -10822,7 +11724,8 @@ def write_user_output_bundles(
         metadata_association_outputs = write_important_metadata_association_outputs(sample_dir, out_dir, important_dir)
         lineage_outputs = write_important_lineage_outputs(sample_dir, out_dir, important_dir)
         diversity_outputs = write_important_diversity_outputs(sample_dir, out_dir, important_dir)
-        outputs.update(write_important_results_report(sample_dir, out_dir, important_dir, geographic_outputs, qc_outputs, prevalence_outputs, variation_outputs, temporal_outputs, cooccurrence_outputs, metadata_association_outputs, lineage_outputs, diversity_outputs))
+        final_outputs = write_important_final_interpretation_outputs(sample_dir, out_dir, important_dir)
+        outputs.update(write_important_results_report(sample_dir, out_dir, important_dir, geographic_outputs, qc_outputs, prevalence_outputs, variation_outputs, temporal_outputs, cooccurrence_outputs, metadata_association_outputs, lineage_outputs, diversity_outputs, final_outputs))
         write_rows(
             manifest_dir / "important_output_manifest.tsv",
             [

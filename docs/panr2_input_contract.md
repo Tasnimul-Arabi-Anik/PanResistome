@@ -181,11 +181,14 @@ CSV/TSV in the final output directory. `important` adds a curated
 `important/results.html` entry point with Featured Results, Run Overview, QC
 Summary, Prevalence, Geographic Distribution, Variations, Temporal Trends,
 Co-occurrence / Genomic Context, Metadata Associations, Lineage / Clonal
-Structure, Diversity / Pan-feature Summary, Warnings, and Important Files
-sections. It writes key QC,
+Structure, Diversity / Pan-feature Summary, Notable Genomes, Feature-profile
+Ordination, Concordance / Database Agreement, Evidence & Confidence, Warnings
+& Limitations, and Downloads / Important Files sections. It writes key QC,
 prevalence, geography, variation, temporal trend, co-occurrence,
 genomic-context, metadata-association, lineage/clonal-structure, and
-diversity/pan-feature tables plus portable PNG/SVG/PDF/TSV figures without
+diversity/pan-feature tables plus final interpretation tables for notable
+genomes, confidence labels, warning summaries, AMR concordance, feature-profile
+ordination, and download manifests, with portable PNG/SVG/PDF/TSV figures without
 adding new runtime plotting
 dependencies. Prevalence includes an interactive HTML viewer with database,
 Top 10/20/50/Complete, metric, sort, minimum-prevalence, minimum-genome, and
