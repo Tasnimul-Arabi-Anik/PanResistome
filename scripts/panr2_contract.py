@@ -3224,6 +3224,108 @@ def _html_table(rows: list[dict[str, str]], fields: list[str], max_rows: int = 2
     )
 
 
+REPORT_FIGURE_STYLE = {
+    "bg": "#f8fafc",
+    "panel": "#ffffff",
+    "text": "#102a43",
+    "body_text": "#1f2933",
+    "muted": "#52606d",
+    "border": "#d9e2ec",
+    "grid": "#e2e8f0",
+    "axis": "#9fb3c8",
+    "primary": "#0f766e",
+    "primary_soft": "#ccfbf1",
+    "red": "#dc2626",
+    "blue": "#2563eb",
+    "green": "#16a34a",
+    "orange": "#f97316",
+    "yellow": "#facc15",
+    "purple": "#7c3aed",
+    "gray": "#64748b",
+}
+
+REPORT_DATABASE_COLORS = {
+    "amr": "#dc2626",
+    "amrfinderplus": "#991b1b",
+    "vfdb": "#16a34a",
+    "plasmidfinder": "#7c3aed",
+    "integronfinder": "#f97316",
+    "mlst": "#2563eb",
+    "mge": "#0f766e",
+    "mobileelementfinder": "#0f766e",
+    "prophage": "#4f46e5",
+    "genomad": "#4f46e5",
+    "mobsuite": "#9333ea",
+    "isfinder": "#ca8a04",
+    "defensefinder": "#475569",
+}
+
+REPORT_CLASS_COLORS = {
+    "core_features": "#0f766e",
+    "common_features": "#38bdf8",
+    "accessory_features": "#f59e0b",
+    "rare_features": "#94a3b8",
+}
+
+REPORT_CATEGORY_PALETTE = [
+    "#0f766e",
+    "#dc2626",
+    "#7c3aed",
+    "#f97316",
+    "#2563eb",
+    "#be123c",
+    "#16a34a",
+    "#4f46e5",
+    "#64748b",
+]
+
+REPORT_SVG_FONT = "Inter, Arial, sans-serif"
+
+
+def _plot_color(name: str) -> str:
+    return REPORT_FIGURE_STYLE[name]
+
+
+def _hex_to_rgb(value: str) -> tuple[int, int, int]:
+    text = value.lstrip("#")
+    return (int(text[0:2], 16), int(text[2:4], 16), int(text[4:6], 16))
+
+
+def _rgb_to_css(rgb: tuple[int, int, int]) -> str:
+    return f"rgb({rgb[0]},{rgb[1]},{rgb[2]})"
+
+
+def _interpolate_color(start: str, end: str, intensity: float) -> str:
+    intensity = max(0.0, min(1.0, intensity))
+    a = _hex_to_rgb(start)
+    b = _hex_to_rgb(end)
+    return _rgb_to_css(tuple(int(a[idx] + (b[idx] - a[idx]) * intensity) for idx in range(3)))
+
+
+def _short_label(value: str, limit: int) -> str:
+    text = str(value or "")
+    if len(text) <= limit:
+        return text
+    return text[: max(limit - 3, 1)] + "..."
+
+
+def _svg_base(width: int, height: int, title: str, subtitle: str = "") -> list[str]:
+    svg_id = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-") or "figure"
+    title_id = f"{svg_id}-title"
+    desc_id = f"{svg_id}-desc"
+    desc = subtitle or "PanResistome report figure. Download the companion data TSV for exact plotted values."
+    parts = [
+        f"<svg xmlns='http://www.w3.org/2000/svg' role='img' aria-labelledby='{title_id} {desc_id}' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
+        f"<title id='{title_id}'>{html.escape(title)}</title>",
+        f"<desc id='{desc_id}'>{html.escape(desc)}</desc>",
+        f"<rect width='100%' height='100%' fill='{_plot_color('bg')}'/>",
+        f"<text x='24' y='34' font-family='{REPORT_SVG_FONT}' font-size='22' font-weight='700' fill='{_plot_color('text')}'>{html.escape(title)}</text>",
+    ]
+    if subtitle:
+        parts.append(f"<text x='24' y='58' font-family='{REPORT_SVG_FONT}' font-size='13' fill='{_plot_color('muted')}'>{html.escape(subtitle)}</text>")
+    return parts
+
+
 def _report_badge_html(label: str, kind: str = "") -> str:
     clean_label = str(label or "").strip()
     if not clean_label:
@@ -4614,33 +4716,42 @@ updateFeatures(); render();
 
 
 def _write_bar_svg(path: Path, rows: list[dict[str, str]], title: str, label_field: str, value_field: str, x_label: str = "") -> None:
-    width = 960
-    row_height = 28
-    top = 58
-    left = 250
-    plot_width = 620
-    height = max(180, top + row_height * max(len(rows), 1) + 30)
+    width = 1000
+    row_height = 30
+    top = 76
+    left = 280
+    plot_width = 610
+    height = max(220, top + row_height * max(len(rows), 1) + 56)
     values = [_float_or_none(row.get(value_field, "")) or 0.0 for row in rows]
     max_value = max(values) if values else 1.0
     if max_value <= 0:
         max_value = 1.0
-    parts = [
-        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
-        "<rect width='100%' height='100%' fill='#f8fafc'/>",
-        f"<text x='20' y='30' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
-    ]
+    parts = _svg_base(width, height, title, x_label or f"Values are scaled to the largest plotted {value_field}.")
+    plot_bottom = top + row_height * max(len(rows), 1)
+    parts.append(f"<rect x='{left}' y='{top - 12}' width='{plot_width}' height='{plot_bottom - top + 18}' fill='{_plot_color('panel')}' stroke='{_plot_color('border')}'/>")
+    for tick in range(0, 5):
+        x = left + tick / 4 * plot_width
+        tick_value = max_value * tick / 4
+        parts.append(f"<line x1='{x:.1f}' y1='{top - 12}' x2='{x:.1f}' y2='{plot_bottom + 6}' stroke='{_plot_color('grid')}'/>")
+        parts.append(f"<text x='{x - 10:.1f}' y='{plot_bottom + 24}' font-family='{REPORT_SVG_FONT}' font-size='11' fill='{_plot_color('muted')}'>{tick_value:g}</text>")
     for idx, row in enumerate(rows):
         y = top + idx * row_height
         value = _float_or_none(row.get(value_field, "")) or 0.0
         bar_width = value / max_value * plot_width
-        label = row.get(label_field, "")
-        if len(label) > 38:
-            label = label[:35] + "..."
-        parts.append(f"<text x='20' y='{y + 17}' font-family='Arial' font-size='12' fill='#1f2933'>{html.escape(label)}</text>")
-        parts.append(f"<rect x='{left}' y='{y}' width='{bar_width:.1f}' height='18' fill='#0f766e'/>")
-        parts.append(f"<text x='{left + bar_width + 8:.1f}' y='{y + 14}' font-family='Arial' font-size='12' fill='#1f2933'>{html.escape(row.get(value_field, ''))}</text>")
+        label = _short_label(row.get(label_field, ""), 42)
+        color = _database_color(row.get("database", "")) if row.get("database") else _plot_color("primary")
+        display = row.get("display_value", "") or row.get("prevalence_display", "") or row.get(value_field, "")
+        value_text = str(display) if display not in {None, ""} else f"{value:g}"
+        tip = f"{row.get(label_field, '')}: {value_text}"
+        parts.append(f"<text x='24' y='{y + 18}' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('body_text')}'><title>{html.escape(row.get(label_field, ''))}</title>{html.escape(label)}</text>")
+        parts.append(f"<rect x='{left}' y='{y}' width='{bar_width:.1f}' height='20' rx='3' fill='{color}'><title>{html.escape(tip)}</title></rect>")
+        inside_label = bar_width > 110 and (left + bar_width + 88) > width
+        text_x = left + bar_width - 8 if inside_label else left + bar_width + 8
+        text_anchor = "end" if inside_label else "start"
+        text_fill = "#ffffff" if inside_label else _plot_color("body_text")
+        parts.append(f"<text x='{text_x:.1f}' y='{y + 15}' text-anchor='{text_anchor}' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{text_fill}'>{html.escape(value_text)}</text>")
     if x_label:
-        parts.append(f"<text x='{left}' y='{height - 10}' font-family='Arial' font-size='12' fill='#52606d'>{html.escape(x_label)}</text>")
+        parts.append(f"<text x='{left}' y='{height - 12}' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('muted')}'>{html.escape(x_label)}</text>")
     parts.append("</svg>\n")
     path.write_text("".join(parts), encoding="utf-8")
 
@@ -4673,8 +4784,8 @@ def _write_bar_png(path: Path, rows: list[dict[str, str]], value_field: str) -> 
 
 
 def _write_line_svg(path: Path, rows: list[dict[str, str]], title: str, label_field: str, value_field: str) -> None:
-    width, height = 960, 420
-    left, top, plot_width, plot_height = 70, 60, 820, 280
+    width, height = 1000, 500
+    left, top, plot_width, plot_height = 88, 82, 820, 300
     values = [_float_or_none(row.get(value_field, "")) or 0.0 for row in rows]
     max_value = max(values) if values else 1.0
     if max_value <= 0:
@@ -4686,20 +4797,18 @@ def _write_line_svg(path: Path, rows: list[dict[str, str]], title: str, label_fi
         y = top + plot_height - value / max_value * plot_height
         points.append((x, y, value))
     point_text = " ".join(f"{x:.1f},{y:.1f}" for x, y, _ in points)
-    circles = "".join(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='4' fill='#0f766e'><title>{value:g}</title></circle>" for x, y, value in points)
-    path.write_text(
-        f"""<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>
-<rect width='100%' height='100%' fill='#f8fafc'/>
-<text x='20' y='30' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>
-<line x1='{left}' y1='{top + plot_height}' x2='{left + plot_width}' y2='{top + plot_height}' stroke='#9fb3c8'/>
-<line x1='{left}' y1='{top}' x2='{left}' y2='{top + plot_height}' stroke='#9fb3c8'/>
-<polyline points='{point_text}' fill='none' stroke='#0f766e' stroke-width='3'/>
-{circles}
-<text x='{left}' y='{height - 30}' font-family='Arial' font-size='12' fill='#52606d'>{html.escape(label_field)}</text>
-</svg>
-""",
-        encoding="utf-8",
-    )
+    circles = "".join(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='4.5' fill='{_plot_color('primary')}'><title>{value:g}</title></circle>" for x, y, value in points)
+    parts = _svg_base(width, height, title, f"Line chart of {value_field}; exact values are in the companion data TSV.")
+    parts.extend([
+        f"<rect x='{left}' y='{top}' width='{plot_width}' height='{plot_height}' fill='{_plot_color('panel')}' stroke='{_plot_color('border')}'/>",
+        f"<line x1='{left}' y1='{top + plot_height}' x2='{left + plot_width}' y2='{top + plot_height}' stroke='{_plot_color('axis')}'/>",
+        f"<line x1='{left}' y1='{top}' x2='{left}' y2='{top + plot_height}' stroke='{_plot_color('axis')}'/>",
+        f"<polyline points='{point_text}' fill='none' stroke='{_plot_color('primary')}' stroke-width='3'/>",
+        circles,
+        f"<text x='{left}' y='{height - 30}' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('muted')}'>{html.escape(label_field)}</text>",
+        "</svg>\n",
+    ])
+    path.write_text("".join(parts), encoding="utf-8")
 
 
 def _write_line_png(path: Path, rows: list[dict[str, str]], value_field: str) -> None:
@@ -4737,35 +4846,38 @@ def _write_heatmap_svg(path: Path, rows: list[dict[str, str]], title: str, row_f
     row_labels = list(dict.fromkeys(row.get(row_field, "") for row in rows if row.get(row_field, "")))
     column_labels = sorted({row.get(column_field, "") for row in rows if row.get(column_field, "")})
     values = {(row.get(row_field, ""), row.get(column_field, "")): _float_or_none(row.get(value_field, "")) or 0.0 for row in rows}
-    cell_w = 68
-    cell_h = 22
-    left = 260
-    top = 72
-    width = max(720, left + cell_w * max(len(column_labels), 1) + 40)
-    height = max(180, top + cell_h * max(len(row_labels), 1) + 40)
+    cell_w = 74
+    cell_h = 24
+    left = 280
+    top = 96
+    width = max(1000, left + cell_w * max(len(column_labels), 1) + 80)
+    height = max(260, top + cell_h * max(len(row_labels), 1) + 70)
     max_value = max(values.values()) if values else 1.0
     if max_value <= 0:
         max_value = 1.0
-    parts = [
-        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
-        "<rect width='100%' height='100%' fill='#f8fafc'/>",
-        f"<text x='20' y='30' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
-    ]
+    parts = _svg_base(width, height, title, f"Color intensity is scaled by {value_field}; download the data TSV for exact values.")
     for cidx, column in enumerate(column_labels):
         x = left + cidx * cell_w
-        parts.append(f"<text x='{x + 6}' y='{top - 12}' font-family='Arial' font-size='11' fill='#52606d'>{html.escape(column)}</text>")
+        short = _short_label(column, 20)
+        parts.append(f"<text x='{x + 6}' y='{top - 16}' font-family='{REPORT_SVG_FONT}' font-size='11' fill='{_plot_color('muted')}'><title>{html.escape(column)}</title>{html.escape(short)}</text>")
     for ridx, label in enumerate(row_labels):
         y = top + ridx * cell_h
-        short_label = label if len(label) <= 42 else label[:39] + "..."
-        parts.append(f"<text x='20' y='{y + 15}' font-family='Arial' font-size='11' fill='#1f2933'>{html.escape(short_label)}</text>")
+        short_label = _short_label(label, 44)
+        parts.append(f"<text x='24' y='{y + 16}' font-family='{REPORT_SVG_FONT}' font-size='11' fill='{_plot_color('body_text')}'><title>{html.escape(label)}</title>{html.escape(short_label)}</text>")
         for cidx, column in enumerate(column_labels):
             x = left + cidx * cell_w
             value = values.get((label, column), 0.0)
             intensity = value / max_value
-            red = int(232 - 160 * intensity)
-            green = int(246 - 82 * intensity)
-            blue = int(255 - 105 * intensity)
-            parts.append(f"<rect x='{x}' y='{y}' width='{cell_w - 2}' height='{cell_h - 2}' fill='rgb({red},{green},{blue})' stroke='#d9e2ec'><title>{html.escape(label)} {html.escape(column)}: {value:g}</title></rect>")
+            fill = _interpolate_color("#ecfeff", _plot_color("primary"), intensity)
+            parts.append(f"<rect x='{x}' y='{y}' width='{cell_w - 2}' height='{cell_h - 2}' rx='2' fill='{fill}' stroke='{_plot_color('border')}'><title>{html.escape(label)} {html.escape(column)}: {value:g}</title></rect>")
+            if cell_w >= 58 and cell_h >= 22 and value:
+                parts.append(f"<text x='{x + cell_w / 2 - 8:.1f}' y='{y + 16}' font-family='{REPORT_SVG_FONT}' font-size='10' fill='{_plot_color('text')}'>{value:g}</text>")
+    legend_y = height - 28
+    parts.append(f"<text x='{left}' y='{legend_y}' font-family='{REPORT_SVG_FONT}' font-size='11' fill='{_plot_color('muted')}'>Low</text>")
+    for idx in range(0, 80):
+        fill = _interpolate_color("#ecfeff", _plot_color("primary"), idx / 79)
+        parts.append(f"<rect x='{left + 34 + idx * 2}' y='{legend_y - 12}' width='2' height='10' fill='{fill}'/>")
+    parts.append(f"<text x='{left + 205}' y='{legend_y}' font-family='{REPORT_SVG_FONT}' font-size='11' fill='{_plot_color('muted')}'>High</text>")
     parts.append("</svg>\n")
     path.write_text("".join(parts), encoding="utf-8")
 
@@ -4805,8 +4917,8 @@ def _write_heatmap_png(path: Path, rows: list[dict[str, str]], row_field: str, c
 
 
 def _write_temporal_series_svg(path: Path, rows: list[dict[str, str]], title: str) -> None:
-    width, height = 960, 420
-    left, top, plot_width, plot_height = 78, 58, 812, 280
+    width, height = 1000, 500
+    left, top, plot_width, plot_height = 88, 82, 820, 300
     years = [_float_or_none(row.get("collection_year", "")) for row in rows]
     values = [_float_or_none(row.get("prevalence_percent", "")) for row in rows]
     pairs = [(year, value, row) for year, value, row in zip(years, values, rows) if year is not None and value is not None]
@@ -4820,27 +4932,30 @@ def _write_temporal_series_svg(path: Path, rows: list[dict[str, str]], title: st
     points = []
     circles = []
     labels = []
+    max_group_n = max([_float_or_none(row.get("total_genomes", "")) or 1.0 for _, _, row in pairs] + [1.0])
     for year, value, row in pairs:
         x = left + (year - min_year) / (max_year - min_year) * plot_width
         y = top + plot_height - value / max_value * plot_height
         points.append(f"{x:.1f},{y:.1f}")
         label = f"{int(year)}: {row.get('prevalence_percent', '0')}% ({row.get('positive_genomes', '0')}/{row.get('total_genomes', '0')})"
-        circles.append(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='5' fill='#0f766e'><title>{html.escape(label)}</title></circle>")
-        labels.append(f"<text x='{x - 16:.1f}' y='{top + plot_height + 22}' font-family='Arial' font-size='11' fill='#52606d'>{int(year)}</text>")
-    path.write_text(
-        f"""<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>
-<rect width='100%' height='100%' fill='#f8fafc'/>
-<text x='20' y='30' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>
-<line x1='{left}' y1='{top + plot_height}' x2='{left + plot_width}' y2='{top + plot_height}' stroke='#9fb3c8'/>
-<line x1='{left}' y1='{top}' x2='{left}' y2='{top + plot_height}' stroke='#9fb3c8'/>
-<text x='20' y='{top + 18}' font-family='Arial' font-size='12' fill='#52606d'>Prevalence %</text>
-<polyline points='{" ".join(points)}' fill='none' stroke='#0f766e' stroke-width='3'/>
-{"".join(circles)}
-{"".join(labels)}
-</svg>
-""",
-        encoding="utf-8",
-    )
+        group_n = _float_or_none(row.get("total_genomes", "")) or 1.0
+        radius = 4.0 + 5.0 * math.sqrt(group_n / max_group_n)
+        circles.append(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='{radius:.1f}' fill='{_plot_color('primary')}' fill-opacity='0.84' stroke='{_plot_color('text')}' stroke-width='0.5'><title>{html.escape(label)}</title></circle>")
+        labels.append(f"<text x='{x - 16:.1f}' y='{top + plot_height + 24}' font-family='{REPORT_SVG_FONT}' font-size='11' fill='{_plot_color('muted')}'>{int(year)}</text>")
+    parts = _svg_base(width, height, title, "Point size follows yearly genome count; labels and tooltips include positive/total denominators.")
+    parts.append(f"<rect x='{left}' y='{top}' width='{plot_width}' height='{plot_height}' fill='{_plot_color('panel')}' stroke='{_plot_color('border')}'/>")
+    for tick in range(0, 101, 20):
+        y = top + plot_height - tick / 100 * plot_height
+        parts.append(f"<line x1='{left}' y1='{y:.1f}' x2='{left + plot_width}' y2='{y:.1f}' stroke='{_plot_color('grid')}'/>")
+        parts.append(f"<text x='{left - 36}' y='{y + 4:.1f}' font-family='{REPORT_SVG_FONT}' font-size='11' fill='{_plot_color('muted')}'>{tick}</text>")
+    parts.append(f"<line x1='{left}' y1='{top + plot_height}' x2='{left + plot_width}' y2='{top + plot_height}' stroke='{_plot_color('axis')}'/>")
+    parts.append(f"<line x1='{left}' y1='{top}' x2='{left}' y2='{top + plot_height}' stroke='{_plot_color('axis')}'/>")
+    parts.append(f"<text x='24' y='{top + 18}' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('muted')}'>Prevalence %</text>")
+    parts.append(f"<polyline points='{' '.join(points)}' fill='none' stroke='{_plot_color('primary')}' stroke-width='3'/>")
+    parts.append("".join(circles))
+    parts.append("".join(labels))
+    parts.append("</svg>\n")
+    path.write_text("".join(parts), encoding="utf-8")
 
 
 def _write_temporal_series_png(path: Path, rows: list[dict[str, str]]) -> None:
@@ -4893,12 +5008,12 @@ def _write_temporal_series_png(path: Path, rows: list[dict[str, str]]) -> None:
 
 
 def _write_temporal_slope_svg(path: Path, rows: list[dict[str, str]], title: str) -> None:
-    width = 960
-    top = 62
-    left_x = 250
-    right_x = 710
+    width = 1000
+    top = 82
+    left_x = 270
+    right_x = 735
     row_h = 28
-    height = max(220, top + row_h * max(len(rows), 1) + 50)
+    height = max(250, top + row_h * max(len(rows), 1) + 56)
     values = []
     for row in rows:
         first = _float_or_none(row.get("first_year_prevalence_percent", "")) or 0.0
@@ -4912,32 +5027,32 @@ def _write_temporal_slope_svg(path: Path, rows: list[dict[str, str]], title: str
 
     def color(label: str) -> str:
         if "increasing" in label:
-            return "#0f766e"
+            return _plot_color("red")
         if "decreasing" in label:
-            return "#b91c1c"
-        return "#64748b"
+            return _plot_color("blue")
+        return _plot_color("gray")
 
-    parts = [
-        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
-        "<rect width='100%' height='100%' fill='#f8fafc'/>",
-        f"<text x='20' y='30' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
-        f"<text x='{left_x - 24}' y='52' font-family='Arial' font-size='12' fill='#52606d'>First year</text>",
-        f"<text x='{right_x - 20}' y='52' font-family='Arial' font-size='12' fill='#52606d'>Last year</text>",
-    ]
+    parts = _svg_base(width, height, title, "Red indicates increasing prevalence; blue indicates decreasing prevalence; gray indicates stable or unsupported trend.")
+    parts.extend([
+        f"<text x='{left_x - 24}' y='72' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('muted')}'>First year</text>",
+        f"<text x='{right_x - 20}' y='72' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('muted')}'>Last year</text>",
+        f"<rect x='760' y='44' width='10' height='10' fill='{_plot_color('red')}'/><text x='776' y='53' font-family='{REPORT_SVG_FONT}' font-size='11' fill='{_plot_color('muted')}'>Increasing</text>",
+        f"<rect x='850' y='44' width='10' height='10' fill='{_plot_color('blue')}'/><text x='866' y='53' font-family='{REPORT_SVG_FONT}' font-size='11' fill='{_plot_color('muted')}'>Decreasing</text>",
+    ])
     for idx, row in enumerate(rows):
         first = _float_or_none(row.get("first_year_prevalence_percent", "")) or 0.0
         last = _float_or_none(row.get("last_year_prevalence_percent", "")) or 0.0
         y1 = y_for(idx, first)
         y2 = y_for(idx, last)
         label = f"{row.get('database', '')}:{row.get('feature_id', '')}"
-        short_label = label if len(label) <= 34 else label[:31] + "..."
+        short_label = _short_label(label, 36)
         stroke = color(row.get("trend_label", ""))
-        parts.append(f"<text x='20' y='{top + idx * row_h + 18}' font-family='Arial' font-size='11' fill='#1f2933'>{html.escape(short_label)}</text>")
+        parts.append(f"<text x='24' y='{top + idx * row_h + 18}' font-family='{REPORT_SVG_FONT}' font-size='11' fill='{_plot_color('body_text')}'><title>{html.escape(label)}</title>{html.escape(short_label)}</text>")
         parts.append(f"<line x1='{left_x}' y1='{y1:.1f}' x2='{right_x}' y2='{y2:.1f}' stroke='{stroke}' stroke-width='2.4'><title>{html.escape(label)}: {first:.1f}% to {last:.1f}%</title></line>")
         parts.append(f"<circle cx='{left_x}' cy='{y1:.1f}' r='4' fill='{stroke}'/>")
         parts.append(f"<circle cx='{right_x}' cy='{y2:.1f}' r='4' fill='{stroke}'/>")
-        parts.append(f"<text x='{left_x + 8}' y='{y1 + 4:.1f}' font-family='Arial' font-size='10' fill='#52606d'>{first:.1f}%</text>")
-        parts.append(f"<text x='{right_x + 8}' y='{y2 + 4:.1f}' font-family='Arial' font-size='10' fill='#52606d'>{last:.1f}%</text>")
+        parts.append(f"<text x='{left_x + 8}' y='{y1 + 4:.1f}' font-family='{REPORT_SVG_FONT}' font-size='10' fill='{_plot_color('muted')}'>{first:.1f}%</text>")
+        parts.append(f"<text x='{right_x + 8}' y='{y2 + 4:.1f}' font-family='{REPORT_SVG_FONT}' font-size='10' fill='{_plot_color('muted')}'>{last:.1f}%</text>")
     parts.append("</svg>\n")
     path.write_text("".join(parts), encoding="utf-8")
 
@@ -4964,9 +5079,9 @@ def _write_temporal_slope_png(path: Path, rows: list[dict[str, str]]) -> None:
 
     def color(label: str) -> tuple[int, int, int]:
         if "increasing" in label:
-            return (15, 118, 110)
+            return (220, 38, 38)
         if "decreasing" in label:
-            return (185, 28, 28)
+            return (37, 99, 235)
         return (100, 116, 139)
 
     for idx, row in enumerate(rows):
@@ -5009,21 +5124,7 @@ def _context_evidence_label(value: str) -> str:
 
 
 def _database_color(database: str) -> str:
-    palette = {
-        "amr": "#dc2626",
-        "amrfinderplus": "#ef4444",
-        "vfdb": "#16a34a",
-        "plasmidfinder": "#7c3aed",
-        "integronfinder": "#ea580c",
-        "mlst": "#2563eb",
-        "prophage": "#0891b2",
-        "genomad": "#0891b2",
-        "mobsuite": "#9333ea",
-        "isfinder": "#ca8a04",
-        "mobileelementfinder": "#ca8a04",
-        "defensefinder": "#475569",
-    }
-    return palette.get(str(database or "").lower(), "#64748b")
+    return REPORT_DATABASE_COLORS.get(str(database or "").lower(), _plot_color("gray"))
 
 
 def _cooccurrence_cell_color(row: dict[str, str]) -> str:
@@ -5033,14 +5134,8 @@ def _cooccurrence_cell_color(row: dict[str, str]) -> str:
     if label != "significant_positive" and label != "significant_negative":
         return "#f1f5f9"
     if label == "significant_positive":
-        red = 254
-        green = int(226 - 140 * intensity)
-        blue = int(226 - 140 * intensity)
-        return f"rgb({red},{green},{blue})"
-    red = int(219 - 150 * intensity)
-    green = int(234 - 120 * intensity)
-    blue = 254
-    return f"rgb({red},{green},{blue})"
+        return _interpolate_color("#fee2e2", _plot_color("red"), intensity)
+    return _interpolate_color("#dbeafe", _plot_color("blue"), intensity)
 
 
 def _write_cooccurrence_heatmap_svg(path: Path, rows: list[dict[str, str]], title: str) -> None:
@@ -5052,20 +5147,15 @@ def _write_cooccurrence_heatmap_svg(path: Path, rows: list[dict[str, str]], titl
     width = max(820, left + cell * max(len(x_features), 1) + 70)
     height = max(320, top + cell * max(len(y_features), 1) + 50)
     by_pair = {(row.get("feature_a_id", ""), row.get("feature_b_id", "")): row for row in rows}
-    parts = [
-        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
-        "<rect width='100%' height='100%' fill='#f8fafc'/>",
-        f"<text x='20' y='32' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
-        "<text x='20' y='60' font-family='Arial' font-size='12' fill='#52606d'>Red = significant positive association; blue = significant negative association; gray = not significant or below support threshold.</text>",
-    ]
+    parts = _svg_base(width, height, title, "Red = significant positive association; blue = significant negative association; gray = not significant or below support threshold.")
     for x_idx, feature in enumerate(x_features):
         x = left + x_idx * cell + 18
-        label = feature if len(feature) <= 22 else feature[:19] + "..."
-        parts.append(f"<text x='{x}' y='{top - 8}' font-family='Arial' font-size='10' fill='#1f2933' transform='rotate(-60 {x} {top - 8})'>{html.escape(label)}</text>")
+        label = _short_label(feature, 22)
+        parts.append(f"<text x='{x}' y='{top - 8}' font-family='{REPORT_SVG_FONT}' font-size='10' fill='{_plot_color('body_text')}' transform='rotate(-60 {x} {top - 8})'><title>{html.escape(feature)}</title>{html.escape(label)}</text>")
     for y_idx, feature in enumerate(y_features):
         y = top + y_idx * cell + 22
-        label = feature if len(feature) <= 28 else feature[:25] + "..."
-        parts.append(f"<text x='20' y='{y}' font-family='Arial' font-size='10' fill='#1f2933'>{html.escape(label)}</text>")
+        label = _short_label(feature, 28)
+        parts.append(f"<text x='24' y='{y}' font-family='{REPORT_SVG_FONT}' font-size='10' fill='{_plot_color('body_text')}'><title>{html.escape(feature)}</title>{html.escape(label)}</text>")
     for y_idx, y_feature in enumerate(y_features):
         for x_idx, x_feature in enumerate(x_features):
             row = by_pair.get((x_feature, y_feature), {})
@@ -5078,9 +5168,9 @@ def _write_cooccurrence_heatmap_svg(path: Path, rows: list[dict[str, str]], titl
                 f"{x_feature} vs {y_feature}; phi={row.get('phi_correlation', '')}; q={row.get('q_value', '')}; "
                 f"both={row.get('n_both_present', '')}/{row.get('n_total', '')}; {row.get('significance_label', '')}"
             ) if row else f"{x_feature} vs {y_feature}: no pair"
-            parts.append(f"<rect x='{x}' y='{y}' width='{cell - 2}' height='{cell - 2}' fill='{fill}' stroke='#cbd5e1'><title>{html.escape(tip)}</title></rect>")
+            parts.append(f"<rect x='{x}' y='{y}' width='{cell - 2}' height='{cell - 2}' rx='2' fill='{fill}' stroke='#cbd5e1'><title>{html.escape(tip)}</title></rect>")
             if label:
-                parts.append(f"<text x='{x + 4}' y='{y + 20}' font-family='Arial' font-size='10' fill='#111827'>{html.escape(label)}</text>")
+                parts.append(f"<text x='{x + 4}' y='{y + 20}' font-family='{REPORT_SVG_FONT}' font-size='10' fill='#111827'>{html.escape(label)}</text>")
     parts.append("</svg>\n")
     path.write_text("".join(parts), encoding="utf-8")
 
@@ -5130,12 +5220,7 @@ def _write_cooccurrence_network_svg(path: Path, nodes: list[dict[str, str]], edg
     for idx, node_id in enumerate(node_ids):
         angle = 2 * math.pi * idx / max(len(node_ids), 1)
         positions[node_id] = (cx + math.cos(angle) * radius, cy + math.sin(angle) * radius)
-    parts = [
-        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
-        "<rect width='100%' height='100%' fill='#f8fafc'/>",
-        f"<text x='20' y='32' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
-        "<text x='20' y='56' font-family='Arial' font-size='12' fill='#52606d'>Edges show significant sample-level co-occurrence unless stronger evidence is listed in the edge table.</text>",
-    ]
+    parts = _svg_base(width, height, title, "Node color indicates database, node size indicates prevalence, and edge color indicates association direction.")
     for edge in edges:
         source = edge.get("source_feature", "")
         target = edge.get("target_feature", "")
@@ -5144,7 +5229,7 @@ def _write_cooccurrence_network_svg(path: Path, nodes: list[dict[str, str]], edg
         x1, y1 = positions[source]
         x2, y2 = positions[target]
         phi = abs(_float_or_none(edge.get("phi_correlation", "")) or 0.0)
-        color = "#dc2626" if edge.get("direction") == "positive" else "#2563eb"
+        color = _plot_color("red") if edge.get("direction") == "positive" else _plot_color("blue")
         width_px = 1.0 + 5.0 * min(phi, 1.0)
         dash = " stroke-dasharray='5 4'" if edge.get("evidence_level") == "same_genome" else ""
         tip = f"{source} - {target}; phi={edge.get('phi_correlation', '')}; q={edge.get('q_value', '')}; both={edge.get('n_both_present', '')}"
@@ -5157,10 +5242,9 @@ def _write_cooccurrence_network_svg(path: Path, nodes: list[dict[str, str]], edg
         prevalence = _float_or_none(node.get("prevalence", "")) or 0.0
         node_radius = max(6, min(24, 6 + prevalence * 22))
         color = _database_color(node.get("database", ""))
-        label = node.get("node_label", node_id)
-        label = label if len(label) <= 22 else label[:19] + "..."
+        label = _short_label(node.get("node_label", node_id), 22)
         parts.append(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='{node_radius:.1f}' fill='{color}' fill-opacity='0.85' stroke='#1f2933'><title>{html.escape(node_id)} prevalence={prevalence:.3f}</title></circle>")
-        parts.append(f"<text x='{x + node_radius + 3:.1f}' y='{y + 4:.1f}' font-family='Arial' font-size='10' fill='#1f2933'>{html.escape(label)}</text>")
+        parts.append(f"<text x='{x + node_radius + 3:.1f}' y='{y + 4:.1f}' font-family='{REPORT_SVG_FONT}' font-size='10' fill='{_plot_color('body_text')}'>{html.escape(label)}</text>")
     parts.append("</svg>\n")
     path.write_text("".join(parts), encoding="utf-8")
 
@@ -5545,8 +5629,8 @@ def _metadata_interpretation_label(q_value: float | None, group_n: int, outside_
 
 
 def _write_metadata_volcano_svg(path: Path, rows: list[dict[str, str]], title: str) -> None:
-    width, height = 920, 520
-    left, top, plot_w, plot_h = 90, 70, 760, 360
+    width, height = 1000, 600
+    left, top, plot_w, plot_h = 96, 90, 800, 380
     points = []
     for row in rows:
         x = _float_or_none(row.get("prevalence_difference", "")) or 0.0
@@ -5555,32 +5639,34 @@ def _write_metadata_volcano_svg(path: Path, rows: list[dict[str, str]], title: s
         points.append((x, y, row))
     max_abs_x = max([abs(point[0]) for point in points] + [0.25])
     max_y = max([point[1] for point in points] + [1.0])
-    parts = [
-        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
-        "<rect width='100%' height='100%' fill='#f8fafc'/>",
-        f"<text x='20' y='32' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
-        f"<line x1='{left}' y1='{top + plot_h}' x2='{left + plot_w}' y2='{top + plot_h}' stroke='#94a3b8'/>",
-        f"<line x1='{left + plot_w / 2}' y1='{top}' x2='{left + plot_w / 2}' y2='{top + plot_h}' stroke='#cbd5e1' stroke-dasharray='4 4'/>",
-        f"<line x1='{left}' y1='{top}' x2='{left}' y2='{top + plot_h}' stroke='#94a3b8'/>",
-    ]
+    parts = _svg_base(width, height, title, "Red = enriched or more prevalent; blue = depleted or less prevalent; gray = not significant or insufficient support.")
+    parts.extend([
+        f"<rect x='{left}' y='{top}' width='{plot_w}' height='{plot_h}' fill='{_plot_color('panel')}' stroke='{_plot_color('border')}'/>",
+        f"<line x1='{left}' y1='{top + plot_h}' x2='{left + plot_w}' y2='{top + plot_h}' stroke='{_plot_color('axis')}'/>",
+        f"<line x1='{left + plot_w / 2}' y1='{top}' x2='{left + plot_w / 2}' y2='{top + plot_h}' stroke='{_plot_color('border')}' stroke-dasharray='4 4'/>",
+        f"<line x1='{left}' y1='{top}' x2='{left}' y2='{top + plot_h}' stroke='{_plot_color('axis')}'/>",
+    ])
+    for tick in range(1, 5):
+        y_grid = top + tick / 5 * plot_h
+        parts.append(f"<line x1='{left}' y1='{y_grid:.1f}' x2='{left + plot_w}' y2='{y_grid:.1f}' stroke='{_plot_color('grid')}'/>")
     for x, y, row in points[:600]:
         cx = left + (x + max_abs_x) / (2 * max_abs_x) * plot_w
         cy = top + plot_h - (y / max_y) * plot_h if max_y else top + plot_h
         label = row.get("interpretation_label", "")
         color = "#94a3b8"
         if label in {"strong_supported", "moderate_supported"} and x > 0:
-            color = "#dc2626"
+            color = _plot_color("red")
         elif label in {"strong_supported", "moderate_supported"} and x < 0:
-            color = "#2563eb"
+            color = _plot_color("blue")
         tip = (
             f"{row.get('feature_id', '')}; diff={x:.3f}; q={row.get('q_value', '')}; "
             f"{row.get('positive_in_group', '')}/{row.get('group_n', '')} vs "
             f"{row.get('positive_outside_group', '')}/{row.get('outside_group_n', '')}; {row.get('warning_flags', '')}"
         )
-        parts.append(f"<circle cx='{cx:.1f}' cy='{cy:.1f}' r='4' fill='{color}' fill-opacity='0.82'><title>{html.escape(tip)}</title></circle>")
+        parts.append(f"<circle cx='{cx:.1f}' cy='{cy:.1f}' r='4.2' fill='{color}' fill-opacity='0.82'><title>{html.escape(tip)}</title></circle>")
     parts.extend([
-        f"<text x='{left + plot_w / 2 - 90}' y='{height - 35}' font-family='Arial' font-size='12' fill='#52606d'>Prevalence difference (selected group - outside)</text>",
-        f"<text x='18' y='{top + 20}' font-family='Arial' font-size='12' fill='#52606d' transform='rotate(-90 18,{top + 20})'>-log10(q-value)</text>",
+        f"<text x='{left + plot_w / 2 - 130}' y='{height - 38}' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('muted')}'>Prevalence difference (selected group - outside)</text>",
+        f"<text x='24' y='{top + 20}' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('muted')}' transform='rotate(-90 24,{top + 20})'>-log10(q-value)</text>",
         "</svg>\n",
     ])
     path.write_text("".join(parts), encoding="utf-8")
@@ -5628,34 +5714,30 @@ def _write_diverging_heatmap_svg(path: Path, rows: list[dict[str, str]], title: 
     column_labels = sorted({row.get(column_field, "") for row in rows if row.get(column_field, "")})
     values = {(row.get(row_field, ""), row.get(column_field, "")): _float_or_none(row.get(value_field, "")) or 0.0 for row in rows}
     max_abs = max([abs(value) for value in values.values()] + [0.1])
-    cell_w, cell_h = 92, 24
-    left, top = 260, 84
-    width = max(840, left + cell_w * max(len(column_labels), 1) + 60)
-    height = max(220, top + cell_h * max(len(row_labels), 1) + 50)
-    parts = [
-        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
-        "<rect width='100%' height='100%' fill='#f8fafc'/>",
-        f"<text x='20' y='32' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
-    ]
+    cell_w, cell_h = 96, 26
+    left, top = 282, 100
+    width = max(1000, left + cell_w * max(len(column_labels), 1) + 80)
+    height = max(270, top + cell_h * max(len(row_labels), 1) + 70)
+    parts = _svg_base(width, height, title, "Red cells indicate enriched or higher values; blue cells indicate depleted or lower values; gray cells are near zero.")
     for cidx, column in enumerate(column_labels):
         x = left + cidx * cell_w
-        short = column if len(column) <= 18 else column[:15] + "..."
-        parts.append(f"<text x='{x + 4}' y='{top - 14}' font-family='Arial' font-size='11' fill='#52606d'>{html.escape(short)}</text>")
+        short = _short_label(column, 18)
+        parts.append(f"<text x='{x + 4}' y='{top - 16}' font-family='{REPORT_SVG_FONT}' font-size='11' fill='{_plot_color('muted')}'><title>{html.escape(column)}</title>{html.escape(short)}</text>")
     for ridx, label in enumerate(row_labels):
         y = top + ridx * cell_h
-        short_label = label if len(label) <= 40 else label[:37] + "..."
-        parts.append(f"<text x='20' y='{y + 16}' font-family='Arial' font-size='11' fill='#1f2933'>{html.escape(short_label)}</text>")
+        short_label = _short_label(label, 44)
+        parts.append(f"<text x='24' y='{y + 17}' font-family='{REPORT_SVG_FONT}' font-size='11' fill='{_plot_color('body_text')}'><title>{html.escape(label)}</title>{html.escape(short_label)}</text>")
         for cidx, column in enumerate(column_labels):
             x = left + cidx * cell_w
             value = values.get((label, column), 0.0)
             intensity = min(abs(value) / max_abs, 1.0)
             if value > 0:
-                fill = f"rgb(254,{int(226 - 130 * intensity)},{int(226 - 130 * intensity)})"
+                fill = _interpolate_color("#fee2e2", _plot_color("red"), intensity)
             elif value < 0:
-                fill = f"rgb({int(219 - 135 * intensity)},{int(234 - 120 * intensity)},254)"
+                fill = _interpolate_color("#dbeafe", _plot_color("blue"), intensity)
             else:
                 fill = "#f1f5f9"
-            parts.append(f"<rect x='{x}' y='{y}' width='{cell_w - 2}' height='{cell_h - 2}' fill='{fill}' stroke='#d9e2ec'><title>{html.escape(label)} / {html.escape(column)}: {value:.3f}</title></rect>")
+            parts.append(f"<rect x='{x}' y='{y}' width='{cell_w - 2}' height='{cell_h - 2}' rx='2' fill='{fill}' stroke='{_plot_color('border')}'><title>{html.escape(label)} / {html.escape(column)}: {value:.3f}</title></rect>")
     parts.append("</svg>\n")
     path.write_text("".join(parts), encoding="utf-8")
 
@@ -5695,28 +5777,32 @@ def _write_diverging_heatmap_png(path: Path, rows: list[dict[str, str]], row_fie
 
 
 def _write_burden_boxplot_svg(path: Path, rows: list[dict[str, str]], title: str) -> None:
-    width = 940
-    row_h = 42
-    left, top, plot_w = 240, 64, 620
-    height = max(220, top + row_h * max(len(rows), 1) + 50)
+    width = 1000
+    row_h = 44
+    left, top, plot_w = 270, 86, 620
+    height = max(260, top + row_h * max(len(rows), 1) + 60)
     max_value = max([_float_or_none(row.get("max", "")) or 0.0 for row in rows] + [1.0])
-    parts = [
-        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
-        "<rect width='100%' height='100%' fill='#f8fafc'/>",
-        f"<text x='20' y='32' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
-    ]
+    parts = _svg_base(width, height, title, "Boxes show interquartile ranges, whiskers show min/max, vertical line is median, dot is mean.")
+    plot_bottom = top + row_h * max(len(rows), 1)
+    parts.append(f"<rect x='{left}' y='{top - 12}' width='{plot_w}' height='{plot_bottom - top + 20}' fill='{_plot_color('panel')}' stroke='{_plot_color('border')}'/>")
+    for tick in range(0, 5):
+        x = left + tick / 4 * plot_w
+        value = max_value * tick / 4
+        parts.append(f"<line x1='{x:.1f}' y1='{top - 12}' x2='{x:.1f}' y2='{plot_bottom + 8}' stroke='{_plot_color('grid')}'/>")
+        parts.append(f"<text x='{x - 8:.1f}' y='{plot_bottom + 26}' font-family='{REPORT_SVG_FONT}' font-size='11' fill='{_plot_color('muted')}'>{value:g}</text>")
     for idx, row in enumerate(rows):
         y = top + idx * row_h
         label = row.get("metadata_group", "")
-        short = label if len(label) <= 32 else label[:29] + "..."
+        short = _short_label(label, 34)
         values = {key: (_float_or_none(row.get(key, "")) or 0.0) for key in ["min", "q1", "median", "q3", "max", "mean"]}
         def xpos(value: float) -> float:
             return left + value / max_value * plot_w if max_value else left
-        parts.append(f"<text x='20' y='{y + 23}' font-family='Arial' font-size='12' fill='#1f2933'>{html.escape(short)} (n={html.escape(row.get('n', ''))})</text>")
-        parts.append(f"<line x1='{xpos(values['min']):.1f}' y1='{y + 18}' x2='{xpos(values['max']):.1f}' y2='{y + 18}' stroke='#64748b'/>")
-        parts.append(f"<rect x='{xpos(values['q1']):.1f}' y='{y + 8}' width='{max(xpos(values['q3']) - xpos(values['q1']), 2):.1f}' height='20' fill='#bae6fd' stroke='#0369a1'/>")
+        tip = f"{label}; n={row.get('n', '')}; median={values['median']:.2f}; mean={values['mean']:.2f}; range={values['min']:.2f}-{values['max']:.2f}"
+        parts.append(f"<text x='24' y='{y + 24}' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('body_text')}'><title>{html.escape(label)}</title>{html.escape(short)} (n={html.escape(row.get('n', ''))})</text>")
+        parts.append(f"<line x1='{xpos(values['min']):.1f}' y1='{y + 18}' x2='{xpos(values['max']):.1f}' y2='{y + 18}' stroke='{_plot_color('gray')}'><title>{html.escape(tip)}</title></line>")
+        parts.append(f"<rect x='{xpos(values['q1']):.1f}' y='{y + 8}' width='{max(xpos(values['q3']) - xpos(values['q1']), 2):.1f}' height='20' rx='2' fill='#bae6fd' stroke='#0369a1'><title>{html.escape(tip)}</title></rect>")
         parts.append(f"<line x1='{xpos(values['median']):.1f}' y1='{y + 6}' x2='{xpos(values['median']):.1f}' y2='{y + 30}' stroke='#0f172a' stroke-width='2'/>")
-        parts.append(f"<circle cx='{xpos(values['mean']):.1f}' cy='{y + 18}' r='4' fill='#0f766e'><title>mean {values['mean']:.2f}</title></circle>")
+        parts.append(f"<circle cx='{xpos(values['mean']):.1f}' cy='{y + 18}' r='4.3' fill='{_plot_color('primary')}'><title>mean {values['mean']:.2f}</title></circle>")
     parts.append("</svg>\n")
     path.write_text("".join(parts), encoding="utf-8")
 
@@ -5892,68 +5978,72 @@ def _prevalence_label(percent: float) -> str:
 
 
 def _write_prevalence_bar_svg(path: Path, rows: list[dict[str, str]], title: str, value_field: str) -> None:
-    width = 1040
-    row_height = 31
-    top = 58
-    left = 285
+    width = 1080
+    row_height = 32
+    top = 80
+    left = 305
     plot_width = 610
-    height = max(190, top + row_height * max(len(rows), 1) + 44)
+    height = max(230, top + row_height * max(len(rows), 1) + 58)
     values = [_float_or_none(row.get(value_field, "")) or 0.0 for row in rows]
     max_value = max(values) if values else 1.0
     if max_value <= 0:
         max_value = 1.0
-    parts = [
-        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
-        "<rect width='100%' height='100%' fill='#f8fafc'/>",
-        f"<text x='20' y='30' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
-    ]
+    parts = _svg_base(
+        width,
+        height,
+        title,
+        "Bars show dataset prevalence or burden; prevalence labels include positive and total genome counts when available.",
+    )
+    plot_bottom = top + row_height * max(len(rows), 1)
+    parts.append(f"<rect x='{left}' y='{top - 12}' width='{plot_width}' height='{plot_bottom - top + 18}' fill='{_plot_color('panel')}' stroke='{_plot_color('border')}'/>")
+    for tick in range(0, 5):
+        x = left + tick / 4 * plot_width
+        parts.append(f"<line x1='{x:.1f}' y1='{top - 12}' x2='{x:.1f}' y2='{plot_bottom + 6}' stroke='{_plot_color('grid')}'/>")
     for idx, row in enumerate(rows):
         y = top + idx * row_height
         value = _float_or_none(row.get(value_field, "")) or 0.0
         bar_width = value / max_value * plot_width
         label = row.get("feature_id", "") or row.get("database", "") or row.get("label", "")
-        if len(label) > 42:
-            label = label[:39] + "..."
+        full_label = label
+        label = _short_label(label, 46)
         display = row.get("prevalence_display", "") or row.get(value_field, "")
+        if not display and row.get("positive_genomes") and row.get("total_genomes"):
+            display = f"{value:.1f}% ({row.get('positive_genomes')}/{row.get('total_genomes')})"
         tip = (
             f"{row.get('database', '')}:{row.get('feature_id', '')}; "
             f"{row.get('positive_genomes', '')}/{row.get('total_genomes', row.get('sample_count', ''))}; "
             f"rows={row.get('feature_rows', '')}; label={row.get('prevalence_label', '')}"
         )
-        parts.append(f"<text x='20' y='{y + 18}' font-family='Arial' font-size='12' fill='#1f2933'>{html.escape(label)}</text>")
-        parts.append(f"<rect x='{left}' y='{y}' width='{bar_width:.1f}' height='20' fill='#0f766e'><title>{html.escape(tip)}</title></rect>")
-        parts.append(f"<text x='{left + bar_width + 8:.1f}' y='{y + 15}' font-family='Arial' font-size='12' fill='#1f2933'>{html.escape(display)}</text>")
-    parts.append(f"<text x='{left}' y='{height - 12}' font-family='Arial' font-size='12' fill='#52606d'>{html.escape(value_field)}</text>")
+        color = _database_color(row.get("database", "")) if row.get("database") else _plot_color("primary")
+        parts.append(f"<text x='24' y='{y + 18}' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('body_text')}'><title>{html.escape(full_label)}</title>{html.escape(label)}</text>")
+        parts.append(f"<rect x='{left}' y='{y}' width='{bar_width:.1f}' height='20' rx='3' fill='{color}'><title>{html.escape(tip)}</title></rect>")
+        inside_label = bar_width > 135 and (left + bar_width + 130) > width
+        text_x = left + bar_width - 8 if inside_label else left + bar_width + 8
+        text_anchor = "end" if inside_label else "start"
+        text_fill = "#ffffff" if inside_label else _plot_color("body_text")
+        parts.append(f"<text x='{text_x:.1f}' y='{y + 15}' text-anchor='{text_anchor}' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{text_fill}'>{html.escape(display)}</text>")
+    parts.append(f"<text x='{left}' y='{height - 12}' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('muted')}'>{html.escape(value_field)}</text>")
     parts.append("</svg>\n")
     path.write_text("".join(parts), encoding="utf-8")
 
 
 def _write_prevalence_stacked_svg(path: Path, rows: list[dict[str, str]], title: str) -> None:
-    width = 980
+    width = 1020
     row_height = 34
-    top, left, plot_width = 76, 210, 620
-    height = max(220, top + row_height * max(len(rows), 1) + 50)
-    colors = {
-        "core_features": "#0f766e",
-        "common_features": "#38bdf8",
-        "accessory_features": "#f59e0b",
-        "rare_features": "#94a3b8",
-    }
+    top, left, plot_width = 92, 230, 620
+    height = max(250, top + row_height * max(len(rows), 1) + 60)
+    colors = REPORT_CLASS_COLORS
     labels = [
         ("core_features", "core"),
         ("common_features", "common"),
         ("accessory_features", "accessory"),
         ("rare_features", "rare"),
     ]
-    parts = [
-        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
-        "<rect width='100%' height='100%' fill='#f8fafc'/>",
-        f"<text x='20' y='30' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
-    ]
-    legend_x = 20
+    parts = _svg_base(width, height, title, "Feature classes use default thresholds: core >=95%, common >=50%, accessory >=5%, rare <5%.")
+    legend_x = 24
     for key, label in labels:
-        parts.append(f"<rect x='{legend_x}' y='48' width='12' height='12' fill='{colors[key]}'/>")
-        parts.append(f"<text x='{legend_x + 18}' y='59' font-family='Arial' font-size='12' fill='#334e68'>{label}</text>")
+        parts.append(f"<rect x='{legend_x}' y='62' width='12' height='12' rx='2' fill='{colors[key]}'/>")
+        parts.append(f"<text x='{legend_x + 18}' y='73' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('body_text')}'>{label}</text>")
         legend_x += 112
     for idx, row in enumerate(rows):
         y = top + idx * row_height
@@ -5962,13 +6052,13 @@ def _write_prevalence_stacked_svg(path: Path, rows: list[dict[str, str]], title:
             total = sum((_float_or_none(row.get(key, "")) or 0.0) for key, _ in labels) or 1.0
         x = left
         database = row.get("database", "")
-        parts.append(f"<text x='20' y='{y + 20}' font-family='Arial' font-size='12' fill='#1f2933'>{html.escape(database)}</text>")
+        parts.append(f"<text x='24' y='{y + 20}' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('body_text')}'>{html.escape(_short_label(database, 28))}</text>")
         for key, label in labels:
             value = _float_or_none(row.get(key, "")) or 0.0
             width_part = value / total * plot_width
             parts.append(f"<rect x='{x:.1f}' y='{y}' width='{width_part:.1f}' height='22' fill='{colors[key]}'><title>{html.escape(database)} {label}: {value:g}</title></rect>")
             x += width_part
-        parts.append(f"<text x='{left + plot_width + 10}' y='{y + 16}' font-family='Arial' font-size='12' fill='#1f2933'>{int(total)}</text>")
+        parts.append(f"<text x='{left + plot_width + 10}' y='{y + 16}' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('body_text')}'>{int(total)}</text>")
     parts.append("</svg>\n")
     path.write_text("".join(parts), encoding="utf-8")
 
@@ -6499,8 +6589,8 @@ def _variation_boxplot_rows(
 
 
 def _write_variation_scatter_svg(path: Path, rows: list[dict[str, str]], title: str) -> None:
-    width, height = 900, 560
-    left, top, plot_w, plot_h = 78, 62, 720, 410
+    width, height = 1000, 640
+    left, top, plot_w, plot_h = 88, 86, 780, 430
     points = [
         (
             _float_or_none(row.get("identity", "")),
@@ -6510,20 +6600,20 @@ def _write_variation_scatter_svg(path: Path, rows: list[dict[str, str]], title: 
         for row in rows
     ]
     points = [(x, y, row) for x, y, row in points if x is not None and y is not None]
-    parts = [
-        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
-        "<rect width='100%' height='100%' fill='#f8fafc'/>",
-        f"<text x='20' y='32' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
-        f"<rect x='{left}' y='{top}' width='{plot_w}' height='{plot_h}' fill='#ffffff' stroke='#bcccdc'/>",
-    ]
+    parts = _svg_base(width, height, title, "Each point is a detected feature hit; dashed guides mark 90% identity and 80% coverage review thresholds.")
+    parts.append(f"<rect x='{left}' y='{top}' width='{plot_w}' height='{plot_h}' fill='{_plot_color('panel')}' stroke='{_plot_color('border')}'/>")
     for tick in range(0, 101, 20):
         x = left + tick / 100 * plot_w
         y = top + plot_h - tick / 100 * plot_h
-        parts.append(f"<line x1='{x:.1f}' y1='{top}' x2='{x:.1f}' y2='{top + plot_h}' stroke='#e2e8f0'/>")
-        parts.append(f"<line x1='{left}' y1='{y:.1f}' x2='{left + plot_w}' y2='{y:.1f}' stroke='#e2e8f0'/>")
-        parts.append(f"<text x='{x - 8:.1f}' y='{top + plot_h + 22}' font-size='11' font-family='Arial' fill='#52606d'>{tick}</text>")
-        parts.append(f"<text x='{left - 38}' y='{y + 4:.1f}' font-size='11' font-family='Arial' fill='#52606d'>{tick}</text>")
-    colors = ["#0f766e", "#dc2626", "#7c3aed", "#d97706", "#2563eb", "#be123c", "#15803d"]
+        parts.append(f"<line x1='{x:.1f}' y1='{top}' x2='{x:.1f}' y2='{top + plot_h}' stroke='{_plot_color('grid')}'/>")
+        parts.append(f"<line x1='{left}' y1='{y:.1f}' x2='{left + plot_w}' y2='{y:.1f}' stroke='{_plot_color('grid')}'/>")
+        parts.append(f"<text x='{x - 8:.1f}' y='{top + plot_h + 22}' font-size='11' font-family='{REPORT_SVG_FONT}' fill='{_plot_color('muted')}'>{tick}</text>")
+        parts.append(f"<text x='{left - 38}' y='{y + 4:.1f}' font-size='11' font-family='{REPORT_SVG_FONT}' fill='{_plot_color('muted')}'>{tick}</text>")
+    threshold_x = left + 90 / 100 * plot_w
+    threshold_y = top + plot_h - 80 / 100 * plot_h
+    parts.append(f"<line x1='{threshold_x:.1f}' y1='{top}' x2='{threshold_x:.1f}' y2='{top + plot_h}' stroke='{_plot_color('orange')}' stroke-dasharray='5 4'/>")
+    parts.append(f"<line x1='{left}' y1='{threshold_y:.1f}' x2='{left + plot_w}' y2='{threshold_y:.1f}' stroke='{_plot_color('orange')}' stroke-dasharray='5 4'/>")
+    colors = REPORT_CATEGORY_PALETTE
     feature_colors: dict[str, str] = {}
     for x_value, y_value, row in points[:600]:
         feature = row.get("feature_id", "")
@@ -6531,10 +6621,13 @@ def _write_variation_scatter_svg(path: Path, rows: list[dict[str, str]], title: 
             feature_colors[feature] = colors[len(feature_colors) % len(colors)]
         cx = left + max(0, min(100, x_value)) / 100 * plot_w
         cy = top + plot_h - max(0, min(100, y_value)) / 100 * plot_h
+        low_warning = x_value < 90 or y_value < 80
+        stroke = _plot_color("orange") if low_warning else "#ffffff"
         tip = f"{row.get('database', '')} {feature}; identity={x_value:.2f}; coverage={y_value:.2f}; sample={row.get('assembly_accession', '') or row.get('sample_id', '')}"
-        parts.append(f"<circle cx='{cx:.1f}' cy='{cy:.1f}' r='4' fill='{feature_colors[feature]}' fill-opacity='0.72'><title>{html.escape(tip)}</title></circle>")
-    parts.append(f"<text x='{left + plot_w / 2 - 55}' y='{height - 24}' font-size='13' font-family='Arial' fill='#334e68'>Identity (%)</text>")
-    parts.append(f"<text x='20' y='{top + plot_h / 2}' font-size='13' font-family='Arial' fill='#334e68' transform='rotate(-90 20 {top + plot_h / 2})'>Coverage (%)</text>")
+        parts.append(f"<circle cx='{cx:.1f}' cy='{cy:.1f}' r='4.5' fill='{feature_colors[feature]}' fill-opacity='0.74' stroke='{stroke}' stroke-width='1.2'><title>{html.escape(tip)}</title></circle>")
+    parts.append(f"<text x='{left + plot_w / 2 - 55}' y='{height - 32}' font-size='13' font-family='{REPORT_SVG_FONT}' fill='{_plot_color('body_text')}'>Identity (%)</text>")
+    parts.append(f"<text x='24' y='{top + plot_h / 2}' font-size='13' font-family='{REPORT_SVG_FONT}' fill='{_plot_color('body_text')}' transform='rotate(-90 24 {top + plot_h / 2})'>Coverage (%)</text>")
+    parts.append(f"<text x='{left}' y='{height - 12}' font-size='11' font-family='{REPORT_SVG_FONT}' fill='{_plot_color('muted')}'>Orange outline or guide indicates hits below common review thresholds.</text>")
     parts.append("</svg>\n")
     path.write_text("".join(parts), encoding="utf-8")
 
