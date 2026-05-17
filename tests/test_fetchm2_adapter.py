@@ -136,8 +136,9 @@ class FetchM2AdapterTests(unittest.TestCase):
 
             pd.DataFrame(
                 [
-                    {"Assembly Accession": "GCF_000000001.1", "Organism Name": "Klebsiella oxytoca"},
-                    {"Assembly Accession": "GCF_000000002.1", "Organism Name": "Klebsiella oxytoca"},
+                    {"Assembly Accession": "GCF_000000001.1", "Organism Name": "Klebsiella oxytoca", "Collection_Year": 2019, "Country": "Bangladesh"},
+                    {"Assembly Accession": "GCF_000000002.1", "Organism Name": "Klebsiella oxytoca", "Collection_Year": 2021, "Country": "United States"},
+                    {"Assembly Accession": "GCF_000000003.1", "Organism Name": "Klebsiella oxytoca", "Collection_Year": 2023, "Country": "United Kingdom"},
                 ]
             ).to_csv(metadata_dir / "ncbi_clean.csv", index=False)
             (metadata_dir / "sample_map.csv").write_text(
@@ -202,6 +203,15 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue((sample_dir / "important" / "key_tables" / "feature_prevalence_summary.tsv").exists())
             self.assertTrue((sample_dir / "important" / "key_tables" / "feature_variation_summary.tsv").exists())
             self.assertTrue((sample_dir / "important" / "key_tables" / "feature_variation_hits.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "key_tables" / "temporal_database_burden.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "key_tables" / "temporal_feature_prevalence.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "key_tables" / "temporal_trend_summary.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "key_tables" / "temporal_increasing_features.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "key_tables" / "temporal_decreasing_features.tsv").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "temporal_database_burden_top20.svg").exists())
+            self.assertTrue((sample_dir / "important" / "figures" / "temporal_feature_heatmap_top40.png").exists())
+            temporal_summary = pd.read_csv(sample_dir / "important" / "key_tables" / "temporal_trend_summary.tsv", sep="\t")
+            self.assertTrue({"trend_label", "support_label", "warning_flags"}.issubset(temporal_summary.columns))
             report_html = (sample_dir / "important" / "results.html").read_text(encoding="utf-8")
             for section in [
                 "Featured Results",
@@ -210,6 +220,7 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "Prevalence",
                 "Geographic Distribution",
                 "Variations",
+                "Temporal Trends",
                 "Warnings And Limitations",
                 "Important Files",
             ]:

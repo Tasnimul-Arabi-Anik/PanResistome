@@ -3946,6 +3946,122 @@ def _write_line_png(path: Path, rows: list[dict[str, str]], value_field: str) ->
     _write_png(path, width, height, pixels)
 
 
+def _write_heatmap_svg(path: Path, rows: list[dict[str, str]], title: str, row_field: str, column_field: str, value_field: str) -> None:
+    row_labels = list(dict.fromkeys(row.get(row_field, "") for row in rows if row.get(row_field, "")))
+    column_labels = sorted({row.get(column_field, "") for row in rows if row.get(column_field, "")})
+    values = {(row.get(row_field, ""), row.get(column_field, "")): _float_or_none(row.get(value_field, "")) or 0.0 for row in rows}
+    cell_w = 68
+    cell_h = 22
+    left = 260
+    top = 72
+    width = max(720, left + cell_w * max(len(column_labels), 1) + 40)
+    height = max(180, top + cell_h * max(len(row_labels), 1) + 40)
+    max_value = max(values.values()) if values else 1.0
+    if max_value <= 0:
+        max_value = 1.0
+    parts = [
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
+        "<rect width='100%' height='100%' fill='#f8fafc'/>",
+        f"<text x='20' y='30' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
+    ]
+    for cidx, column in enumerate(column_labels):
+        x = left + cidx * cell_w
+        parts.append(f"<text x='{x + 6}' y='{top - 12}' font-family='Arial' font-size='11' fill='#52606d'>{html.escape(column)}</text>")
+    for ridx, label in enumerate(row_labels):
+        y = top + ridx * cell_h
+        short_label = label if len(label) <= 42 else label[:39] + "..."
+        parts.append(f"<text x='20' y='{y + 15}' font-family='Arial' font-size='11' fill='#1f2933'>{html.escape(short_label)}</text>")
+        for cidx, column in enumerate(column_labels):
+            x = left + cidx * cell_w
+            value = values.get((label, column), 0.0)
+            intensity = value / max_value
+            red = int(232 - 160 * intensity)
+            green = int(246 - 82 * intensity)
+            blue = int(255 - 105 * intensity)
+            parts.append(f"<rect x='{x}' y='{y}' width='{cell_w - 2}' height='{cell_h - 2}' fill='rgb({red},{green},{blue})' stroke='#d9e2ec'><title>{html.escape(label)} {html.escape(column)}: {value:g}</title></rect>")
+    parts.append("</svg>\n")
+    path.write_text("".join(parts), encoding="utf-8")
+
+
+def _write_heatmap_png(path: Path, rows: list[dict[str, str]], row_field: str, column_field: str, value_field: str) -> None:
+    row_labels = list(dict.fromkeys(row.get(row_field, "") for row in rows if row.get(row_field, "")))
+    column_labels = sorted({row.get(column_field, "") for row in rows if row.get(column_field, "")})
+    values = {(row.get(row_field, ""), row.get(column_field, "")): _float_or_none(row.get(value_field, "")) or 0.0 for row in rows}
+    cell_w = 68
+    cell_h = 22
+    left = 260
+    top = 72
+    width = max(720, left + cell_w * max(len(column_labels), 1) + 40)
+    height = max(180, top + cell_h * max(len(row_labels), 1) + 40)
+    max_value = max(values.values()) if values else 1.0
+    if max_value <= 0:
+        max_value = 1.0
+    pixels = [bytearray([248, 250, 252] * width) for _ in range(height)]
+
+    def rect(x0: int, y0: int, x1: int, y1: int, color: tuple[int, int, int]) -> None:
+        for y in range(max(0, y0), min(height, y1)):
+            row_pixels = pixels[y]
+            for x in range(max(0, x0), min(width, x1)):
+                idx = x * 3
+                row_pixels[idx:idx + 3] = bytes(color)
+
+    for ridx, label in enumerate(row_labels):
+        y = top + ridx * cell_h
+        for cidx, column in enumerate(column_labels):
+            x = left + cidx * cell_w
+            intensity = values.get((label, column), 0.0) / max_value
+            red = int(232 - 160 * intensity)
+            green = int(246 - 82 * intensity)
+            blue = int(255 - 105 * intensity)
+            rect(x, y, x + cell_w - 2, y + cell_h - 2, (red, green, blue))
+    _write_png(path, width, height, pixels)
+
+
+def _extract_year(value: str) -> int | None:
+    match = re.search(r"(19|20)\d{2}", str(value or ""))
+    if not match:
+        return None
+    year = int(match.group(0))
+    if 1900 <= year <= 2100:
+        return year
+    return None
+
+
+def _pearson_correlation(xs: list[float], ys: list[float]) -> float | None:
+    if len(xs) < 2 or len(xs) != len(ys):
+        return None
+    mean_x = sum(xs) / len(xs)
+    mean_y = sum(ys) / len(ys)
+    numerator = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys))
+    denom_x = math.sqrt(sum((x - mean_x) ** 2 for x in xs))
+    denom_y = math.sqrt(sum((y - mean_y) ** 2 for y in ys))
+    if denom_x == 0 or denom_y == 0:
+        return 0.0
+    return numerator / (denom_x * denom_y)
+
+
+def _temporal_trend_label(correlation: float | None, change_percent: float, years_observed: int) -> str:
+    if years_observed < 3 or correlation is None:
+        return "insufficient_temporal_support"
+    if correlation >= 0.6 and change_percent >= 20:
+        return "strong_increasing"
+    if correlation >= 0.3 and change_percent > 0:
+        return "increasing"
+    if correlation <= -0.6 and change_percent <= -20:
+        return "strong_decreasing"
+    if correlation <= -0.3 and change_percent < 0:
+        return "decreasing"
+    return "stable"
+
+
+def _temporal_support_label(years_observed: int, min_year_genomes: int, total_positive: int) -> str:
+    if years_observed < 3 or min_year_genomes < 3 or total_positive < 3:
+        return "low_support"
+    if years_observed >= 5 and min_year_genomes >= 5 and total_positive >= 10:
+        return "high_support"
+    return "moderate_support"
+
+
 def write_important_qc_outputs(sample_dir: Path, out_dir: Path, important_dir: Path) -> dict[str, str]:
     key_tables = important_dir / "key_tables"
     figures = important_dir / "figures"
@@ -4189,6 +4305,267 @@ def write_important_variation_outputs(sample_dir: Path, out_dir: Path, important
     return outputs
 
 
+def write_important_temporal_outputs(sample_dir: Path, out_dir: Path, important_dir: Path, top_n: int = 20) -> dict[str, str]:
+    key_tables = important_dir / "key_tables"
+    figures = important_dir / "figures"
+    key_tables.mkdir(parents=True, exist_ok=True)
+    figures.mkdir(parents=True, exist_ok=True)
+
+    metadata_rows = read_table(sample_dir / "basic" / "enriched_genome_dataset.csv")
+    features = [row for row in read_table(out_dir / "features" / "all_features.tsv") if row.get("presence", "1") != "0"]
+    metadata_by_sample = {row.get("assembly_accession", ""): row for row in metadata_rows if row.get("assembly_accession")}
+    sample_year: dict[str, int] = {}
+    missing_year = 0
+    for row in metadata_rows:
+        sample = row.get("assembly_accession", "")
+        year = _extract_year(row.get("collection_year", ""))
+        if sample and year is not None:
+            sample_year[sample] = year
+        elif sample:
+            missing_year += 1
+
+    samples_by_year: dict[int, set[str]] = defaultdict(set)
+    for sample, year in sample_year.items():
+        samples_by_year[year].add(sample)
+    years = sorted(samples_by_year)
+    missing_year_fraction = missing_year / len(metadata_rows) if metadata_rows else 0.0
+
+    feature_samples: dict[tuple[str, str], set[str]] = defaultdict(set)
+    sample_database_features: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for row in features:
+        database = row.get("database", "")
+        feature_id = row.get("feature_id", "")
+        sample = row.get("assembly_accession", "") or row.get("sample_id", "")
+        if not database or not feature_id or not sample:
+            continue
+        feature_samples[(database, feature_id)].add(sample)
+        sample_database_features[(sample, database)].add(feature_id)
+
+    databases = sorted({database for database, _ in feature_samples})
+    burden_rows = []
+    for database in databases:
+        for year in years:
+            year_samples = samples_by_year[year]
+            counts = [len(sample_database_features.get((sample, database), set())) for sample in year_samples]
+            positive = sum(1 for count in counts if count > 0)
+            total_features = sum(counts)
+            mean_burden = total_features / len(year_samples) if year_samples else 0.0
+            warnings = []
+            if len(year_samples) < 3:
+                warnings.append("small_year_group")
+            if missing_year_fraction > 0:
+                warnings.append("missing_collection_year")
+            burden_rows.append({
+                "database": database,
+                "collection_year": str(year),
+                "total_genomes": str(len(year_samples)),
+                "positive_genomes": str(positive),
+                "total_feature_count": str(total_features),
+                "mean_feature_count_per_genome": f"{mean_burden:.4f}",
+                "warning_flags": ";".join(warnings),
+            })
+
+    prevalence_rows = []
+    trend_rows = []
+    for (database, feature_id), present_samples in sorted(feature_samples.items()):
+        prevalence_values = []
+        total_positive = 0
+        min_year_genomes = min((len(samples_by_year[year]) for year in years), default=0)
+        max_year_genomes = max((len(samples_by_year[year]) for year in years), default=0)
+        for year in years:
+            year_samples = samples_by_year[year]
+            positive = len(present_samples & year_samples)
+            total = len(year_samples)
+            total_positive += positive
+            prevalence = positive / total if total else 0.0
+            warnings = []
+            if total < 3:
+                warnings.append("small_year_group")
+            if missing_year_fraction > 0:
+                warnings.append("missing_collection_year")
+            if positive < 3:
+                warnings.append("few_positive_genomes")
+            prevalence_rows.append({
+                "database": database,
+                "feature_id": feature_id,
+                "collection_year": str(year),
+                "total_genomes": str(total),
+                "positive_genomes": str(positive),
+                "prevalence": f"{prevalence:.4f}",
+                "prevalence_percent": f"{prevalence * 100:.1f}",
+                "warning_flags": ";".join(warnings),
+            })
+            prevalence_values.append((year, prevalence * 100, total, positive))
+
+        year_numbers = [float(item[0]) for item in prevalence_values]
+        prevalence_percents = [item[1] for item in prevalence_values]
+        correlation = _pearson_correlation(year_numbers, prevalence_percents)
+        first_year = prevalence_values[0] if prevalence_values else (None, 0.0, 0, 0)
+        last_year = prevalence_values[-1] if prevalence_values else (None, 0.0, 0, 0)
+        change = last_year[1] - first_year[1]
+        years_observed = len(prevalence_values)
+        trend_label = _temporal_trend_label(correlation, change, years_observed)
+        support_label = _temporal_support_label(years_observed, min_year_genomes, total_positive)
+
+        support_samples = [sample for sample in present_samples if sample in sample_year]
+        support_bioprojects = Counter(metadata_by_sample.get(sample, {}).get("bioproject", "") for sample in support_samples)
+        support_bioprojects.pop("", None)
+        largest_bioproject, largest_bioproject_count = support_bioprojects.most_common(1)[0] if support_bioprojects else ("", 0)
+        largest_bioproject_fraction = largest_bioproject_count / len(support_samples) if support_samples else 0.0
+
+        warnings = ["exploratory_only"]
+        if years_observed < 3:
+            warnings.append("insufficient_temporal_support")
+        if min_year_genomes < 3:
+            warnings.append("small_year_group")
+        if total_positive < 3:
+            warnings.append("few_positive_genomes")
+        if missing_year_fraction > 0:
+            warnings.append("missing_collection_year")
+        if max_year_genomes and min_year_genomes and max_year_genomes / max(min_year_genomes, 1) >= 5:
+            warnings.append("uneven_sampling_by_year")
+        if largest_bioproject_fraction >= 0.8 and len(support_samples) >= 3:
+            warnings.append("single_bioproject_dominance")
+        country_year_dominated = False
+        lineage_year_dominated = False
+        for year in years:
+            if len(samples_by_year[year]) < 3:
+                continue
+            country_counts = Counter(metadata_by_sample.get(sample, {}).get("country", "") for sample in samples_by_year[year])
+            country_counts.pop("", None)
+            lineage_counts = Counter(metadata_by_sample.get(sample, {}).get("mlst_ST", "") for sample in samples_by_year[year])
+            lineage_counts.pop("", None)
+            if country_counts and country_counts.most_common(1)[0][1] / len(samples_by_year[year]) >= 0.8:
+                country_year_dominated = True
+            if lineage_counts and lineage_counts.most_common(1)[0][1] / len(samples_by_year[year]) >= 0.8:
+                lineage_year_dominated = True
+        if country_year_dominated:
+            warnings.append("country_year_confounding")
+        if lineage_year_dominated:
+            warnings.append("lineage_year_confounding")
+
+        trend_rows.append({
+            "database": database,
+            "feature_id": feature_id,
+            "years_observed": str(years_observed),
+            "first_year": str(first_year[0] or ""),
+            "last_year": str(last_year[0] or ""),
+            "first_year_prevalence_percent": f"{first_year[1]:.1f}",
+            "last_year_prevalence_percent": f"{last_year[1]:.1f}",
+            "change_percent_points": f"{change:.1f}",
+            "correlation": "" if correlation is None else f"{correlation:.4f}",
+            "trend_label": trend_label,
+            "support_label": support_label,
+            "total_positive_genomes": str(total_positive),
+            "min_year_genomes": str(min_year_genomes),
+            "max_year_genomes": str(max_year_genomes),
+            "largest_bioproject": largest_bioproject,
+            "largest_bioproject_fraction": f"{largest_bioproject_fraction:.4f}",
+            "warning_flags": ";".join(dict.fromkeys(warnings)),
+        })
+
+    burden_fields = ["database", "collection_year", "total_genomes", "positive_genomes", "total_feature_count", "mean_feature_count_per_genome", "warning_flags"]
+    prevalence_fields = ["database", "feature_id", "collection_year", "total_genomes", "positive_genomes", "prevalence", "prevalence_percent", "warning_flags"]
+    trend_fields = [
+        "database", "feature_id", "years_observed", "first_year", "last_year",
+        "first_year_prevalence_percent", "last_year_prevalence_percent", "change_percent_points",
+        "correlation", "trend_label", "support_label", "total_positive_genomes",
+        "min_year_genomes", "max_year_genomes", "largest_bioproject",
+        "largest_bioproject_fraction", "warning_flags",
+    ]
+    burden_path = key_tables / "temporal_database_burden.tsv"
+    prevalence_path = key_tables / "temporal_feature_prevalence.tsv"
+    trend_path = key_tables / "temporal_trend_summary.tsv"
+    increasing_path = key_tables / "temporal_increasing_features.tsv"
+    decreasing_path = key_tables / "temporal_decreasing_features.tsv"
+    write_rows(burden_path, burden_rows, burden_fields)
+    write_rows(prevalence_path, prevalence_rows, prevalence_fields)
+    write_rows(trend_path, trend_rows, trend_fields)
+
+    increasing = [
+        row for row in trend_rows
+        if row["trend_label"] in {"increasing", "strong_increasing"}
+    ]
+    increasing.sort(key=lambda row: (-(_float_or_none(row["change_percent_points"]) or 0.0), row["database"], row["feature_id"]))
+    decreasing = [
+        row for row in trend_rows
+        if row["trend_label"] in {"decreasing", "strong_decreasing"}
+    ]
+    decreasing.sort(key=lambda row: (_float_or_none(row["change_percent_points"]) or 0.0, row["database"], row["feature_id"]))
+    write_rows(increasing_path, increasing, trend_fields)
+    write_rows(decreasing_path, decreasing, trend_fields)
+
+    outputs = {
+        "important_temporal_database_burden": str(burden_path),
+        "important_temporal_feature_prevalence": str(prevalence_path),
+        "important_temporal_trend_summary": str(trend_path),
+        "important_temporal_increasing_features": str(increasing_path),
+        "important_temporal_decreasing_features": str(decreasing_path),
+    }
+
+    latest_burden = []
+    for database in databases:
+        db_rows = [row for row in burden_rows if row["database"] == database]
+        if not db_rows:
+            continue
+        latest = max(db_rows, key=lambda row: int(row["collection_year"]))
+        latest_burden.append({"database": database, "mean_feature_count_per_genome": latest["mean_feature_count_per_genome"]})
+    latest_burden.sort(key=lambda row: -(_float_or_none(row["mean_feature_count_per_genome"]) or 0.0))
+    burden_data = figures / "temporal_database_burden_top20.data.tsv"
+    burden_svg = figures / "temporal_database_burden_top20.svg"
+    burden_png = figures / "temporal_database_burden_top20.png"
+    write_rows(burden_data, latest_burden[:top_n], ["database", "mean_feature_count_per_genome"])
+    _write_bar_svg(burden_svg, latest_burden[:top_n], "Temporal Database Burden", "database", "mean_feature_count_per_genome", "Mean features/genome in latest year")
+    _write_bar_png(burden_png, latest_burden[:top_n], "mean_feature_count_per_genome")
+    outputs.update({
+        "important_temporal_database_burden_data": str(burden_data),
+        "important_temporal_database_burden_svg": str(burden_svg),
+        "important_temporal_database_burden_png": str(burden_png),
+    })
+
+    for label, rows, filename in [
+        ("Top Increasing Temporal Features", increasing[:top_n], "temporal_top_increasing_features"),
+        ("Top Decreasing Temporal Features", decreasing[:top_n], "temporal_top_decreasing_features"),
+    ]:
+        data_path = figures / f"{filename}.data.tsv"
+        svg_path = figures / f"{filename}.svg"
+        png_path = figures / f"{filename}.png"
+        figure_rows = [
+            {
+                **row,
+                "feature_label": f"{row['database']}:{row['feature_id']}",
+                "display_change_percent_points": f"{abs(_float_or_none(row['change_percent_points']) or 0.0):.1f}",
+            }
+            for row in rows
+        ]
+        write_rows(data_path, figure_rows, trend_fields + ["feature_label", "display_change_percent_points"])
+        _write_bar_svg(svg_path, figure_rows, label, "feature_label", "display_change_percent_points", "Absolute change in prevalence percentage points")
+        _write_bar_png(png_path, figure_rows, "display_change_percent_points")
+        outputs[f"important_{filename}_data"] = str(data_path)
+        outputs[f"important_{filename}_svg"] = str(svg_path)
+        outputs[f"important_{filename}_png"] = str(png_path)
+
+    heatmap_features = increasing[:top_n] + decreasing[:top_n]
+    heatmap_keys = {(row["database"], row["feature_id"]) for row in heatmap_features[: top_n * 2]}
+    heatmap_rows = [
+        {**row, "feature_label": f"{row['database']}:{row['feature_id']}"}
+        for row in prevalence_rows
+        if (row["database"], row["feature_id"]) in heatmap_keys
+    ]
+    heatmap_data = figures / "temporal_feature_heatmap_top40.data.tsv"
+    heatmap_svg = figures / "temporal_feature_heatmap_top40.svg"
+    heatmap_png = figures / "temporal_feature_heatmap_top40.png"
+    write_rows(heatmap_data, heatmap_rows, prevalence_fields + ["feature_label"])
+    _write_heatmap_svg(heatmap_svg, heatmap_rows, "Temporal Feature Prevalence Heatmap", "feature_label", "collection_year", "prevalence_percent")
+    _write_heatmap_png(heatmap_png, heatmap_rows, "feature_label", "collection_year", "prevalence_percent")
+    outputs.update({
+        "important_temporal_heatmap_data": str(heatmap_data),
+        "important_temporal_heatmap_svg": str(heatmap_svg),
+        "important_temporal_heatmap_png": str(heatmap_png),
+    })
+    return outputs
+
+
 def write_important_results_report(
     sample_dir: Path,
     out_dir: Path,
@@ -4197,6 +4574,7 @@ def write_important_results_report(
     qc_outputs: dict[str, str],
     prevalence_outputs: dict[str, str],
     variation_outputs: dict[str, str],
+    temporal_outputs: dict[str, str],
 ) -> dict[str, str]:
     important_dir.mkdir(parents=True, exist_ok=True)
     basic_csv = sample_dir / "basic" / "enriched_genome_dataset.csv"
@@ -4220,11 +4598,14 @@ def write_important_results_report(
     qc_steps = read_table(important_dir / "key_tables" / "qc_step_summary.tsv")
     prevalence_rows = read_table(important_dir / "key_tables" / "feature_prevalence_summary.tsv")
     variation_rows = read_table(important_dir / "key_tables" / "feature_variation_summary.tsv")
+    temporal_rows = read_table(important_dir / "key_tables" / "temporal_trend_summary.tsv")
     top_prevalence = sorted(prevalence_rows, key=lambda row: (row.get("database", ""), -(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("feature_id", "")))[:20]
     top_variation = sorted(variation_rows, key=lambda row: (-(_float_or_none(row.get("iqr_identity", "")) or 0.0), row.get("database", ""), row.get("feature_id", "")))[:20]
+    top_temporal = sorted(temporal_rows, key=lambda row: (-abs(_float_or_none(row.get("change_percent_points", "")) or 0.0), row.get("database", ""), row.get("feature_id", "")))[:20]
     qc_table_html = _html_table(qc_steps, ["step_order", "qc_step", "tool", "enabled", "pass", "warning", "fail", "skipped", "status", "notes"], max_rows=20)
     prevalence_table_html = _html_table(top_prevalence, ["database", "feature_id", "positive_genomes", "sample_count", "prevalence_percent", "feature_rows"], max_rows=20)
     variation_table_html = _html_table(top_variation, ["database", "feature_id", "total_hits", "positive_genomes", "median_identity", "iqr_identity", "median_coverage", "iqr_coverage", "variation_label", "warning_flags"], max_rows=20)
+    temporal_table_html = _html_table(top_temporal, ["database", "feature_id", "first_year", "last_year", "first_year_prevalence_percent", "last_year_prevalence_percent", "change_percent_points", "correlation", "trend_label", "support_label", "warning_flags"], max_rows=20)
     prevalence_figures = []
     for path in sorted((important_dir / "figures").glob("prevalence_*_top20.svg")):
         database = path.name.replace("prevalence_", "").replace("_top20.svg", "")
@@ -4241,6 +4622,21 @@ def write_important_results_report(
             f"<p><a href='figures/{html.escape(path.with_suffix('.png').name)}'>PNG</a> | <a href='figures/{html.escape(path.name)}'>SVG</a> | <a href='figures/{html.escape(path.name.replace('.svg', '.data.tsv'))}'>Data TSV</a></p></div>"
         )
     variation_figures_html = "<div class='figure-row'>" + "".join(variation_figures[:6]) + "</div>" if variation_figures else "<p>No variation figures were generated because no identity/coverage feature rows were available.</p>"
+    temporal_figure_items = []
+    for figure_name, title in [
+        ("temporal_database_burden_top20", "Database burden over time"),
+        ("temporal_top_increasing_features", "Top increasing features"),
+        ("temporal_top_decreasing_features", "Top decreasing features"),
+        ("temporal_feature_heatmap_top40", "Temporal feature heatmap"),
+    ]:
+        svg_path = important_dir / "figures" / f"{figure_name}.svg"
+        if not svg_path.exists():
+            continue
+        temporal_figure_items.append(
+            f"<div><h3>{html.escape(title)}</h3><img src='figures/{html.escape(svg_path.name)}' alt='{html.escape(title)}'>"
+            f"<p><a href='figures/{html.escape(figure_name)}.png'>PNG</a> | <a href='figures/{html.escape(figure_name)}.svg'>SVG</a> | <a href='figures/{html.escape(figure_name)}.data.tsv'>Data TSV</a></p></div>"
+        )
+    temporal_figures_html = "<div class='figure-row'>" + "".join(temporal_figure_items) + "</div>" if temporal_figure_items else "<p>No temporal figures were generated because collection-year metadata or feature rows were unavailable.</p>"
     report_path = important_dir / "results.html"
     report_path.write_text(
         f"""<!doctype html>
@@ -4274,6 +4670,7 @@ th {{ background: #f0f4f8; }}
 <a href="#prevalence">Prevalence</a>
 <a href="#geography">Geographic Distribution</a>
 <a href="#variations">Variations</a>
+<a href="#temporal">Temporal Trends</a>
 <a href="#files">Important Files</a>
 <a href="#warnings">Warnings</a>
 </nav>
@@ -4296,12 +4693,18 @@ th {{ background: #f0f4f8; }}
 {variation_figures_html}
 {variation_table_html}
 <div class="downloads"><a href="key_tables/feature_variation_summary.tsv">Download variation summary</a><a href="key_tables/feature_variation_hits.tsv">Download hit-level variation table</a></div></section>
+<section id="temporal"><h2>Temporal Trends</h2><div class="warning">Temporal trends reflect the analyzed dataset only. They can be affected by sampling year, BioProject, country, lineage, and missing collection-year metadata.</div>
+<p>Prevalence trends use yearly percentages with genome-count denominators. Database burden is summarized as mean detected features per genome by collection year.</p>
+{temporal_figures_html}
+{temporal_table_html}
+<div class="downloads"><a href="key_tables/temporal_database_burden.tsv">Download database burden by year</a><a href="key_tables/temporal_feature_prevalence.tsv">Download yearly feature prevalence</a><a href="key_tables/temporal_trend_summary.tsv">Download temporal trend summary</a><a href="key_tables/temporal_increasing_features.tsv">Download increasing features</a><a href="key_tables/temporal_decreasing_features.tsv">Download decreasing features</a></div></section>
 <section id="files"><h2>Important Files</h2><ul>
 <li><a href="../basic/enriched_genome_dataset.csv">Enriched genome dataset CSV</a></li>
 <li><a href="key_tables/qc_step_summary.tsv">QC step summary</a></li>
 <li><a href="key_tables/feature_prevalence_summary.tsv">Feature prevalence summary</a></li>
 <li><a href="key_tables/geographic_distribution.tsv">Geographic distribution table</a></li>
 <li><a href="key_tables/feature_variation_summary.tsv">Feature variation summary</a></li>
+<li><a href="key_tables/temporal_trend_summary.tsv">Temporal trend summary</a></li>
 <li><a href="../panr2_inputs/features/all_features.tsv">Complete standardized feature table</a></li>
 <li><a href="../panr2_inputs/manifest/schema_validation_summary.txt">Feature-contract validation summary</a></li>
 </ul></section>
@@ -4310,7 +4713,7 @@ th {{ background: #f0f4f8; }}
 """,
         encoding="utf-8",
     )
-    return {"important_results_html": str(report_path), **geographic_outputs, **qc_outputs, **prevalence_outputs, **variation_outputs}
+    return {"important_results_html": str(report_path), **geographic_outputs, **qc_outputs, **prevalence_outputs, **variation_outputs, **temporal_outputs}
 
 
 def write_user_output_bundles(
@@ -4333,12 +4736,13 @@ def write_user_output_bundles(
         prevalence_outputs = write_important_prevalence_outputs(sample_dir, out_dir, important_dir)
         geographic_outputs = write_important_geographic_outputs(sample_dir, out_dir, important_dir)
         variation_outputs = write_important_variation_outputs(sample_dir, out_dir, important_dir)
-        outputs.update(write_important_results_report(sample_dir, out_dir, important_dir, geographic_outputs, qc_outputs, prevalence_outputs, variation_outputs))
+        temporal_outputs = write_important_temporal_outputs(sample_dir, out_dir, important_dir)
+        outputs.update(write_important_results_report(sample_dir, out_dir, important_dir, geographic_outputs, qc_outputs, prevalence_outputs, variation_outputs, temporal_outputs))
         write_rows(
             manifest_dir / "important_output_manifest.tsv",
             [
                 {"setting": "output_mode", "value": mode, "message": "User-facing output bundle mode."},
-                {"setting": "figure_formats_requested", "value": figure_formats, "message": "Requested figure formats. Current geographic first-pass writes HTML, PNG, SVG, and TSV without new plotting dependencies."},
+                {"setting": "figure_formats_requested", "value": figure_formats, "message": "Requested figure formats. Current important report writes portable HTML, PNG, SVG, and TSV outputs without new plotting dependencies."},
                 {"setting": "publication_figures", "value": str(publication_figures).lower(), "message": "Reserved for PDF/static publication figure expansion."},
             ],
             ["setting", "value", "message"],
