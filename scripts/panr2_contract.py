@@ -5198,15 +5198,156 @@ def write_important_prevalence_outputs(sample_dir: Path, out_dir: Path, importan
     return outputs
 
 
-def _summary_stats(values: list[float]) -> dict[str, str]:
+def _summary_stats_full(values: list[float]) -> dict[str, float | None]:
     if not values:
-        return {"median": "", "min": "", "max": "", "iqr": ""}
+        return {"median": None, "min": None, "max": None, "q1": None, "q3": None, "iqr": None, "mean": None}
     values = sorted(values)
     mid = len(values) // 2
     median = values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2
     q1 = values[len(values) // 4]
     q3 = values[(len(values) * 3) // 4]
-    return {"median": f"{median:.2f}", "min": f"{values[0]:.2f}", "max": f"{values[-1]:.2f}", "iqr": f"{q3 - q1:.2f}"}
+    return {
+        "median": median,
+        "min": values[0],
+        "max": values[-1],
+        "q1": q1,
+        "q3": q3,
+        "iqr": q3 - q1,
+        "mean": sum(values) / len(values),
+    }
+
+
+def _summary_stats(values: list[float]) -> dict[str, str]:
+    stats = _summary_stats_full(values)
+    return {
+        "median": "" if stats["median"] is None else f"{stats['median']:.2f}",
+        "min": "" if stats["min"] is None else f"{stats['min']:.2f}",
+        "max": "" if stats["max"] is None else f"{stats['max']:.2f}",
+        "iqr": "" if stats["iqr"] is None else f"{stats['iqr']:.2f}",
+    }
+
+
+def _alignment_length(row: dict[str, str]) -> str:
+    direct = first_value(row, ["alignment_length", "alignment_len", "align_len", "length"], "")
+    if direct:
+        return direct
+    start = _float_or_none(row.get("start", ""))
+    end = _float_or_none(row.get("end", ""))
+    if start is None or end is None:
+        return ""
+    length = abs(end - start) + 1
+    return str(int(length)) if length > 0 else ""
+
+
+def _variation_boxplot_rows(
+    hit_rows: list[dict[str, str]],
+    selected_features: set[tuple[str, str]],
+    metric_field: str,
+    metric_label: str,
+) -> list[dict[str, str]]:
+    grouped: dict[tuple[str, str], list[float]] = defaultdict(list)
+    for row in hit_rows:
+        key = (row.get("database", ""), row.get("feature_id", ""))
+        if key not in selected_features:
+            continue
+        value = _float_or_none(row.get(metric_field, ""))
+        if value is not None:
+            grouped[key].append(value)
+    rows = []
+    for (database, feature_id), values in sorted(grouped.items()):
+        stats = _summary_stats_full(values)
+        rows.append({
+            "database": database,
+            "feature_id": feature_id,
+            "metadata_group": feature_id,
+            "metric": metric_label,
+            "n": str(len(values)),
+            "min": "" if stats["min"] is None else f"{stats['min']:.2f}",
+            "q1": "" if stats["q1"] is None else f"{stats['q1']:.2f}",
+            "median": "" if stats["median"] is None else f"{stats['median']:.2f}",
+            "q3": "" if stats["q3"] is None else f"{stats['q3']:.2f}",
+            "max": "" if stats["max"] is None else f"{stats['max']:.2f}",
+            "mean": "" if stats["mean"] is None else f"{stats['mean']:.2f}",
+        })
+    return rows
+
+
+def _write_variation_scatter_svg(path: Path, rows: list[dict[str, str]], title: str) -> None:
+    width, height = 900, 560
+    left, top, plot_w, plot_h = 78, 62, 720, 410
+    points = [
+        (
+            _float_or_none(row.get("identity", "")),
+            _float_or_none(row.get("coverage", "")),
+            row,
+        )
+        for row in rows
+    ]
+    points = [(x, y, row) for x, y, row in points if x is not None and y is not None]
+    parts = [
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
+        "<rect width='100%' height='100%' fill='#f8fafc'/>",
+        f"<text x='20' y='32' font-family='Arial' font-size='20' font-weight='700' fill='#102a43'>{html.escape(title)}</text>",
+        f"<rect x='{left}' y='{top}' width='{plot_w}' height='{plot_h}' fill='#ffffff' stroke='#bcccdc'/>",
+    ]
+    for tick in range(0, 101, 20):
+        x = left + tick / 100 * plot_w
+        y = top + plot_h - tick / 100 * plot_h
+        parts.append(f"<line x1='{x:.1f}' y1='{top}' x2='{x:.1f}' y2='{top + plot_h}' stroke='#e2e8f0'/>")
+        parts.append(f"<line x1='{left}' y1='{y:.1f}' x2='{left + plot_w}' y2='{y:.1f}' stroke='#e2e8f0'/>")
+        parts.append(f"<text x='{x - 8:.1f}' y='{top + plot_h + 22}' font-size='11' font-family='Arial' fill='#52606d'>{tick}</text>")
+        parts.append(f"<text x='{left - 38}' y='{y + 4:.1f}' font-size='11' font-family='Arial' fill='#52606d'>{tick}</text>")
+    colors = ["#0f766e", "#dc2626", "#7c3aed", "#d97706", "#2563eb", "#be123c", "#15803d"]
+    feature_colors: dict[str, str] = {}
+    for x_value, y_value, row in points[:600]:
+        feature = row.get("feature_id", "")
+        if feature not in feature_colors:
+            feature_colors[feature] = colors[len(feature_colors) % len(colors)]
+        cx = left + max(0, min(100, x_value)) / 100 * plot_w
+        cy = top + plot_h - max(0, min(100, y_value)) / 100 * plot_h
+        tip = f"{row.get('database', '')} {feature}; identity={x_value:.2f}; coverage={y_value:.2f}; sample={row.get('assembly_accession', '') or row.get('sample_id', '')}"
+        parts.append(f"<circle cx='{cx:.1f}' cy='{cy:.1f}' r='4' fill='{feature_colors[feature]}' fill-opacity='0.72'><title>{html.escape(tip)}</title></circle>")
+    parts.append(f"<text x='{left + plot_w / 2 - 55}' y='{height - 24}' font-size='13' font-family='Arial' fill='#334e68'>Identity (%)</text>")
+    parts.append(f"<text x='20' y='{top + plot_h / 2}' font-size='13' font-family='Arial' fill='#334e68' transform='rotate(-90 20 {top + plot_h / 2})'>Coverage (%)</text>")
+    parts.append("</svg>\n")
+    path.write_text("".join(parts), encoding="utf-8")
+
+
+def _write_variation_scatter_png(path: Path, rows: list[dict[str, str]]) -> None:
+    width, height = 900, 560
+    left, top, plot_w, plot_h = 78, 62, 720, 410
+    pixels = [bytearray([248, 250, 252] * width) for _ in range(height)]
+
+    def rect(x0: int, y0: int, x1: int, y1: int, color: tuple[int, int, int]) -> None:
+        for y in range(max(0, y0), min(height, y1)):
+            row_pixels = pixels[y]
+            for x in range(max(0, x0), min(width, x1)):
+                idx = x * 3
+                row_pixels[idx:idx + 3] = bytes(color)
+
+    def dot(cx: int, cy: int, color: tuple[int, int, int]) -> None:
+        for y in range(cy - 3, cy + 4):
+            for x in range(cx - 3, cx + 4):
+                if (x - cx) * (x - cx) + (y - cy) * (y - cy) <= 9:
+                    if 0 <= x < width and 0 <= y < height:
+                        idx = x * 3
+                        pixels[y][idx:idx + 3] = bytes(color)
+
+    rect(left, top, left + plot_w, top + plot_h, (255, 255, 255))
+    colors = [(15, 118, 110), (220, 38, 38), (124, 58, 237), (217, 119, 6), (37, 99, 235), (190, 18, 60), (21, 128, 61)]
+    feature_colors: dict[str, tuple[int, int, int]] = {}
+    for row in rows[:600]:
+        identity = _float_or_none(row.get("identity", ""))
+        coverage = _float_or_none(row.get("coverage", ""))
+        if identity is None or coverage is None:
+            continue
+        feature = row.get("feature_id", "")
+        if feature not in feature_colors:
+            feature_colors[feature] = colors[len(feature_colors) % len(colors)]
+        x = int(left + max(0, min(100, identity)) / 100 * plot_w)
+        y = int(top + plot_h - max(0, min(100, coverage)) / 100 * plot_h)
+        dot(x, y, feature_colors[feature])
+    _write_png(path, width, height, pixels)
 
 
 def write_important_variation_outputs(sample_dir: Path, out_dir: Path, important_dir: Path, top_n: int = 20) -> dict[str, str]:
@@ -5214,6 +5355,8 @@ def write_important_variation_outputs(sample_dir: Path, out_dir: Path, important
     figures = important_dir / "figures"
     key_tables.mkdir(parents=True, exist_ok=True)
     figures.mkdir(parents=True, exist_ok=True)
+    metadata_rows = read_table(sample_dir / "basic" / "enriched_genome_dataset.csv")
+    sample_count = len(metadata_rows)
     features = [row for row in read_table(out_dir / "features" / "all_features.tsv") if row.get("presence", "1") != "0"]
     grouped: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
     hit_rows = []
@@ -5230,6 +5373,7 @@ def write_important_variation_outputs(sample_dir: Path, out_dir: Path, important
             "sample_id": row.get("sample_id", ""),
             "identity": row.get("identity", ""),
             "coverage": row.get("coverage", ""),
+            "alignment_length": _alignment_length(row),
             "contig": row.get("contig", ""),
             "start": row.get("start", ""),
             "end": row.get("end", ""),
@@ -5241,11 +5385,14 @@ def write_important_variation_outputs(sample_dir: Path, out_dir: Path, important
     for (database, feature_id), rows in sorted(grouped.items()):
         identities = [_float_or_none(row.get("identity", "")) for row in rows]
         coverages = [_float_or_none(row.get("coverage", "")) for row in rows]
+        alignment_lengths = [_float_or_none(_alignment_length(row)) for row in rows]
         identities = [value for value in identities if value is not None]
         coverages = [value for value in coverages if value is not None]
+        alignment_lengths = [value for value in alignment_lengths if value is not None]
         identity_stats = _summary_stats(identities)
         coverage_stats = _summary_stats(coverages)
-        samples = {row.get("assembly_accession", "") or row.get("sample_id", "") for row in rows}
+        alignment_stats = _summary_stats(alignment_lengths)
+        samples = {row.get("assembly_accession", "") or row.get("sample_id", "") for row in rows if row.get("assembly_accession", "") or row.get("sample_id", "")}
         low_identity = sum(1 for value in identities if value < 90)
         low_coverage = sum(1 for value in coverages if value < 80)
         warnings = []
@@ -5253,13 +5400,25 @@ def write_important_variation_outputs(sample_dir: Path, out_dir: Path, important
             warnings.append("low_identity")
         if low_coverage:
             warnings.append("low_coverage")
+            warnings.append("partial_feature")
+        if len(rows) < 3:
+            warnings.append("few_hits")
         iqr_identity = _float_or_none(identity_stats["iqr"]) or 0.0
-        label = "high_variation" if iqr_identity >= 10 else ("moderate_variation" if iqr_identity >= 3 else "low_variation")
+        iqr_coverage = _float_or_none(coverage_stats["iqr"]) or 0.0
+        variation_score = max(iqr_identity, iqr_coverage)
+        label = "high_variation" if variation_score >= 10 else ("moderate_variation" if variation_score >= 3 else "low_variation")
+        if label == "high_variation":
+            warnings.append("high_variation")
+        prevalence = len(samples) / sample_count if sample_count else 0.0
         summary_rows.append({
             "database": database,
             "feature_id": feature_id,
+            "feature_name": first_value(rows[0], ["feature_name", "feature_id"], feature_id),
             "total_hits": str(len(rows)),
             "positive_genomes": str(len(samples)),
+            "sample_count": str(sample_count),
+            "prevalence_percent": f"{prevalence * 100:.1f}",
+            "mean_hits_per_positive_genome": f"{(len(rows) / len(samples)):.2f}" if samples else "",
             "median_identity": identity_stats["median"],
             "min_identity": identity_stats["min"],
             "max_identity": identity_stats["max"],
@@ -5268,40 +5427,288 @@ def write_important_variation_outputs(sample_dir: Path, out_dir: Path, important
             "min_coverage": coverage_stats["min"],
             "max_coverage": coverage_stats["max"],
             "iqr_coverage": coverage_stats["iqr"],
+            "median_alignment_length": alignment_stats["median"],
+            "min_alignment_length": alignment_stats["min"],
+            "max_alignment_length": alignment_stats["max"],
+            "iqr_alignment_length": alignment_stats["iqr"],
             "low_identity_hits": str(low_identity),
             "low_coverage_hits": str(low_coverage),
+            "variation_score": f"{variation_score:.2f}",
             "variation_label": label,
-            "warning_flags": ";".join(warnings),
+            "warning_flags": ";".join(dict.fromkeys(warnings)),
         })
     summary_rows.sort(key=lambda row: (row["database"], -(_float_or_none(row["iqr_identity"]) or 0.0), row["feature_id"]))
     summary_fields = [
-        "database", "feature_id", "total_hits", "positive_genomes",
+        "database", "feature_id", "feature_name", "total_hits", "positive_genomes", "sample_count", "prevalence_percent", "mean_hits_per_positive_genome",
         "median_identity", "min_identity", "max_identity", "iqr_identity",
         "median_coverage", "min_coverage", "max_coverage", "iqr_coverage",
-        "low_identity_hits", "low_coverage_hits", "variation_label", "warning_flags",
+        "median_alignment_length", "min_alignment_length", "max_alignment_length", "iqr_alignment_length",
+        "low_identity_hits", "low_coverage_hits", "variation_score", "variation_label", "warning_flags",
     ]
     summary_path = key_tables / "feature_variation_summary.tsv"
     hits_path = key_tables / "feature_variation_hits.tsv"
     write_rows(summary_path, summary_rows, summary_fields)
-    write_rows(hits_path, hit_rows, ["database", "feature_id", "assembly_accession", "sample_id", "identity", "coverage", "contig", "start", "end", "tool", "source_file"])
+    hit_fields = ["database", "feature_id", "assembly_accession", "sample_id", "identity", "coverage", "alignment_length", "contig", "start", "end", "tool", "source_file"]
+    write_rows(hits_path, hit_rows, hit_fields)
 
     outputs = {
         "important_feature_variation_summary": str(summary_path),
         "important_feature_variation_hits": str(hits_path),
     }
+    figure_files: list[Path] = []
+
+    def write_pdf_for_rows(path: Path, title: str, rows: list[dict[str, str]], metric: str) -> None:
+        _write_simple_pdf(
+            path,
+            title,
+            [f"{row.get('feature_id', row.get('metadata_group', ''))}: {metric}={row.get(metric, row.get('median', ''))}, n={row.get('n', row.get('total_hits', ''))}" for row in rows],
+        )
+
     for database in sorted({row["database"] for row in summary_rows}):
-        db_rows = [row for row in summary_rows if row["database"] == database][:top_n]
+        safe_database = _safe_filename(database)
+        db_summary = [row for row in summary_rows if row["database"] == database]
+        db_rows = sorted(db_summary, key=lambda row: -(_float_or_none(row["iqr_identity"]) or 0.0))[:top_n]
         if not db_rows:
             continue
-        data_path = figures / f"variation_identity_{database}_top20.data.tsv"
-        svg_path = figures / f"variation_identity_{database}_top20.svg"
-        png_path = figures / f"variation_identity_{database}_top20.png"
-        write_rows(data_path, db_rows, summary_fields)
-        _write_bar_svg(svg_path, db_rows, f"{database} Identity Variation Top {top_n}", "feature_id", "iqr_identity", "Identity IQR")
-        _write_bar_png(png_path, db_rows, "iqr_identity")
-        outputs[f"important_variation_{database}_data"] = str(data_path)
-        outputs[f"important_variation_{database}_svg"] = str(svg_path)
-        outputs[f"important_variation_{database}_png"] = str(png_path)
+        for metric_name, metric_field, iqr_field, title_metric in [
+            ("identity", "identity", "iqr_identity", "Identity"),
+            ("coverage", "coverage", "iqr_coverage", "Coverage"),
+        ]:
+            metric_rows = sorted(db_summary, key=lambda row: -(_float_or_none(row.get(iqr_field, "")) or 0.0))[:top_n]
+            selected = {(row["database"], row["feature_id"]) for row in metric_rows}
+            box_rows = _variation_boxplot_rows(hit_rows, selected, metric_field, title_metric)
+            data_path = figures / f"variation_{metric_name}_{safe_database}_top20.data.tsv"
+            svg_path = figures / f"variation_{metric_name}_{safe_database}_top20.svg"
+            png_path = figures / f"variation_{metric_name}_{safe_database}_top20.png"
+            pdf_path = figures / f"variation_{metric_name}_{safe_database}_top20.pdf"
+            write_rows(data_path, box_rows, ["database", "feature_id", "metadata_group", "metric", "n", "min", "q1", "median", "q3", "max", "mean"])
+            _write_burden_boxplot_svg(svg_path, box_rows, f"{database} {title_metric} Variation Top {top_n}")
+            _write_burden_boxplot_png(png_path, box_rows)
+            _write_simple_pdf(pdf_path, f"{database} {title_metric} Variation Top {top_n}", [f"{row.get('feature_id', '')}: median={row.get('median', '')}, IQR={row.get('q1', '')}-{row.get('q3', '')}, n={row.get('n', '')}" for row in box_rows])
+            figure_files.extend([data_path, svg_path, png_path, pdf_path])
+            outputs[f"important_variation_{safe_database}_{metric_name}_data"] = str(data_path)
+            outputs[f"important_variation_{safe_database}_{metric_name}_svg"] = str(svg_path)
+            outputs[f"important_variation_{safe_database}_{metric_name}_png"] = str(png_path)
+            outputs[f"important_variation_{safe_database}_{metric_name}_pdf"] = str(pdf_path)
+
+        scatter_features = {(row["database"], row["feature_id"]) for row in sorted(db_summary, key=lambda row: -(_float_or_none(row.get("variation_score", "")) or 0.0))[:top_n]}
+        scatter_rows = [row for row in hit_rows if (row.get("database", ""), row.get("feature_id", "")) in scatter_features]
+        scatter_base = f"variation_identity_coverage_{safe_database}_top20"
+        scatter_data = figures / f"{scatter_base}.data.tsv"
+        scatter_svg = figures / f"{scatter_base}.svg"
+        scatter_png = figures / f"{scatter_base}.png"
+        scatter_pdf = figures / f"{scatter_base}.pdf"
+        write_rows(scatter_data, scatter_rows, hit_fields)
+        _write_variation_scatter_svg(scatter_svg, scatter_rows, f"{database} Identity vs Coverage")
+        _write_variation_scatter_png(scatter_png, scatter_rows)
+        _write_simple_pdf(scatter_pdf, f"{database} Identity vs Coverage", [f"{row.get('feature_id', '')}: identity={row.get('identity', '')}, coverage={row.get('coverage', '')}" for row in scatter_rows[:34]])
+        figure_files.extend([scatter_data, scatter_svg, scatter_png, scatter_pdf])
+
+        variable_rows = sorted(db_summary, key=lambda row: -(_float_or_none(row.get("variation_score", "")) or 0.0))[:top_n]
+        variable_base = f"variation_top_variable_{safe_database}_top20"
+        variable_data = figures / f"{variable_base}.data.tsv"
+        variable_svg = figures / f"{variable_base}.svg"
+        variable_png = figures / f"{variable_base}.png"
+        variable_pdf = figures / f"{variable_base}.pdf"
+        write_rows(variable_data, variable_rows, summary_fields)
+        _write_bar_svg(variable_svg, variable_rows, f"{database} Top Variable Features", "feature_id", "variation_score", "Variation score")
+        _write_bar_png(variable_png, variable_rows, "variation_score")
+        write_pdf_for_rows(variable_pdf, f"{database} Top Variable Features", variable_rows, "variation_score")
+        figure_files.extend([variable_data, variable_svg, variable_png, variable_pdf])
+        outputs[f"important_variation_{safe_database}_scatter_svg"] = str(scatter_svg)
+        outputs[f"important_variation_{safe_database}_scatter_png"] = str(scatter_png)
+        outputs[f"important_variation_{safe_database}_scatter_pdf"] = str(scatter_pdf)
+        outputs[f"important_variation_{safe_database}_top_variable_svg"] = str(variable_svg)
+        outputs[f"important_variation_{safe_database}_top_variable_png"] = str(variable_png)
+        outputs[f"important_variation_{safe_database}_top_variable_pdf"] = str(variable_pdf)
+
+    summary_by_database = []
+    for database in sorted({row["database"] for row in summary_rows}):
+        db_rows = [row for row in summary_rows if row["database"] == database]
+        total_hits = sum(int(_float_or_none(row.get("total_hits", "")) or 0) for row in db_rows)
+        median_identity_values = [_float_or_none(row.get("median_identity", "")) for row in db_rows]
+        median_coverage_values = [_float_or_none(row.get("median_coverage", "")) for row in db_rows]
+        median_identity_values = [value for value in median_identity_values if value is not None]
+        median_coverage_values = [value for value in median_coverage_values if value is not None]
+        identity_summary = _summary_stats(median_identity_values)
+        coverage_summary = _summary_stats(median_coverage_values)
+        summary_by_database.append({
+            "database": database,
+            "unique_features": str(len(db_rows)),
+            "total_hits": str(total_hits),
+            "median_identity": identity_summary["median"],
+            "median_coverage": coverage_summary["median"],
+            "high_variation_features": str(sum(1 for row in db_rows if row.get("variation_label") == "high_variation")),
+            "low_identity_hits": str(sum(int(_float_or_none(row.get("low_identity_hits", "")) or 0) for row in db_rows)),
+            "low_coverage_hits": str(sum(int(_float_or_none(row.get("low_coverage_hits", "")) or 0) for row in db_rows)),
+        })
+    variation_summary_path = key_tables / "feature_variation_database_summary.tsv"
+    write_rows(
+        variation_summary_path,
+        summary_by_database,
+        ["database", "unique_features", "total_hits", "median_identity", "median_coverage", "high_variation_features", "low_identity_hits", "low_coverage_hits"],
+    )
+    outputs["important_feature_variation_database_summary"] = str(variation_summary_path)
+
+    html_path = figures / "variation_analysis.html"
+    variation_html = """<!doctype html>
+<html><head><meta charset="utf-8"><title>Feature Variations</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 1.5rem; color: #1f2933; background: #f8fafc; }
+label { font-weight: 700; margin-right: 0.35rem; }
+select { margin: 0 0.9rem 1rem 0; padding: 0.35rem; }
+.warning { background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; margin: 1rem 0; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; }
+.card { border: 1px solid #d9e2ec; border-radius: 6px; padding: 0.75rem; background: white; }
+.card span { display: block; color: #52606d; font-size: 0.8rem; }
+.card strong { display: block; font-size: 1.25rem; margin-top: 0.25rem; }
+.figure-box { max-width: 100%; max-height: 680px; overflow: auto; border: 1px solid #d9e2ec; background: white; padding: 0.75rem; }
+svg { max-width: 100%; height: auto; }
+table { border-collapse: collapse; width: 100%; margin-top: 1rem; background: white; font-size: 0.9rem; }
+th, td { border: 1px solid #d9e2ec; padding: 0.4rem; text-align: left; }
+th { background: #f0f4f8; position: sticky; top: 0; }
+.downloads a { display: inline-block; margin: 0.25rem 0.45rem 0.25rem 0; color: #0f766e; font-weight: 700; }
+</style></head><body>
+<h1>Variations</h1>
+<p>Use this view to compare identity, coverage, alignment length, and hit-count variation across detected features. Complete views are table-first so large feature sets do not force the full page to scroll sideways.</p>
+<div class="warning">Low identity, low coverage, high variation, and few-hit labels are review flags. They may reflect divergent homologs, partial hits, fragmented assemblies, or database boundary effects.</div>
+<label for="database">Database</label><select id="database"></select>
+<label for="metric">Metric</label><select id="metric">
+  <option value="identity">Identity</option>
+  <option value="coverage">Coverage</option>
+  <option value="alignment_length">Alignment length</option>
+  <option value="hit_count">Feature count per genome</option>
+</select>
+<label for="view">View</label><select id="view">
+  <option value="variable">Top variable features</option>
+  <option value="prevalent">Top prevalent features</option>
+  <option value="complete">Complete</option>
+</select>
+<label for="display">Display</label><select id="display">
+  <option value="20">Top 20</option>
+  <option value="10">Top 10</option>
+  <option value="50">Top 50</option>
+  <option value="all">Complete</option>
+</select>
+<label for="sort">Sort by</label><select id="sort">
+  <option value="variation">variation</option>
+  <option value="prevalence">prevalence</option>
+  <option value="median_identity">median identity</option>
+  <option value="low_identity">low-identity warnings</option>
+  <option value="alphabetical">alphabetical</option>
+</select>
+<div id="summary"></div>
+<div class="figure-box" id="figure"></div>
+<div id="table"></div>
+<div class="downloads">
+  <a href="../key_tables/feature_variation_summary.tsv">Download full variation summary</a>
+  <a href="../key_tables/feature_variation_hits.tsv">Download hit-level variation table</a>
+  <a href="../key_tables/feature_variation_database_summary.tsv">Download database summary</a>
+</div>
+<script>
+const summaryRows = __SUMMARY_ROWS__;
+const databaseRows = __DATABASE_ROWS__;
+function num(value) { const parsed = Number(value || 0); return Number.isFinite(parsed) ? parsed : 0; }
+function metricField(metric) {
+  if (metric === 'identity') return 'iqr_identity';
+  if (metric === 'coverage') return 'iqr_coverage';
+  if (metric === 'alignment_length') return 'iqr_alignment_length';
+  return 'mean_hits_per_positive_genome';
+}
+function metricLabel(metric) {
+  if (metric === 'identity') return 'Identity IQR';
+  if (metric === 'coverage') return 'Coverage IQR';
+  if (metric === 'alignment_length') return 'Alignment length IQR';
+  return 'Mean hits per positive genome';
+}
+const dbSelect = document.getElementById('database');
+for (const db of ['All', ...[...new Set(summaryRows.map(r => r.database).filter(Boolean))].sort()]) {
+  const option = document.createElement('option'); option.value = db; option.textContent = db; dbSelect.appendChild(option);
+}
+function activeRows() {
+  const database = dbSelect.value;
+  const metric = document.getElementById('metric').value;
+  const view = document.getElementById('view').value;
+  const sort = document.getElementById('sort').value;
+  const display = document.getElementById('display').value;
+  let rows = summaryRows.filter(row => database === 'All' || row.database === database);
+  if (view === 'prevalent') rows = rows.slice().sort((a, b) => num(b.prevalence_percent) - num(a.prevalence_percent));
+  else if (sort === 'prevalence') rows = rows.slice().sort((a, b) => num(b.prevalence_percent) - num(a.prevalence_percent));
+  else if (sort === 'median_identity') rows = rows.slice().sort((a, b) => num(a.median_identity) - num(b.median_identity));
+  else if (sort === 'low_identity') rows = rows.slice().sort((a, b) => num(b.low_identity_hits) - num(a.low_identity_hits));
+  else if (sort === 'alphabetical') rows = rows.slice().sort((a, b) => (a.feature_id || '').localeCompare(b.feature_id || ''));
+  else rows = rows.slice().sort((a, b) => num(b[metricField(metric)]) - num(a[metricField(metric)]));
+  if (view === 'complete' || display === 'all') return rows;
+  return rows.slice(0, Number(display || 20));
+}
+function renderCards(rows) {
+  const unique = rows.length;
+  const hits = rows.reduce((a, r) => a + num(r.total_hits), 0);
+  const high = rows.filter(r => r.variation_label === 'high_variation').length;
+  const lowIdentity = rows.reduce((a, r) => a + num(r.low_identity_hits), 0);
+  const lowCoverage = rows.reduce((a, r) => a + num(r.low_coverage_hits), 0);
+  const medianIdentityValues = rows.map(r => num(r.median_identity)).filter(v => v > 0).sort((a, b) => a - b);
+  const medianCoverageValues = rows.map(r => num(r.median_coverage)).filter(v => v > 0).sort((a, b) => a - b);
+  const mid = values => values.length ? values[Math.floor(values.length / 2)].toFixed(1) : '';
+  document.getElementById('summary').innerHTML = `<div class="cards">
+    <div class="card"><span>Unique features analyzed</span><strong>${unique}</strong></div>
+    <div class="card"><span>Total hits</span><strong>${hits}</strong></div>
+    <div class="card"><span>Median identity</span><strong>${mid(medianIdentityValues)}</strong></div>
+    <div class="card"><span>Median coverage</span><strong>${mid(medianCoverageValues)}</strong></div>
+    <div class="card"><span>High-variation features</span><strong>${high}</strong></div>
+    <div class="card"><span>Low identity / coverage hits</span><strong>${lowIdentity} / ${lowCoverage}</strong></div>
+  </div>`;
+}
+function renderFigure(rows) {
+  const metric = document.getElementById('metric').value;
+  const field = metricField(metric);
+  const figureRows = rows.slice(0, 50);
+  const width = Math.max(860, figureRows.length * 46 + 170), height = 455;
+  const plotLeft = 120, plotTop = 42, plotHeight = 270, plotWidth = width - plotLeft - 40;
+  const maxValue = Math.max(1, ...figureRows.map(row => num(row[field])));
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`;
+  svg += `<rect width="100%" height="100%" fill="#f8fafc"/><text x="20" y="28" font-size="20" font-family="Arial" font-weight="700" fill="#102a43">${metricLabel(metric)}</text>`;
+  svg += `<rect x="${plotLeft}" y="${plotTop}" width="${plotWidth}" height="${plotHeight}" fill="#fff" stroke="#bcccdc"/>`;
+  figureRows.forEach((row, idx) => {
+    const value = num(row[field]);
+    const x = plotLeft + 18 + idx * 46;
+    const barHeight = value / maxValue * (plotHeight - 20);
+    const y = plotTop + plotHeight - barHeight;
+    const color = row.warning_flags ? '#dc2626' : '#0f766e';
+    svg += `<rect x="${x}" y="${y}" width="26" height="${barHeight}" fill="${color}"><title>${row.database} ${row.feature_id}: ${value}</title></rect>`;
+    svg += `<text x="${x + 8}" y="${plotTop + plotHeight + 14}" transform="rotate(70 ${x + 8} ${plotTop + plotHeight + 14})" font-size="10" font-family="Arial" fill="#334e68">${(row.feature_id || '').slice(0, 24)}</text>`;
+  });
+  if (figureRows.length < rows.length) svg += `<text x="20" y="${height - 18}" font-size="12" font-family="Arial" fill="#52606d">Figure capped at 50 features. Use the table/download for the complete view.</text>`;
+  svg += `</svg>`;
+  document.getElementById('figure').innerHTML = svg;
+}
+function renderTable(rows) {
+  const fields = ['database','feature_id','total_hits','positive_genomes','prevalence_percent','mean_hits_per_positive_genome','median_identity','iqr_identity','median_coverage','iqr_coverage','median_alignment_length','iqr_alignment_length','variation_label','warning_flags'];
+  const shown = rows.slice(0, document.getElementById('display').value === 'all' ? rows.length : 80);
+  let table = '<table><thead><tr>' + fields.map(field => `<th>${field}</th>`).join('') + '</tr></thead><tbody>';
+  for (const row of shown) table += '<tr>' + fields.map(field => `<td>${row[field] || ''}</td>`).join('') + '</tr>';
+  table += '</tbody></table>';
+  if (shown.length < rows.length) table += `<p>Showing ${shown.length} of ${rows.length} rows. Use Complete to inspect all rows, or download the full TSV.</p>`;
+  document.getElementById('table').innerHTML = table;
+}
+function render() {
+  const rows = activeRows();
+  renderCards(rows);
+  renderFigure(rows);
+  renderTable(rows);
+}
+for (const id of ['database','metric','view','display','sort']) document.getElementById(id).addEventListener('change', render);
+render();
+</script></body></html>
+"""
+    html_path.write_text(
+        variation_html
+        .replace("__SUMMARY_ROWS__", json.dumps(summary_rows))
+        .replace("__DATABASE_ROWS__", json.dumps(summary_by_database)),
+        encoding="utf-8",
+    )
+    outputs["important_variation_analysis_html"] = str(html_path)
+    outputs["important_variation_figures_zip"] = _write_zip_bundle(important_dir / "variation_figures.zip", figure_files, important_dir)
     return outputs
 
 
@@ -7179,6 +7586,7 @@ def write_important_results_report(
     qc_steps = read_table(important_dir / "key_tables" / "qc_step_summary.tsv")
     prevalence_rows = read_table(important_dir / "key_tables" / "feature_prevalence_summary.tsv")
     variation_rows = read_table(important_dir / "key_tables" / "feature_variation_summary.tsv")
+    variation_database_rows = read_table(important_dir / "key_tables" / "feature_variation_database_summary.tsv")
     temporal_rows = read_table(important_dir / "key_tables" / "temporal_trend_summary.tsv")
     cooccurrence_rows = read_table(important_dir / "tables" / "cooccurrence_pair_summary.tsv")
     cooccurrence_summary_rows = read_table(important_dir / "tables" / "cooccurrence_context_summary.tsv")
@@ -7214,7 +7622,7 @@ def write_important_results_report(
     )[:20]
     qc_table_html = _html_table(qc_steps, ["step_order", "qc_step", "tool", "enabled", "pass", "warning", "fail", "skipped", "status", "notes"], max_rows=20)
     prevalence_table_html = _html_table(top_prevalence, ["database", "feature_id", "positive_genomes", "sample_count", "prevalence_percent", "feature_rows"], max_rows=20)
-    variation_table_html = _html_table(top_variation, ["database", "feature_id", "total_hits", "positive_genomes", "median_identity", "iqr_identity", "median_coverage", "iqr_coverage", "variation_label", "warning_flags"], max_rows=20)
+    variation_table_html = _html_table(top_variation, ["database", "feature_id", "total_hits", "positive_genomes", "mean_hits_per_positive_genome", "median_identity", "iqr_identity", "median_coverage", "iqr_coverage", "variation_label", "warning_flags"], max_rows=20)
     temporal_table_html = _html_table(top_temporal, ["database", "feature_id", "first_year", "last_year", "first_year_prevalence_percent", "last_year_prevalence_percent", "change_percent_points", "correlation", "trend_label", "support_label", "warning_flags"], max_rows=20)
     cooccurrence_table_html = _html_table(top_cooccurrence, ["feature_a_database", "feature_a_id", "feature_b_database", "feature_b_id", "n_total", "n_both_present", "phi_correlation", "q_value", "direction", "significance_label", "warning_flags"], max_rows=20)
     context_table_html = _html_table(top_context, ["selected_database", "selected_feature", "context_database", "context_feature", "assembly_accession", "contig", "distance_bp", "evidence_level", "warning_flags"], max_rows=20)
@@ -7229,12 +7637,47 @@ def write_important_results_report(
             f"<p><a href='figures/{html.escape(path.with_suffix('.png').name)}'>PNG</a> | <a href='figures/{html.escape(path.name)}'>SVG</a> | <a href='figures/{html.escape(path.name.replace('.svg', '.data.tsv'))}'>Data TSV</a></p></div>"
         )
     prevalence_figures_html = "<div class='figure-row'>" + "".join(prevalence_figures[:6]) + "</div>" if prevalence_figures else "<p>No prevalence figures were generated because no feature rows were available.</p>"
+    variation_unique_features = len(variation_rows)
+    variation_total_hits = sum(int(_float_or_none(row.get("total_hits", "")) or 0) for row in variation_rows)
+    variation_high_features = sum(1 for row in variation_rows if row.get("variation_label") == "high_variation")
+    variation_low_identity = sum(int(_float_or_none(row.get("low_identity_hits", "")) or 0) for row in variation_rows)
+    variation_low_coverage = sum(int(_float_or_none(row.get("low_coverage_hits", "")) or 0) for row in variation_rows)
+    variation_median_identity_values = [_float_or_none(row.get("median_identity", "")) for row in variation_rows]
+    variation_median_coverage_values = [_float_or_none(row.get("median_coverage", "")) for row in variation_rows]
+    variation_median_identity = _summary_stats([value for value in variation_median_identity_values if value is not None])["median"]
+    variation_median_coverage = _summary_stats([value for value in variation_median_coverage_values if value is not None])["median"]
+    variation_cards_html = (
+        "<div class='cards'>"
+        f"<div class='card'><span>Unique features analyzed</span><strong>{variation_unique_features}</strong></div>"
+        f"<div class='card'><span>Total hits</span><strong>{variation_total_hits}</strong></div>"
+        f"<div class='card'><span>Median identity</span><strong>{html.escape(variation_median_identity)}</strong></div>"
+        f"<div class='card'><span>Median coverage</span><strong>{html.escape(variation_median_coverage)}</strong></div>"
+        f"<div class='card'><span>High-variation features</span><strong>{variation_high_features}</strong></div>"
+        f"<div class='card'><span>Low identity / coverage hits</span><strong>{variation_low_identity} / {variation_low_coverage}</strong></div>"
+        "</div>"
+    )
+    variation_database_table_html = _html_table(
+        variation_database_rows,
+        ["database", "unique_features", "total_hits", "median_identity", "median_coverage", "high_variation_features", "low_identity_hits", "low_coverage_hits"],
+        max_rows=20,
+    )
     variation_figures = []
-    for path in sorted((important_dir / "figures").glob("variation_identity_*_top20.svg")):
-        database = path.name.replace("variation_identity_", "").replace("_top20.svg", "")
+    for path in sorted((important_dir / "figures").glob("variation_*_top20.svg")):
+        figure_name = path.name.replace(".svg", "")
+        if figure_name.startswith("variation_identity_coverage_"):
+            title = figure_name.replace("variation_identity_coverage_", "").replace("_top20", "") + " identity vs coverage"
+        elif figure_name.startswith("variation_top_variable_"):
+            title = figure_name.replace("variation_top_variable_", "").replace("_top20", "") + " top variable features"
+        elif figure_name.startswith("variation_coverage_"):
+            title = figure_name.replace("variation_coverage_", "").replace("_top20", "") + " coverage variation"
+        elif figure_name.startswith("variation_identity_"):
+            title = figure_name.replace("variation_identity_", "").replace("_top20", "") + " identity variation"
+        else:
+            title = figure_name
+        stem = path.stem
         variation_figures.append(
-            f"<div><h3>{html.escape(database)} identity variation</h3><img src='figures/{html.escape(path.name)}' alt='{html.escape(database)} identity variation'>"
-            f"<p><a href='figures/{html.escape(path.with_suffix('.png').name)}'>PNG</a> | <a href='figures/{html.escape(path.name)}'>SVG</a> | <a href='figures/{html.escape(path.name.replace('.svg', '.data.tsv'))}'>Data TSV</a></p></div>"
+            f"<div><h3>{html.escape(title)}</h3><img src='figures/{html.escape(path.name)}' alt='{html.escape(title)}'>"
+            f"<p><a href='figures/{html.escape(stem)}.png'>PNG</a> | <a href='figures/{html.escape(path.name)}'>SVG</a> | <a href='figures/{html.escape(stem)}.pdf'>PDF</a> | <a href='figures/{html.escape(stem)}.data.tsv'>Data TSV</a></p></div>"
         )
     variation_figures_html = "<div class='figure-row'>" + "".join(variation_figures[:6]) + "</div>" if variation_figures else "<p>No variation figures were generated because no identity/coverage feature rows were available.</p>"
     temporal_figure_items = []
@@ -7380,10 +7823,16 @@ th {{ background: #f0f4f8; }}
 <section id="geography"><h2>Geographic Distribution</h2><div class="warning">Geographic patterns reflect the analyzed dataset only. They are not global prevalence estimates and can be affected by BioProject, lineage, country, and year sampling bias.</div>
 <iframe src="figures/geographic_distribution_map.html" title="Geographic distribution map"></iframe>
 <div class="downloads"><a href="figures/geographic_distribution_map.html">Open map</a><a href="figures/geographic_distribution_map.png">Download initial PNG</a><a href="figures/geographic_distribution_map.svg">Download initial SVG</a><a href="figures/geographic_distribution.data.tsv">Download data TSV</a></div></section>
-<section id="variations"><h2>Variations</h2><p>Variation summaries use identity and coverage values when available. Low identity, low coverage, and high variation are review flags, not automatic failures.</p>
+<section id="variations"><h2>Variations</h2><p>Variation summaries use identity, coverage, alignment length, and hit-count values when available. Low identity, low coverage, high variation, and few-hit flags are review cues, not automatic failures.</p>
+<div class="warning">A feature can be common but conserved, common and variable, or rare with unstable estimates. Use the complete hit-level table when reviewing low-confidence or partial hits.</div>
+{variation_cards_html}
+<iframe src="figures/variation_analysis.html" title="Feature variation interactive report"></iframe>
 {variation_figures_html}
+<h3>Variation by database</h3>
+{variation_database_table_html}
+<h3>Most variable features</h3>
 {variation_table_html}
-<div class="downloads"><a href="key_tables/feature_variation_summary.tsv">Download variation summary</a><a href="key_tables/feature_variation_hits.tsv">Download hit-level variation table</a></div></section>
+<div class="downloads"><a href="figures/variation_analysis.html">Open interactive variation report</a><a href="variation_figures.zip">Download variation figures ZIP</a><a href="key_tables/feature_variation_database_summary.tsv">Download variation database summary</a><a href="key_tables/feature_variation_summary.tsv">Download variation summary</a><a href="key_tables/feature_variation_hits.tsv">Download hit-level variation table</a></div></section>
 <section id="temporal"><h2>Temporal Trends</h2><div class="warning">Temporal trends reflect the analyzed dataset only. They can be affected by sampling year, BioProject, country, lineage, and missing collection-year metadata.</div>
 <p>Prevalence trends use yearly percentages with genome-count denominators. Database burden is summarized as mean detected features per genome by collection year.</p>
 <iframe src="figures/temporal_trends.html" title="Temporal trends interactive report"></iframe>
@@ -7419,6 +7868,8 @@ th {{ background: #f0f4f8; }}
 <li><a href="key_tables/feature_prevalence_summary.tsv">Feature prevalence summary</a></li>
 <li><a href="key_tables/geographic_distribution.tsv">Geographic distribution table</a></li>
 <li><a href="key_tables/feature_variation_summary.tsv">Feature variation summary</a></li>
+<li><a href="key_tables/feature_variation_database_summary.tsv">Feature variation database summary</a></li>
+<li><a href="figures/variation_analysis.html">Interactive variation report</a></li>
 <li><a href="key_tables/temporal_trend_summary.tsv">Temporal trend summary</a></li>
 <li><a href="tables/cooccurrence_pair_summary.tsv">Co-occurrence pair summary</a></li>
 <li><a href="tables/genomic_context_evidence.tsv">Genomic context evidence</a></li>

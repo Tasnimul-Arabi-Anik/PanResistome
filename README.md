@@ -115,7 +115,7 @@ Database setup automation is documented in [`docs/database_automation_matrix.md`
 
 For large runs, add `--large_dataset true` or combine a resource profile with `large`, for example `-profile conda,mamba,desktop_parallel,large`. Large-dataset mode still writes complete feature TSV outputs, but caps report-facing matrices/co-occurrence/proximity summaries, switches the handoff pages to compact mode, summarizes top features per database, and records the applied limits in `panr2_inputs/manifest/report_controls.tsv`. Complete proximity evidence is preserved separately as `panr2_inputs/cross_database/feature_proximity_all.tsv`.
 
-Use `--output_mode basic|important|all` to control the final user-facing bundle. The default is `all`, preserving the complete advanced output tree. `basic` is intentionally minimal: the final sample directory contains only `basic/enriched_genome_dataset.csv` and `basic/enriched_genome_dataset.tsv`, one row per genome with metadata, QC summaries, annotation burdens, compact annotation lists, lineage labels, and module provenance. `important` publishes the enriched dataset plus `important/results.html`, a curated report with Featured Results, Run Overview, QC Summary, Prevalence, Geographic Distribution, Variations, Temporal Trends, Co-occurrence / Genomic Context, Metadata Associations, Warnings, and Important Files sections; it includes portable PNG/SVG/PDF/TSV figure outputs, key tables, an interactive temporal trend viewer with database/trend/support/feature controls, an interactive co-occurrence/context viewer with database/support/effect controls, an interactive metadata-association viewer with database/group/significance/effect/display/support controls, and links to the complete `panr2_inputs/` handoff bundle.
+Use `--output_mode basic|important|all` to control the final user-facing bundle. The default is `all`, preserving the complete advanced output tree. `basic` is intentionally minimal: the final sample directory contains only `basic/enriched_genome_dataset.csv` and `basic/enriched_genome_dataset.tsv`, one row per genome with metadata, QC summaries, annotation burdens, compact annotation lists, lineage labels, and module provenance. `important` publishes the enriched dataset plus `important/results.html`, a curated report with Featured Results, Run Overview, QC Summary, Prevalence, Geographic Distribution, Variations, Temporal Trends, Co-occurrence / Genomic Context, Metadata Associations, Warnings, and Important Files sections; it includes portable PNG/SVG/PDF/TSV figure outputs, key tables, an interactive variation viewer with database/metric/top-N/sort controls, an interactive temporal trend viewer with database/trend/support/feature controls, an interactive co-occurrence/context viewer with database/support/effect controls, an interactive metadata-association viewer with database/group/significance/effect/display/support controls, and links to the complete `panr2_inputs/` handoff bundle.
 
 For 300+ genome desktop validations, start with CheckM2, ANI, and AMRFinderPlus disabled, then add those heavier stages intentionally. The documented 300-record Klebsiella large-mode run used `--run_checkm2 false --run_ani false --run_amrfinderplus false` and still validated FetchM2, sequence QC, QUAST, Mash, ABRicate AMR/VFDB/PlasmidFinder, IntegronFinder, MLST, PanR2 feature contracts, and compact report safeguards. FastANI all-vs-all and AMRFinderPlus nucleotide `tblastn` were the observed long-running optional stages at this scale. If ANI is enabled with `--large_dataset true`, the default `--ani_large_run_strategy auto` skips all-vs-all ANI above `--ani_max_all_vs_all_genomes` and writes an ANI status audit instead of accidentally launching a long all-vs-all run.
 
@@ -681,6 +681,7 @@ results/
     │   ├── key_tables/geographic_distribution.tsv
     │   ├── key_tables/feature_variation_summary.tsv
     │   ├── key_tables/feature_variation_hits.tsv
+    │   ├── key_tables/feature_variation_database_summary.tsv
     │   ├── key_tables/temporal_database_burden.tsv
     │   ├── key_tables/temporal_feature_prevalence.tsv
     │   ├── key_tables/temporal_trend_summary.tsv
@@ -703,6 +704,7 @@ results/
     │   ├── cooccurrence_figures.zip
     │   ├── metadata_association_tables.zip
     │   ├── metadata_association_figures.zip
+    │   ├── variation_figures.zip
     │   ├── figures/qc_funnel.png
     │   ├── figures/qc_funnel.svg
     │   ├── figures/qc_status_overview.png
@@ -711,6 +713,11 @@ results/
     │   ├── figures/geographic_distribution_map.png
     │   ├── figures/geographic_distribution_map.svg
     │   ├── figures/geographic_distribution.data.tsv
+    │   ├── figures/variation_analysis.html
+    │   ├── figures/variation_identity_<db>_top20.svg
+    │   ├── figures/variation_coverage_<db>_top20.svg
+    │   ├── figures/variation_identity_coverage_<db>_top20.svg
+    │   ├── figures/variation_top_variable_<db>_top20.svg
     │   ├── figures/temporal_trends.html
     │   ├── figures/temporal_selected_feature_prevalence.svg
     │   ├── figures/temporal_slope_top40.svg

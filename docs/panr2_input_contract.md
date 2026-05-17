@@ -184,7 +184,10 @@ Co-occurrence / Genomic Context, Metadata Associations, Warnings, and Important
 Files sections. It writes key QC, prevalence, geography, variation, temporal
 trend, co-occurrence, genomic-context, and metadata-association tables plus
 portable PNG/SVG/PDF/TSV figures without adding new runtime plotting
-dependencies. Temporal Trends includes an interactive HTML
+dependencies. Variations includes an interactive HTML viewer with database,
+metric, Top 10/20/50/Complete, and sort controls; identity and coverage
+boxplots; identity-vs-coverage scatterplots; top-variable feature plots; and
+summary/hit-level TSV downloads. Temporal Trends includes an interactive HTML
 viewer with database, trend, support, and feature controls, selected-feature
 prevalence lines, and a first-to-last-year slope plot. Co-occurrence / Genomic
 Context includes an interactive heatmap viewer, co-occurrence network tables,
