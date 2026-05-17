@@ -642,6 +642,7 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "Featured Results",
                 "Run Overview",
                 "QC Summary",
+                "Enriched Dataset",
                 "Prevalence",
                 "Geographic Distribution",
                 "Variations",
@@ -658,6 +659,69 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "Downloads / Important Files",
             ]:
                 self.assertIn(section, report_html)
+            for anchor in [
+                'id="featured"',
+                'id="overview"',
+                'id="qc"',
+                'id="enriched-dataset"',
+                'id="prevalence"',
+                'id="geography"',
+                'id="variations"',
+                'id="temporal"',
+                'id="cooccurrence"',
+                'id="metadata-associations"',
+                'id="lineage"',
+                'id="diversity"',
+                'id="notable-genomes"',
+                'id="ordination"',
+                'id="concordance"',
+                'id="evidence"',
+                'id="warnings"',
+                'id="downloads"',
+            ]:
+                self.assertIn(anchor, report_html)
+            for ui_class in [
+                "report-header",
+                "sidebar",
+                "section-header",
+                "summary-card",
+                "figure-card",
+                "table-card",
+                "table-search",
+                "warning-box",
+                "download-card",
+                "back-to-top",
+                "details-block",
+            ]:
+                self.assertIn(ui_class, report_html)
+            for css_token in [
+                "--primary: #0f766e",
+                "--red: #dc2626",
+                "--green: #16a34a",
+                "overflow-x: hidden",
+                "@media (max-width: 920px)",
+            ]:
+                self.assertIn(css_token, report_html)
+            self.assertIn("Featured figure gallery", report_html)
+            self.assertIn("Download enriched dataset", report_html)
+            self.assertIn("Download important tables ZIP", report_html)
+            self.assertIn("Download important figures ZIP", report_html)
+            self.assertIn("Download report assets ZIP", report_html)
+            self.assertIn("PNG</a>", report_html)
+            self.assertIn("SVG</a>", report_html)
+            self.assertIn("Data TSV</a>", report_html)
+            self.assertIn("alt='", report_html)
+            self.assertIn("Showing ", report_html)
+            self.assertIn("download the full TSV", report_html)
+            for zip_name in ["important_tables.zip", "important_figures.zip", "important_report_assets.zip"]:
+                self.assertGreater((sample_dir / "important" / "downloads" / zip_name).stat().st_size, 0)
+            qa = subprocess.run(
+                [sys.executable, str(REPO_ROOT / "scripts" / "check_important_report_outputs.py"), str(sample_dir)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(qa.returncode, 0, qa.stderr + qa.stdout)
 
     def test_optional_table_inputs_export_contract_features(self):
         with tempfile.TemporaryDirectory() as tmpdir:

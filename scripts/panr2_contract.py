@@ -3173,7 +3173,22 @@ def write_feature_contract_manifest(out_dir: Path) -> dict[str, str]:
     }
     path = manifest_dir / "feature_contract.json"
     path.write_text(json.dumps(contract, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return {"feature_contract_manifest": str(path)}
+    reproducibility = {
+        "pipeline": "PanResistome",
+        "panr2_contract_version": CONTRACT_VERSION,
+        "schema_version": SCHEMA_VERSION,
+        "feature_contract": "manifest/feature_contract.json",
+        "schema_validation_summary": "manifest/schema_validation_summary.txt",
+        "module_status_summary": "manifest/module_status_summary.tsv",
+        "report_controls": "manifest/report_controls.tsv",
+        "complete_feature_table": "features/all_features.tsv",
+        "complete_feature_matrices": "feature_matrices/",
+        "complete_metadata_feature_analysis": "metadata_feature_analysis/",
+        "note": "This manifest records report-facing reproducibility entry points; complete raw module outputs remain in the sample output directory.",
+    }
+    reproducibility_path = manifest_dir / "reproducibility_manifest.json"
+    reproducibility_path.write_text(json.dumps(reproducibility, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return {"feature_contract_manifest": str(path), "reproducibility_manifest": str(reproducibility_path)}
 
 
 def _relative_link(target: Path, base: Path) -> str:
@@ -3185,7 +3200,7 @@ def _relative_link(target: Path, base: Path) -> str:
 
 def _html_table(rows: list[dict[str, str]], fields: list[str], max_rows: int = 25) -> str:
     if not rows:
-        return "<p>No rows available.</p>"
+        return "<div class='table-card'><p>No rows available.</p></div>"
     header = "".join(f"<th>{html.escape(field)}</th>" for field in fields)
     body_rows = []
     for row in rows[:max_rows]:
@@ -3194,7 +3209,166 @@ def _html_table(rows: list[dict[str, str]], fields: list[str], max_rows: int = 2
             + "".join(f"<td>{html.escape(str(row.get(field, '') or ''))}</td>" for field in fields)
             + "</tr>"
         )
-    return f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(body_rows)}</tbody></table>"
+    capped_note = f"Showing {min(len(rows), max_rows)} of {len(rows)} rows"
+    if len(rows) > max_rows:
+        capped_note += "; download the full TSV from this section for complete data."
+    return (
+        "<div class='table-card'>"
+        "<div class='table-card-header'>"
+        f"<span>{html.escape(capped_note)}</span>"
+        "<input class='table-search' type='search' placeholder='Search this preview' aria-label='Search table preview'>"
+        "</div>"
+        "<div class='table-scroll'>"
+        f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(body_rows)}</tbody></table>"
+        "</div></div>"
+    )
+
+
+def _report_badge_html(label: str, kind: str = "") -> str:
+    clean_label = str(label or "").strip()
+    if not clean_label:
+        return ""
+    normalized = re.sub(r"[^a-z0-9]+", "-", (kind or clean_label).lower()).strip("-")
+    class_map = {
+        "pass": "badge-pass",
+        "passed": "badge-pass",
+        "warning": "badge-warning",
+        "warnings": "badge-warning",
+        "failed": "badge-failed",
+        "fail": "badge-failed",
+        "skipped": "badge-skipped",
+        "exploratory": "badge-exploratory",
+        "capped": "badge-capped",
+        "lineage": "badge-lineage",
+        "bioproject": "badge-bioproject",
+        "high-confidence": "badge-pass",
+        "moderate-confidence": "badge-exploratory",
+        "descriptive": "badge-skipped",
+    }
+    css_class = class_map.get(normalized, "")
+    return f"<span class='badge {css_class}'>{html.escape(clean_label)}</span>"
+
+
+def _report_summary_cards_html(cards: list[tuple[str, str, str | None]]) -> str:
+    items = []
+    for card in cards:
+        label = card[0]
+        value = card[1] if len(card) > 1 else ""
+        note = card[2] if len(card) > 2 else ""
+        items.append(
+            "<div class='summary-card card'>"
+            f"<span>{html.escape(str(label))}</span>"
+            f"<strong>{html.escape(str(value))}</strong>"
+            + (f"<small>{html.escape(str(note))}</small>" if note else "")
+            + "</div>"
+        )
+    return "<div class='cards summary-cards'>" + "".join(items) + "</div>"
+
+
+def _report_download_links_html(links: list[tuple[str, str]]) -> str:
+    if not links:
+        return ""
+    return (
+        "<div class='downloads download-bar'>"
+        + "".join(
+            f"<a class='download-button' href='{html.escape(href)}'>{html.escape(label)}</a>"
+            for href, label in links
+        )
+        + "</div>"
+    )
+
+
+def _report_section_header_html(title: str, subtitle: str = "", badges: list[tuple[str, str]] | None = None) -> str:
+    badge_html = " ".join(_report_badge_html(label, kind) for label, kind in (badges or []))
+    return (
+        "<div class='section-header'>"
+        f"<div><h2>{html.escape(title)}</h2>"
+        + (f"<p>{html.escape(subtitle)}</p>" if subtitle else "")
+        + "</div>"
+        + (f"<div class='badge-row'>{badge_html}</div>" if badge_html else "")
+        + "</div>"
+    )
+
+
+def _report_warning_box_html(message: str, badges: list[tuple[str, str]] | None = None) -> str:
+    badge_html = " ".join(_report_badge_html(label, kind) for label, kind in (badges or []))
+    return (
+        "<div class='warning-box warning'>"
+        f"<p>{html.escape(message)}</p>"
+        + (f"<div class='badge-row'>{badge_html}</div>" if badge_html else "")
+        + "<p><a href='#warnings'>Review warnings and limitations</a></p>"
+        "</div>"
+    )
+
+
+def _figure_asset_links(important_dir: Path, stem: str) -> list[tuple[str, str]]:
+    links: list[tuple[str, str]] = []
+    for suffix, label in [(".png", "PNG"), (".svg", "SVG"), (".pdf", "PDF"), (".data.tsv", "Data TSV")]:
+        path = important_dir / "figures" / f"{stem}{suffix}"
+        if path.exists():
+            links.append((f"figures/{path.name}", label))
+    return links
+
+
+def _report_figure_card_html(
+    important_dir: Path,
+    stem: str,
+    title: str,
+    caption: str,
+    badges: list[tuple[str, str]] | None = None,
+) -> str:
+    svg_path = important_dir / "figures" / f"{stem}.svg"
+    png_path = important_dir / "figures" / f"{stem}.png"
+    preview_path = svg_path if svg_path.exists() else png_path
+    if not preview_path.exists():
+        return ""
+    badge_html = " ".join(_report_badge_html(label, kind) for label, kind in (badges or []))
+    links_html = _report_download_links_html(_figure_asset_links(important_dir, stem))
+    return (
+        "<div class='figure-card'>"
+        "<div class='figure-card-header'>"
+        f"<h3>{html.escape(title)}</h3>"
+        + (f"<div class='badge-row'>{badge_html}</div>" if badge_html else "")
+        + "</div>"
+        f"<p class='figure-caption'>{html.escape(caption)}</p>"
+        "<div class='figure-box'>"
+        f"<img src='figures/{html.escape(preview_path.name)}' alt='{html.escape(title)}'>"
+        "</div>"
+        f"{links_html}"
+        "</div>"
+    )
+
+
+def _report_figure_grid_html(cards: list[str]) -> str:
+    present = [card for card in cards if card]
+    if not present:
+        return "<p>No figures were generated for this section.</p>"
+    return "<div class='figure-row'>" + "".join(present) + "</div>"
+
+
+def _report_download_cards_html(important_dir: Path, specs: list[tuple[str, str, str, str]]) -> str:
+    cards = []
+    for href, title, description, recommended_use in specs:
+        target = (important_dir / href).resolve() if not href.startswith("../") else (important_dir / href).resolve()
+        exists = target.exists()
+        status = "available" if exists else "missing"
+        row_count = ""
+        if exists and target.suffix in {".tsv", ".csv"}:
+            row_count = str(len(read_table(target)))
+        cards.append(
+            "<div class='download-card'>"
+            "<div>"
+            f"<h3>{html.escape(title)}</h3>"
+            f"<p>{html.escape(description)}</p>"
+            f"<small>{html.escape(recommended_use)}</small>"
+            "</div>"
+            "<div>"
+            + _report_badge_html(status.upper(), "pass" if exists else "warning")
+            + (f"<small>{html.escape(row_count)} rows</small>" if row_count else "")
+            + f"<a class='download-button' href='{html.escape(href)}'>Open</a>"
+            "</div></div>"
+        )
+    return "<div class='download-card-grid'>" + "".join(cards) + "</div>"
 
 
 COUNTRY_COORDS = {
@@ -10965,16 +11139,23 @@ def write_important_results_report(
     databases = sorted({row.get("database", "") for row in all_features if row.get("database")})
     qc_pass = sum(1 for row in dataset_rows if row.get("qc_pass") == "true")
     warning_count = sum(1 for row in dataset_rows if row.get("modules_warning"))
+    organism_values = Counter(
+        first_value(row, ["organism_name", "Organism Name", "organism", "species"], "")
+        for row in dataset_rows
+        if first_value(row, ["organism_name", "Organism Name", "organism", "species"], "")
+    )
+    report_taxon = organism_values.most_common(1)[0][0] if organism_values else "not specified"
+    schema_status = "PASS" if "unmatched_feature_rows=0" in schema_summary and "invalid_feature_rows=0" in schema_summary else "CHECK"
     cards = [
-        ("Genomes", str(len(dataset_rows))),
-        ("QC PASS", f"{qc_pass}/{len(dataset_rows)}" if dataset_rows else "0"),
-        ("Feature rows", str(total_features)),
-        ("Databases", str(len(databases))),
-        ("Schema", "PASS" if "unmatched_feature_rows=0" in schema_summary and "invalid_feature_rows=0" in schema_summary else "CHECK"),
-        ("Warnings", str(warning_count)),
+        ("Input genomes", str(len(dataset_rows)), "genomes in report"),
+        ("QC pass", f"{qc_pass}/{len(dataset_rows)}" if dataset_rows else "0", "post-QC genomes"),
+        ("Total features", str(total_features), "standardized rows"),
+        ("Databases detected", str(len(databases)), ", ".join(databases[:4]) + ("..." if len(databases) > 4 else "")),
+        ("Warnings", str(warning_count), "genome-level module flags"),
+        ("Schema validation", schema_status, "feature contract status"),
     ]
-    card_html = "".join(f"<div class='card'><span>{html.escape(label)}</span><strong>{html.escape(value)}</strong></div>" for label, value in cards)
-    db_badges = " ".join(f"<span class='badge'>{html.escape(db)}</span>" for db in databases)
+    card_html = _report_summary_cards_html(cards)
+    db_badges = " ".join(f"<span class='badge badge-db badge-db-{html.escape(_safe_filename(db))}'>{html.escape(db)}</span>" for db in databases)
     qc_steps = read_table(important_dir / "key_tables" / "qc_step_summary.tsv")
     prevalence_rows = read_table(important_dir / "tables" / "feature_prevalence.tsv") or read_table(important_dir / "key_tables" / "feature_prevalence_summary.tsv")
     prevalence_database_rows = read_table(important_dir / "tables" / "prevalence_summary_by_database.tsv")
@@ -11124,6 +11305,8 @@ def write_important_results_report(
         file_index_rows,
         key=lambda row: (row.get("category", ""), row.get("file_path", "")),
     )[:40]
+    enriched_dataset_fields = list(dataset_rows[0].keys())[:14] if dataset_rows else []
+    enriched_dataset_table_html = _html_table(dataset_rows, enriched_dataset_fields, max_rows=20) if enriched_dataset_fields else "<p>No enriched dataset rows available.</p>"
     qc_table_html = _html_table(qc_steps, ["step_order", "qc_step", "tool", "enabled", "pass", "warning", "fail", "skipped", "status", "notes"], max_rows=20)
     prevalence_table_html = _html_table(top_prevalence, ["database", "feature_id", "feature_category", "positive_genomes", "total_genomes", "prevalence_display", "feature_rows", "mean_hits_per_positive_genome", "prevalence_label", "warning_flags"], max_rows=20)
     variation_table_html = _html_table(top_variation, ["database", "feature_id", "total_hits", "positive_genomes", "mean_hits_per_positive_genome", "median_identity", "iqr_identity", "median_coverage", "iqr_coverage", "variation_label", "warning_flags"], max_rows=20)
@@ -11180,22 +11363,29 @@ def write_important_results_report(
         ("prevalence_core_accessory_rare_by_database", "Core/common/accessory/rare features"),
         ("prevalence_database_burden_by_sample", "Database burden by sample"),
     ]:
-        svg_path = important_dir / "figures" / f"{figure_name}.svg"
-        if not svg_path.exists():
-            continue
         prevalence_figure_items.append(
-            f"<div><h3>{html.escape(title)}</h3><img src='figures/{html.escape(svg_path.name)}' alt='{html.escape(title)}'>"
-            f"<p><a href='figures/{html.escape(figure_name)}.png'>PNG</a> | <a href='figures/{html.escape(figure_name)}.svg'>SVG</a> | <a href='figures/{html.escape(figure_name)}.pdf'>PDF</a> | <a href='figures/{html.escape(figure_name)}.data.tsv'>Data TSV</a></p></div>"
+            _report_figure_card_html(
+                important_dir,
+                figure_name,
+                title,
+                "Prevalence is calculated as genomes with at least one hit; labels and tables preserve denominators.",
+                [("Descriptive", "descriptive")],
+            )
         )
     prevalence_figures = []
     for path in sorted((important_dir / "figures").glob("prevalence_top_features_*.svg")):
         database = path.name.replace("prevalence_top_features_", "").replace(".svg", "")
         stem = path.stem
         prevalence_figures.append(
-            f"<div><h3>{html.escape(database)} prevalence</h3><img src='figures/{html.escape(path.name)}' alt='{html.escape(database)} prevalence'>"
-            f"<p><a href='figures/{html.escape(stem)}.png'>PNG</a> | <a href='figures/{html.escape(path.name)}'>SVG</a> | <a href='figures/{html.escape(stem)}.pdf'>PDF</a> | <a href='figures/{html.escape(stem)}.data.tsv'>Data TSV</a></p></div>"
+            _report_figure_card_html(
+                important_dir,
+                stem,
+                f"{database} prevalence",
+                "Horizontal bars show dataset prevalence with positive-genome denominators in the plotted data.",
+                [("Descriptive", "descriptive")],
+            )
         )
-    prevalence_figures_html = "<div class='figure-row'>" + "".join((prevalence_figure_items + prevalence_figures)[:8]) + "</div>" if (prevalence_figure_items or prevalence_figures) else "<p>No prevalence figures were generated because no feature rows were available.</p>"
+    prevalence_figures_html = _report_figure_grid_html((prevalence_figure_items + prevalence_figures)[:8]) if (prevalence_figure_items or prevalence_figures) else "<p>No prevalence figures were generated because no feature rows were available.</p>"
     geographic_databases = len({row.get("database", "") for row in geographic_burden_rows if row.get("database", "")})
     geographic_country_groups = len({row.get("group_name", "") for row in geographic_burden_rows if row.get("geo_level") == "country" and row.get("group_name") not in {"", "missing", "unknown", "missing (unknown)"}})
     geographic_missing_country = max([int(_float_or_none(row.get("missing_country_count", "")) or 0) for row in geographic_summary_rows] or [0])
@@ -11234,16 +11424,26 @@ def write_important_results_report(
     for path in sorted((important_dir / "figures").glob("geographic_*_bar_*.svg"))[:6]:
         stem = path.stem
         geographic_figure_items.append(
-            f"<div><h3>{html.escape(stem.replace('_', ' '))}</h3><img src='figures/{html.escape(path.name)}' alt='{html.escape(stem)}'>"
-            f"<p><a href='figures/{html.escape(stem)}.png'>PNG</a> | <a href='figures/{html.escape(path.name)}'>SVG</a> | <a href='figures/{html.escape(stem)}.pdf'>PDF</a> | <a href='figures/{html.escape(stem)}.data.tsv'>Data TSV</a></p></div>"
+            _report_figure_card_html(
+                important_dir,
+                stem,
+                stem.replace("_", " "),
+                "Bars summarize dataset-specific geographic prevalence or burden; small groups are flagged in the plotted data.",
+                [("Exploratory", "exploratory")],
+            )
         )
     for path in sorted((important_dir / "figures").glob("geographic_map_*.svg"))[:2]:
         stem = path.stem
         geographic_figure_items.append(
-            f"<div><h3>{html.escape(stem.replace('_', ' '))}</h3><img src='figures/{html.escape(path.name)}' alt='{html.escape(stem)}'>"
-            f"<p><a href='figures/{html.escape(stem)}.png'>PNG</a> | <a href='figures/{html.escape(path.name)}'>SVG</a> | <a href='figures/{html.escape(stem)}.pdf'>PDF</a> | <a href='figures/{html.escape(stem)}.data.tsv'>Data TSV</a></p></div>"
+            _report_figure_card_html(
+                important_dir,
+                stem,
+                stem.replace("_", " "),
+                "Map colors reflect the analyzed dataset and should not be read as regional or global prevalence.",
+                [("Exploratory", "exploratory")],
+            )
         )
-    geographic_figures_html = "<div class='figure-row'>" + "".join(geographic_figure_items[:8]) + "</div>" if geographic_figure_items else "<p>No geographic figures were generated because no mappable country groups were available.</p>"
+    geographic_figures_html = _report_figure_grid_html(geographic_figure_items[:8]) if geographic_figure_items else "<p>No geographic figures were generated because no mappable country groups were available.</p>"
     variation_unique_features = len(variation_rows)
     variation_total_hits = sum(int(_float_or_none(row.get("total_hits", "")) or 0) for row in variation_rows)
     variation_high_features = sum(1 for row in variation_rows if row.get("variation_label") == "high_variation")
@@ -11283,10 +11483,15 @@ def write_important_results_report(
             title = figure_name
         stem = path.stem
         variation_figures.append(
-            f"<div><h3>{html.escape(title)}</h3><img src='figures/{html.escape(path.name)}' alt='{html.escape(title)}'>"
-            f"<p><a href='figures/{html.escape(stem)}.png'>PNG</a> | <a href='figures/{html.escape(path.name)}'>SVG</a> | <a href='figures/{html.escape(stem)}.pdf'>PDF</a> | <a href='figures/{html.escape(stem)}.data.tsv'>Data TSV</a></p></div>"
+            _report_figure_card_html(
+                important_dir,
+                stem,
+                title,
+                "Variation reflects detected hit identity and coverage, not necessarily functional or phenotypic differences.",
+                [("Review", "warning")],
+            )
         )
-    variation_figures_html = "<div class='figure-row'>" + "".join(variation_figures[:6]) + "</div>" if variation_figures else "<p>No variation figures were generated because no identity/coverage feature rows were available.</p>"
+    variation_figures_html = _report_figure_grid_html(variation_figures[:6]) if variation_figures else "<p>No variation figures were generated because no identity/coverage feature rows were available.</p>"
     temporal_figure_items = []
     for figure_name, title in [
         ("temporal_selected_feature_prevalence", "Selected feature prevalence"),
@@ -11300,10 +11505,15 @@ def write_important_results_report(
         if not svg_path.exists():
             continue
         temporal_figure_items.append(
-            f"<div><h3>{html.escape(title)}</h3><img src='figures/{html.escape(svg_path.name)}' alt='{html.escape(title)}'>"
-            f"<p><a href='figures/{html.escape(figure_name)}.png'>PNG</a> | <a href='figures/{html.escape(figure_name)}.svg'>SVG</a> | <a href='figures/{html.escape(figure_name)}.data.tsv'>Data TSV</a></p></div>"
+            _report_figure_card_html(
+                important_dir,
+                figure_name,
+                title,
+                "Temporal trends are exploratory and may reflect uneven sampling by year, lineage, geography, or BioProject.",
+                [("Exploratory", "exploratory")],
+            )
         )
-    temporal_figures_html = "<div class='figure-row'>" + "".join(temporal_figure_items) + "</div>" if temporal_figure_items else "<p>No temporal figures were generated because collection-year metadata or feature rows were unavailable.</p>"
+    temporal_figures_html = _report_figure_grid_html(temporal_figure_items) if temporal_figure_items else "<p>No temporal figures were generated because collection-year metadata or feature rows were unavailable.</p>"
     cooccurrence_summary = cooccurrence_summary_rows[0] if cooccurrence_summary_rows else {}
     cooccurrence_summary_html = (
         "<p>"
@@ -11326,14 +11536,16 @@ def write_important_results_report(
         if not figure_path.exists():
             continue
         stem = figure_path.stem
-        png_name = figure_path.with_suffix(".png").name
-        pdf_name = figure_path.with_suffix(".pdf").name
-        data_name = f"{stem}.data.tsv"
         cooccurrence_figure_items.append(
-            f"<div><h3>{html.escape(title)}</h3><img src='figures/{html.escape(figure_path.name)}' alt='{html.escape(title)}'>"
-            f"<p><a href='figures/{html.escape(png_name)}'>PNG</a> | <a href='figures/{html.escape(figure_path.name)}'>SVG</a> | <a href='figures/{html.escape(pdf_name)}'>PDF</a> | <a href='figures/{html.escape(data_name)}'>Data TSV</a></p></div>"
+            _report_figure_card_html(
+                important_dir,
+                stem,
+                title,
+                "Sample-level co-occurrence is separate from same-contig and proximity context evidence.",
+                [("Context", "exploratory")],
+            )
         )
-    cooccurrence_figures_html = "<div class='figure-row'>" + "".join(cooccurrence_figure_items) + "</div>" if cooccurrence_figure_items else "<p>No co-occurrence/context figures were generated because feature-pair data were unavailable.</p>"
+    cooccurrence_figures_html = _report_figure_grid_html(cooccurrence_figure_items) if cooccurrence_figure_items else "<p>No co-occurrence/context figures were generated because feature-pair data were unavailable.</p>"
     metadata_summary = {row.get("metric", ""): row.get("value", "") for row in metadata_summary_rows}
     metadata_usable = metadata_summary.get("metadata_columns_usable", "0")
     metadata_sparse = metadata_summary.get("metadata_columns_sparse_or_biased", "0")
@@ -11372,10 +11584,15 @@ def write_important_results_report(
             continue
         stem = figure_path.stem
         metadata_figure_items.append(
-            f"<div><h3>{html.escape(title)}</h3><img src='figures/{html.escape(figure_path.name)}' alt='{html.escape(title)}'>"
-            f"<p><a href='figures/{html.escape(stem)}.png'>PNG</a> | <a href='figures/{html.escape(figure_path.name)}'>SVG</a> | <a href='figures/{html.escape(stem)}.pdf'>PDF</a> | <a href='figures/{html.escape(stem)}.data.tsv'>Data TSV</a></p></div>"
+            _report_figure_card_html(
+                important_dir,
+                stem,
+                title,
+                "Metadata associations are exploratory and may reflect sampling, BioProject, lineage, geography, or year bias.",
+                [("Exploratory", "exploratory")],
+            )
         )
-    metadata_figures_html = "<div class='figure-row'>" + "".join(metadata_figure_items) + "</div>" if metadata_figure_items else "<p>No metadata association figures were generated because metadata groups or feature rows were unavailable.</p>"
+    metadata_figures_html = _report_figure_grid_html(metadata_figure_items) if metadata_figure_items else "<p>No metadata association figures were generated because metadata groups or feature rows were unavailable.</p>"
     lineage_summary = {row.get("metric", ""): row.get("value", "") for row in lineage_summary_rows}
     lineage_cards_html = (
         "<div class='cards'>"
@@ -11415,10 +11632,15 @@ def write_important_results_report(
             continue
         stem = figure_path.stem
         lineage_figure_items.append(
-            f"<div><h3>{html.escape(title)}</h3><img src='figures/{html.escape(figure_path.name)}' alt='{html.escape(title)}'>"
-            f"<p><a href='figures/{html.escape(stem)}.png'>PNG</a> | <a href='figures/{html.escape(figure_path.name)}'>SVG</a> | <a href='figures/{html.escape(stem)}.pdf'>PDF</a> | <a href='figures/{html.escape(stem)}.data.tsv'>Data TSV</a></p></div>"
+            _report_figure_card_html(
+                important_dir,
+                stem,
+                title,
+                "Lineage summaries provide clonal-structure context and do not replace formal phylogenetic analysis.",
+                [("Lineage warning", "lineage")],
+            )
         )
-    lineage_figures_html = "<div class='figure-row'>" + "".join(lineage_figure_items) + "</div>" if lineage_figure_items else "<p>No lineage figures were generated because lineage context was unavailable.</p>"
+    lineage_figures_html = _report_figure_grid_html(lineage_figure_items) if lineage_figure_items else "<p>No lineage figures were generated because lineage context was unavailable.</p>"
     diversity_summary = {row.get("metric", ""): row.get("value", "") for row in diversity_summary_rows}
     diversity_cards_html = (
         "<div class='cards'>"
@@ -11451,27 +11673,39 @@ def write_important_results_report(
         if not svg_path.exists():
             continue
         diversity_figure_items.append(
-            f"<div><h3>{html.escape(title)}</h3><img src='figures/{html.escape(svg_path.name)}' alt='{html.escape(title)}'>"
-            f"<p><a href='figures/{html.escape(figure_name)}.png'>PNG</a> | <a href='figures/{html.escape(figure_name)}.svg'>SVG</a> | <a href='figures/{html.escape(figure_name)}.pdf'>PDF</a> | <a href='figures/{html.escape(figure_name)}.data.tsv'>Data TSV</a></p></div>"
+            _report_figure_card_html(
+                important_dir,
+                figure_name,
+                title,
+                "Diversity summaries reflect detected annotation features, not complete biological diversity.",
+                [("Descriptive", "descriptive")],
+            )
         )
     for svg_path in sorted((important_dir / "figures").glob("diversity_richness_by_metadata_*.svg"))[:1]:
         stem = svg_path.stem
         diversity_figure_items.append(
-            f"<div><h3>{html.escape(stem.replace('_', ' '))}</h3><img src='figures/{html.escape(svg_path.name)}' alt='{html.escape(stem)}'>"
-            f"<p><a href='figures/{html.escape(stem)}.png'>PNG</a> | <a href='figures/{html.escape(svg_path.name)}'>SVG</a> | <a href='figures/{html.escape(stem)}.pdf'>PDF</a> | <a href='figures/{html.escape(stem)}.data.tsv'>Data TSV</a></p></div>"
+            _report_figure_card_html(
+                important_dir,
+                stem,
+                stem.replace("_", " "),
+                "Richness-by-metadata summaries are descriptive and should be interpreted alongside sampling and lineage warnings.",
+                [("Descriptive", "descriptive")],
+            )
         )
-    diversity_figures_html = "<div class='figure-row'>" + "".join(diversity_figure_items) + "</div>" if diversity_figure_items else "<p>No diversity figures were generated because feature rows were unavailable.</p>"
+    diversity_figures_html = _report_figure_grid_html(diversity_figure_items) if diversity_figure_items else "<p>No diversity figures were generated because feature rows were unavailable.</p>"
     def figure_cards(figure_specs: list[tuple[str, str]]) -> str:
         items = []
         for figure_name, title in figure_specs:
-            svg_path = important_dir / "figures" / f"{figure_name}.svg"
-            if not svg_path.exists():
-                continue
             items.append(
-                f"<div><h3>{html.escape(title)}</h3><img src='figures/{html.escape(svg_path.name)}' alt='{html.escape(title)}'>"
-                f"<p><a href='figures/{html.escape(figure_name)}.png'>PNG</a> | <a href='figures/{html.escape(figure_name)}.svg'>SVG</a> | <a href='figures/{html.escape(figure_name)}.pdf'>PDF</a> | <a href='figures/{html.escape(figure_name)}.data.tsv'>Data TSV</a></p></div>"
+                _report_figure_card_html(
+                    important_dir,
+                    figure_name,
+                    title,
+                    "Report-facing figure with PNG, SVG, PDF when available, and plotted-data TSV links.",
+                    [("Report figure", "descriptive")],
+                )
             )
-        return "<div class='figure-row'>" + "".join(items) + "</div>" if items else "<p>No figures were generated for this section.</p>"
+        return _report_figure_grid_html(items)
 
     notable_figures_html = figure_cards([
         ("notable_genomes_ranked", "Ranked notable genomes"),
@@ -11495,36 +11729,237 @@ def write_important_results_report(
         ("warnings_summary", "Warnings by severity"),
         ("warnings_by_section", "Warnings by section"),
     ])
+    qc_figures_html = _report_figure_grid_html([
+        _report_figure_card_html(
+            important_dir,
+            "qc_funnel",
+            "QC funnel",
+            "Genome counts through the report-facing quality-control steps.",
+            [("QC", "pass" if qc_pass == len(dataset_rows) and dataset_rows else "warning")],
+        ),
+        _report_figure_card_html(
+            important_dir,
+            "qc_status_overview",
+            "QC status overview",
+            "Enabled, skipped, passing, warning, and failing QC statuses by step.",
+            [("Status", "descriptive")],
+        ),
+    ])
+    top_prevalence_card = top_prevalence[0] if top_prevalence else {}
+    top_geography_card = top_geographic_burden[0] if top_geographic_burden else {}
+    top_temporal_card = top_temporal[0] if top_temporal else {}
+    top_cooccurrence_card = top_cooccurrence[0] if top_cooccurrence else {}
+    top_metadata_card = top_metadata_features[0] if top_metadata_features else {}
+    top_notable_card = top_notable[0] if top_notable else {}
+
+    def featured_finding_card(title: str, text: str, href: str, badge: str, badge_kind: str = "descriptive") -> str:
+        return (
+            "<article class='finding-card'>"
+            "<div>"
+            f"<h3>{html.escape(title)}</h3>"
+            f"<p>{html.escape(text)}</p>"
+            "</div>"
+            "<div class='finding-card-footer'>"
+            f"{_report_badge_html(badge, badge_kind)}"
+            f"<a href='{html.escape(href)}'>Open section</a>"
+            "</div>"
+            "</article>"
+        )
+
+    featured_finding_cards_html = "<div class='finding-grid'>" + "".join([
+        featured_finding_card(
+            "Top prevalence finding",
+            (
+                f"{top_prevalence_card.get('feature_id', 'No feature')} in {top_prevalence_card.get('database', 'NA')} "
+                f"({top_prevalence_card.get('prevalence_display') or top_prevalence_card.get('prevalence_percent', 'NA')})."
+            ),
+            "#prevalence",
+            "Descriptive",
+            "descriptive",
+        ),
+        featured_finding_card(
+            "Top geographic pattern",
+            (
+                f"{top_geography_card.get('database', 'No database')} in {top_geography_card.get('group_name', 'no country')} "
+                f"({top_geography_card.get('prevalence_display') or top_geography_card.get('prevalence_percent', 'NA')})."
+            ),
+            "#geography",
+            "Exploratory",
+            "exploratory",
+        ),
+        featured_finding_card(
+            "Top temporal trend",
+            (
+                f"{top_temporal_card.get('feature_id', 'No feature')} "
+                f"{top_temporal_card.get('trend_label', 'trend unavailable')} "
+                f"({top_temporal_card.get('change_percent_points', 'NA')} percentage points)."
+            ),
+            "#temporal",
+            "Exploratory",
+            "exploratory",
+        ),
+        featured_finding_card(
+            "Top co-occurrence/context finding",
+            (
+                f"{top_cooccurrence_card.get('feature_a_id', 'No feature')} with "
+                f"{top_cooccurrence_card.get('feature_b_id', 'no paired feature')} "
+                f"(phi {top_cooccurrence_card.get('phi_correlation', 'NA')})."
+            ),
+            "#cooccurrence",
+            "Context",
+            "exploratory",
+        ),
+        featured_finding_card(
+            "Top metadata association",
+            (
+                f"{top_metadata_card.get('feature_id', 'No feature')} vs "
+                f"{top_metadata_card.get('metadata_column', 'metadata')}={top_metadata_card.get('metadata_group', 'NA')} "
+                f"({top_metadata_card.get('interpretation_label', 'label unavailable')})."
+            ),
+            "#metadata-associations",
+            "Warning-aware",
+            "warning",
+        ),
+        featured_finding_card(
+            "Top notable genome",
+            (
+                f"{top_notable_card.get('assembly_accession', 'No genome')} scored "
+                f"{top_notable_card.get('notable_genome_score', 'NA')}: "
+                f"{top_notable_card.get('notable_label', 'notable label unavailable')}."
+            ),
+            "#notable-genomes",
+            "Research review",
+            "exploratory",
+        ),
+    ]) + "</div>"
+    featured_figures_html = _report_figure_grid_html([
+        _report_figure_card_html(important_dir, "notable_genomes_ranked", "Notable genomes", "Top genomes ranked for research review, not clinical risk.", [("Research review", "exploratory")]),
+        _report_figure_card_html(important_dir, "evidence_confidence_summary", "Evidence confidence", "Confidence labels summarize support and warning burden across report sections.", [("Confidence", "pass")]),
+        _report_figure_card_html(important_dir, "diversity_core_common_accessory_rare_by_database", "Feature class composition", "Core/common/accessory/rare feature classes by database.", [("Descriptive", "descriptive")]),
+        _report_figure_card_html(important_dir, "warnings_summary", "Warning severity", "Warnings are grouped by severity so limitations are visible before interpretation.", [("Warnings", "warning")]),
+        _report_figure_card_html(important_dir, "lineage_distribution_mlst_st", "Lineage distribution", "Dominant lineages help interpret metadata and feature associations.", [("Lineage", "lineage")]),
+        _report_figure_card_html(important_dir, "prevalence_feature_counts_by_database", "Detected feature counts", "Database contributions to the report-facing feature set.", [("Descriptive", "descriptive")]),
+    ])
+    top_download_links = _report_download_links_html([
+        ("../basic/enriched_genome_dataset.csv", "Download enriched dataset"),
+        ("downloads/important_tables.zip", "Download important tables ZIP"),
+        ("downloads/important_figures.zip", "Download important figures ZIP"),
+        ("../panr2_inputs/report/panr2_handoff_index.html", "Open complete output bundle"),
+        ("../panr2_inputs/manifest/reproducibility_manifest.json", "Download reproducibility manifest"),
+        ("../panr2_inputs/manifest/feature_contract.json", "Download feature contract"),
+    ])
+    download_cards_html = _report_download_cards_html(important_dir, [
+        ("../basic/enriched_genome_dataset.csv", "Enriched dataset", "One row per genome with metadata, QC, annotation burdens, lineage labels, and module provenance.", "Start here for spreadsheet review."),
+        ("downloads/important_tables.zip", "Important tables ZIP", "All curated report-facing TSV tables in one archive.", "Use for downstream analysis and review."),
+        ("downloads/important_figures.zip", "Important figures ZIP", "Publication-friendly PNG/SVG/PDF/data figure outputs.", "Use for presentations and manuscripts."),
+        ("downloads/important_report_assets.zip", "Report assets ZIP", "Report HTML, figures, tables, and related assets.", "Use to move the important report as a bundle."),
+        ("tables/warnings_and_limitations.tsv", "Warnings table", "Structured warning descriptions, severity, affected rows, and recommended actions.", "Review before interpreting findings."),
+        ("tables/notable_genomes.tsv", "Notable genomes", "Transparent research-prioritization output with score explanations.", "Use to choose genomes for manual review."),
+        ("tables/finding_confidence_summary.tsv", "Finding confidence", "Cross-section finding confidence labels and recommended interpretation.", "Use to triage strongest and exploratory findings."),
+        ("../panr2_inputs/manifest/feature_contract.json", "Feature contract", "Machine-readable feature schema and allowed values.", "Use for reproducibility and parser validation."),
+    ])
     report_path = important_dir / "results.html"
     report_path.write_text(
         f"""<!doctype html>
-<html><head><meta charset="utf-8"><title>PanResistome Important Results</title>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PanResistome Important Results</title>
 <style>
-body {{ font-family: Arial, sans-serif; margin: 0; color: #1f2933; background: #f8fafc; }}
-nav {{ position: fixed; left: 0; top: 0; bottom: 0; width: 210px; background: #102a43; color: white; padding: 1rem; }}
-nav a {{ display: block; color: white; text-decoration: none; margin: 0.8rem 0; }}
-main {{ margin-left: 240px; padding: 1.5rem 2rem; }}
-section {{ background: white; border: 1px solid #d9e2ec; border-radius: 6px; padding: 1rem; margin-bottom: 1rem; }}
-.cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; }}
-.card {{ border: 1px solid #d9e2ec; border-radius: 6px; padding: 0.75rem; background: #f8fafc; }}
-.card span {{ display: block; font-size: 0.8rem; color: #52606d; }}
-.card strong {{ display: block; font-size: 1.4rem; margin-top: 0.3rem; }}
-.badge {{ display: inline-block; background: #e0f2fe; border: 1px solid #7dd3fc; padding: 0.2rem 0.45rem; border-radius: 999px; margin: 0.15rem; }}
-.downloads a {{ display: inline-block; margin: 0.25rem 0.5rem 0.25rem 0; padding: 0.45rem 0.7rem; background: #0f766e; color: white; text-decoration: none; border-radius: 4px; }}
-.warning {{ background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; }}
-iframe {{ width: 100%; height: 680px; border: 1px solid #d9e2ec; }}
-table {{ border-collapse: collapse; width: 100%; margin: 0.75rem 0; font-size: 0.9rem; }}
-th, td {{ border: 1px solid #d9e2ec; padding: 0.4rem; text-align: left; vertical-align: top; }}
-th {{ background: #f0f4f8; }}
-.figure-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; }}
-.figure-row img {{ max-width: 100%; border: 1px solid #d9e2ec; background: white; }}
+:root {{
+  --bg: #f8fafc;
+  --panel: #ffffff;
+  --text: #102a43;
+  --muted: #52606d;
+  --border: #d9e2ec;
+  --primary: #0f766e;
+  --primary-soft: #ccfbf1;
+  --blue: #2563eb;
+  --red: #dc2626;
+  --orange: #f97316;
+  --yellow: #facc15;
+  --green: #16a34a;
+  --purple: #7c3aed;
+  --gray: #64748b;
+  --pass: #16a34a;
+  --warning: #f97316;
+  --failed: #dc2626;
+  --skipped: #64748b;
+  --exploratory: #7c3aed;
+}}
+* {{ box-sizing: border-box; }}
+html {{ scroll-behavior: smooth; }}
+body {{ font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; margin: 0; color: var(--text); background: var(--bg); overflow-x: hidden; line-height: 1.45; }}
+a {{ color: var(--primary); }}
+a:focus, button:focus, input:focus {{ outline: 3px solid var(--primary-soft); outline-offset: 2px; }}
+.sidebar {{ position: fixed; left: 0; top: 0; bottom: 0; width: 270px; background: #102a43; color: white; padding: 1rem; overflow-y: auto; z-index: 10; }}
+.sidebar h2 {{ margin: 0 0 1rem; font-size: 1.05rem; }}
+.sidebar a {{ display: block; color: #e0f2fe; text-decoration: none; margin: 0.35rem 0; padding: 0.42rem 0.55rem; border-radius: 6px; }}
+.sidebar a:hover, .sidebar a:focus {{ background: rgba(255,255,255,0.12); color: white; }}
+main {{ margin-left: 290px; padding: 1.2rem 1.4rem 2rem; min-width: 0; }}
+.report-header {{ background: linear-gradient(135deg, #0f766e 0%, #14532d 100%); color: white; border-radius: 10px; padding: 1.2rem; margin-bottom: 1rem; box-shadow: 0 14px 32px rgba(15, 23, 42, 0.14); }}
+.report-header h1 {{ margin: 0; font-size: clamp(1.7rem, 3vw, 2.4rem); }}
+.report-header p {{ margin: 0.35rem 0 0; color: #d1fae5; }}
+.report-header .download-button {{ background: white; color: var(--primary); }}
+.section {{ background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05); scroll-margin-top: 1rem; }}
+.section-header {{ display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.7rem; }}
+.section-header h2, section h2 {{ margin-top: 0; }}
+.cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 0.75rem; }}
+.summary-card, .card {{ border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem; background: #fbfdff; }}
+.summary-card span, .card span {{ display: block; font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }}
+.summary-card strong, .card strong {{ display: block; font-size: 1.45rem; margin-top: 0.25rem; color: var(--text); }}
+.summary-card small, .card small {{ display: block; color: var(--muted); margin-top: 0.2rem; }}
+.badge {{ display: inline-block; background: #e0f2fe; border: 1px solid #7dd3fc; color: var(--text); padding: 0.22rem 0.5rem; border-radius: 999px; margin: 0.1rem; font-size: 0.78rem; font-weight: 700; }}
+.badge-pass {{ background: #dcfce7; border-color: var(--pass); color: #14532d; }}
+.badge-warning, .badge-capped {{ background: #ffedd5; border-color: var(--warning); color: #7c2d12; }}
+.badge-failed {{ background: #fee2e2; border-color: var(--failed); color: #7f1d1d; }}
+.badge-skipped {{ background: #f1f5f9; border-color: var(--skipped); color: #334155; }}
+.badge-exploratory, .badge-lineage {{ background: #ede9fe; border-color: var(--exploratory); color: #3b0764; }}
+.badge-bioproject {{ background: #fef3c7; border-color: #d97706; color: #78350f; }}
+.badge-db-amr {{ background: #fee2e2; border-color: var(--red); }}
+.badge-db-amrfinderplus {{ background: #fecaca; border-color: #991b1b; }}
+.badge-db-vfdb {{ background: #dcfce7; border-color: var(--green); }}
+.badge-db-plasmidfinder {{ background: #ede9fe; border-color: var(--purple); }}
+.badge-db-integronfinder {{ background: #ffedd5; border-color: var(--orange); }}
+.badge-db-mlst {{ background: #dbeafe; border-color: var(--blue); }}
+.download-bar, .downloads {{ display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0.75rem 0; }}
+.download-button, .downloads a {{ display: inline-block; padding: 0.5rem 0.75rem; background: var(--primary); color: white; text-decoration: none; border-radius: 7px; font-weight: 700; border: 1px solid rgba(15,118,110,0.2); }}
+.download-button:hover, .downloads a:hover {{ filter: brightness(0.95); }}
+.warning-box, .warning {{ background: #fff7ed; border: 1px solid #fed7aa; border-left: 5px solid var(--warning); padding: 0.8rem; border-radius: 8px; margin: 0.75rem 0; }}
+.figure-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 1rem; }}
+.figure-card {{ border: 1px solid var(--border); border-radius: 8px; background: white; padding: 0.85rem; overflow: hidden; }}
+.figure-card-header {{ display: flex; justify-content: space-between; gap: 0.7rem; align-items: flex-start; }}
+.figure-card h3 {{ margin: 0 0 0.35rem; font-size: 1rem; }}
+.figure-caption {{ color: var(--muted); font-size: 0.9rem; min-height: 2.2rem; }}
+.figure-box {{ background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; max-height: 720px; overflow: auto; }}
+.figure-box img {{ width: 100%; max-width: 100%; height: auto; display: block; background: white; }}
+.heatmap-scroll {{ max-height: 720px; overflow: auto; }}
+iframe {{ width: 100%; min-height: 680px; border: 1px solid var(--border); border-radius: 8px; background: white; }}
+.table-card {{ border: 1px solid var(--border); border-radius: 8px; background: white; margin: 0.75rem 0; overflow: hidden; }}
+.table-card-header {{ display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; padding: 0.55rem 0.7rem; background: #f8fafc; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; }}
+.table-search {{ max-width: 240px; width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.45rem; }}
+.table-scroll {{ max-height: 550px; overflow: auto; }}
+table {{ border-collapse: collapse; width: 100%; font-size: 0.88rem; }}
+th, td {{ border-bottom: 1px solid var(--border); padding: 0.48rem; text-align: left; vertical-align: top; }}
+th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
+.finding-grid, .download-card-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.8rem; }}
+.finding-card, .download-card {{ border: 1px solid var(--border); border-radius: 8px; background: #fbfdff; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; gap: 0.6rem; }}
+.finding-card h3, .download-card h3 {{ margin: 0 0 0.35rem; }}
+.finding-card-footer {{ display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }}
+.details-block {{ border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; background: #f8fafc; margin: 0.75rem 0; }}
+.back-to-top {{ position: fixed; right: 1rem; bottom: 1rem; background: var(--primary); color: white; padding: 0.55rem 0.7rem; border-radius: 999px; text-decoration: none; box-shadow: 0 8px 20px rgba(15,23,42,0.22); z-index: 20; }}
+@media (max-width: 920px) {{
+  .sidebar {{ position: static; width: auto; max-height: none; }}
+  .sidebar a {{ display: inline-block; margin: 0.2rem; }}
+  main {{ margin-left: 0; padding: 0.8rem; }}
+  .section-header, .figure-card-header, .table-card-header {{ flex-direction: column; align-items: stretch; }}
+  iframe {{ min-height: 520px; }}
+}}
 </style></head>
-<body>
-<nav>
+<body id="top">
+<nav class="sidebar" aria-label="Report navigation">
 <h2>Results</h2>
 <a href="#featured">Featured Results</a>
 <a href="#overview">Run Overview</a>
 <a href="#qc">QC Summary</a>
+<a href="#enriched-dataset">Enriched Dataset</a>
 <a href="#prevalence">Prevalence</a>
 <a href="#geography">Geographic Distribution</a>
 <a href="#variations">Variations</a>
@@ -11541,15 +11976,26 @@ th {{ background: #f0f4f8; }}
 <a href="#downloads">Downloads / Important Files</a>
 </nav>
 <main>
-<section id="featured"><h1>Featured Results</h1><div class="cards">{card_html}</div><p>{db_badges}</p></section>
-<section id="overview"><h2>Run Overview</h2><p>This curated report summarizes the key outputs while preserving complete advanced outputs in the full PanResistome bundle.</p>
-<div class="downloads"><a href="../basic/enriched_genome_dataset.csv">Download enriched dataset CSV</a><a href="downloads/important_tables.zip">Download important tables ZIP</a><a href="downloads/important_figures.zip">Download important figures ZIP</a><a href="../panr2_inputs/report/panr2_handoff_index.html">Open complete PanR2 handoff report</a><a href="../panr2_inputs/manifest/reproducibility_manifest.json">Download reproducibility manifest</a><a href="../panr2_inputs/manifest/feature_contract.json">Download feature contract</a></div></section>
-<section id="qc"><h2>QC Summary</h2><p>This section shows which QC steps were enabled, skipped, or passed before annotation.</p>
-<div class="figure-row"><div><h3>QC Funnel</h3><img src="figures/qc_funnel.svg" alt="QC funnel"></div><div><h3>QC Status</h3><img src="figures/qc_status_overview.svg" alt="QC status overview"></div></div>
+<header class="report-header">
+<h1>PanResistome Important Report</h1>
+<p>Taxon: {html.escape(report_taxon)} | Genomes analyzed: {len(dataset_rows)} | QC PASS: {qc_pass}/{len(dataset_rows)} | Total features: {total_features} | Databases detected: {html.escape(", ".join(databases) or "none")} | Warnings: {len(warnings_rows) or warning_count} | Schema validation: {html.escape(schema_status)}</p>
+{top_download_links}
+</header>
+<section id="featured" class="section"><h1>Featured Results</h1>{card_html}<p>{db_badges}</p>
+<details class="details-block"><summary>How to use this report</summary><p>Start with the cards and featured figures, then use the sidebar to inspect each analysis section. Complete TSVs are preserved even when report-facing tables and figures are capped for readability.</p></details>
+<h2>Top findings</h2>{featured_finding_cards_html}
+<h2>Featured figure gallery</h2>{featured_figures_html}</section>
+<section id="overview" class="section">{_report_section_header_html("Run Overview", "Curated outputs are summarized here while complete advanced outputs remain available in the PanR2 handoff bundle.", [("Schema " + schema_status, "pass" if schema_status == "PASS" else "warning")])}
+{top_download_links}</section>
+<section id="qc" class="section">{_report_section_header_html("QC Summary", "Enabled, skipped, passing, warning, and failing QC steps before annotation.", [("QC pass " + str(qc_pass) + "/" + str(len(dataset_rows)), "pass" if qc_pass == len(dataset_rows) and dataset_rows else "warning")])}
+{qc_figures_html}
 {qc_table_html}
 <div class="downloads"><a href="key_tables/qc_step_summary.tsv">Download QC step summary</a><a href="key_tables/qc_by_genome.tsv">Download per-genome QC table</a><a href="figures/qc_funnel.png">Download funnel PNG</a><a href="figures/qc_funnel.svg">Download funnel SVG</a><a href="figures/qc_funnel.data.tsv">Download funnel data</a></div></section>
-<section id="prevalence"><h2>Prevalence</h2><p>This section summarizes how frequently each detected feature appears across analyzed genomes. Prevalence uses positive genome count; feature rows can be higher when a feature appears multiple times in one genome.</p>
-<div class="warning">Prevalence reflects the analyzed dataset, not global prevalence. This section is descriptive and does not test association or causality.</div>
+<section id="enriched-dataset" class="section">{_report_section_header_html("Enriched Dataset", "The main user-facing genome table with metadata, QC, burdens, compact annotation lists, lineage labels, and module provenance.", [("Complete CSV", "pass")])}
+{enriched_dataset_table_html}
+<div class="downloads"><a href="../basic/enriched_genome_dataset.csv">Download enriched dataset CSV</a><a href="../basic/enriched_genome_dataset.tsv">Download enriched dataset TSV</a></div></section>
+<section id="prevalence" class="section"><h2>Prevalence</h2><p>This section summarizes how frequently each detected feature appears across analyzed genomes. Prevalence uses positive genome count; feature rows can be higher when a feature appears multiple times in one genome.</p>
+<div class="warning-box warning">Prevalence reflects the analyzed dataset, not global prevalence. This section is descriptive and does not test association or causality.</div>
 {prevalence_cards_html}
 {prevalence_written_html}
 <iframe src="figures/prevalence_analysis.html" title="Feature prevalence interactive report"></iframe>
@@ -11559,7 +12005,7 @@ th {{ background: #f0f4f8; }}
 <h3>Top feature prevalence</h3>
 {prevalence_table_html}
 <div class="downloads"><a href="figures/prevalence_analysis.html">Open interactive prevalence report</a><a href="prevalence_tables.zip">Download prevalence tables ZIP</a><a href="prevalence_figures.zip">Download prevalence figures ZIP</a><a href="tables/feature_prevalence.tsv">Download full feature prevalence</a><a href="tables/feature_prevalence_top.tsv">Download top feature prevalence</a><a href="tables/prevalence_summary_by_database.tsv">Download database summary</a><a href="tables/prevalence_core_accessory_rare_summary.tsv">Download core/common/accessory/rare summary</a><a href="tables/prevalence_database_burden_by_sample.tsv">Download database burden by sample</a></div></section>
-<section id="geography"><h2>Geographic Distribution</h2><div class="warning">Geographic patterns reflect the analyzed dataset only. They are not global prevalence estimates and can be affected by BioProject, lineage, country, and year sampling bias.</div>
+<section id="geography" class="section"><h2>Geographic Distribution</h2><div class="warning-box warning">Geographic patterns reflect the analyzed dataset only. They are not global prevalence estimates and can be affected by BioProject, lineage, country, and year sampling bias.</div>
 {geographic_cards_html}
 {geographic_summary_html}
 <iframe src="figures/geographic_distribution.html" title="Geographic distribution interactive report"></iframe>
@@ -11569,8 +12015,8 @@ th {{ background: #f0f4f8; }}
 <h3>Top feature distributions by country</h3>
 {geographic_feature_table_html}
 <div class="downloads"><a href="figures/geographic_distribution.html">Open interactive geographic report</a><a href="figures/geographic_distribution_map.html">Open compatibility map</a><a href="geographic_tables.zip">Download geographic tables ZIP</a><a href="geographic_figures.zip">Download geographic figures ZIP</a><a href="tables/geographic_distribution_summary.tsv">Download geographic summary</a><a href="tables/geographic_database_burden.tsv">Download database burden table</a><a href="tables/geographic_feature_distribution.tsv">Download feature distribution table</a><a href="tables/geographic_warning_summary.tsv">Download warning summary</a></div></section>
-<section id="variations"><h2>Variations</h2><p>Variation summaries use identity, coverage, alignment length, and hit-count values when available. Low identity, low coverage, high variation, and few-hit flags are review cues, not automatic failures.</p>
-<div class="warning">A feature can be common but conserved, common and variable, or rare with unstable estimates. Use the complete hit-level table when reviewing low-confidence or partial hits.</div>
+<section id="variations" class="section"><h2>Variations</h2><p>Variation summaries use identity, coverage, alignment length, and hit-count values when available. Low identity, low coverage, high variation, and few-hit flags are review cues, not automatic failures.</p>
+<div class="warning-box warning">A feature can be common but conserved, common and variable, or rare with unstable estimates. Use the complete hit-level table when reviewing low-confidence or partial hits.</div>
 {variation_cards_html}
 <iframe src="figures/variation_analysis.html" title="Feature variation interactive report"></iframe>
 {variation_figures_html}
@@ -11579,13 +12025,13 @@ th {{ background: #f0f4f8; }}
 <h3>Most variable features</h3>
 {variation_table_html}
 <div class="downloads"><a href="figures/variation_analysis.html">Open interactive variation report</a><a href="variation_figures.zip">Download variation figures ZIP</a><a href="key_tables/feature_variation_database_summary.tsv">Download variation database summary</a><a href="key_tables/feature_variation_summary.tsv">Download variation summary</a><a href="key_tables/feature_variation_hits.tsv">Download hit-level variation table</a></div></section>
-<section id="temporal"><h2>Temporal Trends</h2><div class="warning">Temporal trends reflect the analyzed dataset only. They can be affected by sampling year, BioProject, country, lineage, and missing collection-year metadata.</div>
+<section id="temporal" class="section"><h2>Temporal Trends</h2><div class="warning-box warning">Temporal trends reflect the analyzed dataset only. They can be affected by sampling year, BioProject, country, lineage, and missing collection-year metadata.</div>
 <p>Prevalence trends use yearly percentages with genome-count denominators. Database burden is summarized as mean detected features per genome by collection year.</p>
 <iframe src="figures/temporal_trends.html" title="Temporal trends interactive report"></iframe>
 {temporal_figures_html}
 {temporal_table_html}
 <div class="downloads"><a href="figures/temporal_trends.html">Open interactive temporal report</a><a href="key_tables/temporal_database_burden.tsv">Download database burden by year</a><a href="key_tables/temporal_feature_prevalence.tsv">Download yearly feature prevalence</a><a href="key_tables/temporal_trend_summary.tsv">Download temporal trend summary</a><a href="key_tables/temporal_increasing_features.tsv">Download increasing features</a><a href="key_tables/temporal_decreasing_features.tsv">Download decreasing features</a></div></section>
-<section id="cooccurrence"><h2>Co-occurrence / Genomic Context</h2><div class="warning">Sample-level co-occurrence does not prove physical linkage. Same-contig and proximity evidence are stronger context signals, but do not prove transfer, expression, phenotype, or plasmid localization.</div>
+<section id="cooccurrence" class="section"><h2>Co-occurrence / Genomic Context</h2><div class="warning-box warning">Sample-level co-occurrence does not prove physical linkage. Same-contig and proximity evidence are stronger context signals, but do not prove transfer, expression, phenotype, or plasmid localization.</div>
 {cooccurrence_summary_html}
 <iframe src="figures/cooccurrence_context.html" title="Co-occurrence and genomic context interactive report"></iframe>
 {cooccurrence_figures_html}
@@ -11594,7 +12040,7 @@ th {{ background: #f0f4f8; }}
 <h3>Genomic context evidence</h3>
 {context_table_html}
 <div class="downloads"><a href="figures/cooccurrence_context.html">Open interactive co-occurrence report</a><a href="cooccurrence_tables.zip">Download all co-occurrence tables ZIP</a><a href="cooccurrence_figures.zip">Download all co-occurrence figures ZIP</a><a href="tables/cooccurrence_pair_summary.tsv">Download pair summary</a><a href="tables/cooccurrence_heatmap_matrix.tsv">Download heatmap matrix</a><a href="tables/cooccurrence_network_edges.tsv">Download network edges</a><a href="tables/cooccurrence_network_nodes.tsv">Download network nodes</a><a href="tables/genomic_context_evidence.tsv">Download genomic context evidence</a><a href="tables/contig_neighborhoods.tsv">Download contig neighborhoods</a></div></section>
-<section id="metadata-associations"><h2>Metadata Associations</h2><div class="warning">Metadata associations are exploratory enrichment-style screens. They may reflect sampling, BioProject structure, lineage composition, geography, collection year, or missing metadata and should not be interpreted as causal.</div>
+<section id="metadata-associations" class="section"><h2>Metadata Associations</h2><div class="warning-box warning">Metadata associations are exploratory enrichment-style screens. They may reflect sampling, BioProject structure, lineage composition, geography, collection year, or missing metadata and should not be interpreted as causal.</div>
 {metadata_summary_html}
 <h3>Metadata usability</h3>
 {metadata_usability_cards}
@@ -11608,7 +12054,7 @@ th {{ background: #f0f4f8; }}
 <h3>Top multi-group burden tests</h3>
 {metadata_omnibus_table_html}
 <div class="downloads"><a href="figures/metadata_associations.html">Open interactive metadata association report</a><a href="metadata_association_tables.zip">Download all metadata association tables ZIP</a><a href="metadata_association_figures.zip">Download all metadata association figures ZIP</a><a href="tables/metadata_usability_summary.tsv">Download metadata usability summary</a><a href="tables/metadata_feature_enrichment.tsv">Download feature enrichment</a><a href="tables/metadata_burden_associations.tsv">Download burden associations</a><a href="tables/metadata_category_enrichment.tsv">Download category enrichment</a><a href="tables/metadata_burden_omnibus.tsv">Download burden omnibus tests</a><a href="tables/metadata_category_omnibus.tsv">Download category omnibus tests</a><a href="tables/metadata_association_summary.tsv">Download metadata association summary</a></div></section>
-<section id="lineage"><h2>Lineage / Clonal Structure</h2><div class="warning">Lineage summaries are exploratory and do not replace phylogenetic analysis. Apparent metadata associations may reflect clonal structure, BioProject sampling, geography, or temporal sampling.</div>
+<section id="lineage" class="section"><h2>Lineage / Clonal Structure</h2><div class="warning-box warning">Lineage summaries are exploratory and do not replace phylogenetic analysis. Apparent metadata associations may reflect clonal structure, BioProject sampling, geography, or temporal sampling.</div>
 {lineage_cards_html}
 {lineage_summary_html}
 {lineage_written_html}
@@ -11625,7 +12071,7 @@ th {{ background: #f0f4f8; }}
 <h3>Selected feature lineage report</h3>
 {lineage_presence_table_html}
 <div class="downloads"><a href="figures/lineage_clonal_structure.html">Open interactive lineage report</a><a href="lineage_tables.zip">Download lineage tables ZIP</a><a href="lineage_figures.zip">Download lineage figures ZIP</a><a href="tables/lineage_summary.tsv">Download sample lineage summary</a><a href="tables/lineage_distribution.tsv">Download lineage distribution</a><a href="tables/lineage_metadata_overlap.tsv">Download metadata-lineage overlap</a><a href="tables/lineage_feature_burden.tsv">Download lineage feature burden</a><a href="tables/lineage_feature_enrichment.tsv">Download lineage feature enrichment</a><a href="tables/lineage_adjusted_top_findings.tsv">Download lineage-adjusted top findings</a><a href="tables/lineage_feature_presence.tsv">Download selected feature lineage table</a><a href="tables/lineage_written_summaries.tsv">Download written summaries</a></div></section>
-<section id="diversity"><h2>Diversity / Pan-feature Summary</h2><div class="warning">Diversity summaries reflect detected annotation features, not complete biological diversity. Results depend on selected databases, genome quality, sample composition, and feature-calling tools.</div>
+<section id="diversity" class="section"><h2>Diversity / Pan-feature Summary</h2><div class="warning-box warning">Diversity summaries reflect detected annotation features, not complete biological diversity. Results depend on selected databases, genome quality, sample composition, and feature-calling tools.</div>
 {diversity_cards_html}
 {diversity_written_html}
 <iframe src="figures/diversity_analysis.html" title="Diversity and pan-feature summary interactive report"></iframe>
@@ -11637,28 +12083,28 @@ th {{ background: #f0f4f8; }}
 <h3>Metadata-stratified diversity</h3>
 {diversity_metadata_table_html}
 <div class="downloads"><a href="figures/diversity_analysis.html">Open interactive diversity report</a><a href="diversity_tables.zip">Download diversity tables ZIP</a><a href="diversity_figures.zip">Download diversity figures ZIP</a><a href="tables/diversity_feature_richness_by_sample.tsv">Download feature richness by sample</a><a href="tables/diversity_database_by_sample.tsv">Download database diversity by sample</a><a href="tables/diversity_database_by_sample_wide.tsv">Download wide database diversity</a><a href="tables/diversity_core_common_accessory_rare_features.tsv">Download feature class table</a><a href="tables/diversity_core_accessory_summary_by_database.tsv">Download core/accessory summary</a><a href="tables/diversity_pan_feature_accumulation.tsv">Download pan-feature accumulation</a><a href="tables/diversity_jaccard_distance_matrix.tsv">Download Jaccard matrix</a><a href="tables/diversity_jaccard_pairs.tsv">Download Jaccard pairs</a><a href="tables/diversity_by_metadata_group.tsv">Download metadata-stratified diversity</a><a href="tables/diversity_written_summaries.tsv">Download written summaries</a></div></section>
-<section id="notable-genomes"><h2>Notable Genomes / Genome Prioritization</h2><div class="warning">This prioritization is for research review only. It is not a clinical risk score.</div>
+<section id="notable-genomes" class="section"><h2>Notable Genomes / Genome Prioritization</h2><div class="warning-box warning">This prioritization is for research review only. It is not a clinical risk score.</div>
 <p>Genomes are ranked by transparent annotation-burden, genomic-context, rare-feature, temporal-trend, and variation components with warning penalties.</p>
 {notable_figures_html}
 {notable_table_html}
 <div class="downloads"><a href="tables/notable_genomes.tsv">Download notable genomes</a><a href="tables/notable_genome_score_components.tsv">Download score components</a><a href="figures/notable_genomes_ranked.data.tsv">Download plotted data</a></div></section>
-<section id="ordination"><h2>Feature-profile Ordination</h2><div class="warning">Feature-profile ordination reflects annotation similarity, not whole-genome phylogeny.</div>
+<section id="ordination" class="section"><h2>Feature-profile Ordination</h2><div class="warning-box warning">Feature-profile ordination reflects annotation similarity, not whole-genome phylogeny.</div>
 <p>PCoA coordinates are computed from Jaccard feature-profile distances when available and colored by lineage, country, source, or BioProject in companion figures.</p>
 {ordination_figures_html}
 {ordination_table_html}
 <div class="downloads"><a href="tables/feature_profile_ordination.tsv">Download ordination table</a><a href="figures/feature_profile_pcoa_by_lineage.data.tsv">Download PCoA plotted data</a></div></section>
-<section id="concordance"><h2>Concordance / Database Agreement</h2><div class="warning">Tool-specific calls are retained for review. Differences may reflect database scope, thresholds, naming, or partial hits.</div>
+<section id="concordance" class="section"><h2>Concordance / Database Agreement</h2><div class="warning-box warning">Tool-specific calls are retained for review. Differences may reflect database scope, thresholds, naming, or partial hits.</div>
 {concordance_figures_html}
 <h3>Concordance summary</h3>
 {concordance_summary_table_html}
 <h3>Feature-level AMR concordance</h3>
 {concordance_feature_table_html}
 <div class="downloads"><a href="tables/database_concordance_summary.tsv">Download concordance summary</a><a href="tables/amr_concordance_feature_level.tsv">Download feature-level concordance</a><a href="tables/amr_concordance_by_sample.tsv">Download sample-level concordance</a></div></section>
-<section id="evidence"><h2>Evidence & Confidence</h2><p>This synthesis classifies report findings by sample support, statistical evidence, genomic-context level, and warning flags. Most findings should be treated as exploratory unless support and warning labels indicate otherwise.</p>
+<section id="evidence" class="section"><h2>Evidence & Confidence</h2><p>This synthesis classifies report findings by sample support, statistical evidence, genomic-context level, and warning flags. Most findings should be treated as exploratory unless support and warning labels indicate otherwise.</p>
 {evidence_figures_html}
 {confidence_table_html}
 <div class="downloads"><a href="tables/evidence_summary.tsv">Download evidence summary</a><a href="tables/finding_confidence_summary.tsv">Download finding confidence summary</a><a href="tables/evidence_by_section.tsv">Download evidence by section</a></div></section>
-<section id="warnings"><h2>Warnings & Limitations</h2><div class="warning">Warnings do not necessarily invalidate the run, but they affect interpretation. Complete TSV outputs are preserved even when report-facing figures are capped.</div>
+<section id="warnings" class="section"><h2>Warnings & Limitations</h2><div class="warning-box warning">Warnings do not necessarily invalidate the run, but they affect interpretation. Complete TSV outputs are preserved even when report-facing figures are capped.</div>
 {warnings_figures_html}
 <h3>Top warnings</h3>
 {warnings_table_html}
@@ -11669,11 +12115,25 @@ th {{ background: #f0f4f8; }}
 <h3>Report caps</h3>
 {report_cap_table_html}
 <div class="downloads"><a href="tables/warnings_and_limitations.tsv">Download warnings and limitations</a><a href="tables/warnings_by_section.tsv">Download warnings by section</a><a href="tables/module_warning_summary.tsv">Download module warning summary</a><a href="tables/report_cap_summary.tsv">Download report cap summary</a></div></section>
-<section id="downloads"><h2>Downloads / Important Files</h2><p>Use these files to navigate the report-facing outputs and complete reproducibility artifacts.</p>
+<section id="downloads" class="section"><h2>Downloads / Important Files</h2><p>Use these files to navigate the report-facing outputs and complete reproducibility artifacts.</p>
 <div class="downloads"><a href="../basic/enriched_genome_dataset.csv">Download enriched dataset CSV</a><a href="../basic/enriched_genome_dataset.tsv">Download enriched dataset TSV</a><a href="downloads/important_tables.zip">Download important tables ZIP</a><a href="downloads/important_figures.zip">Download important figures ZIP</a><a href="downloads/important_report_assets.zip">Download report assets ZIP</a><a href="../panr2_inputs/report/panr2_handoff_index.html">Open complete output bundle</a><a href="../panr2_inputs/manifest/reproducibility_manifest.json">Download reproducibility manifest</a><a href="../panr2_inputs/manifest/feature_contract.json">Download feature contract</a></div>
+{download_cards_html}
 {file_index_table_html}
 <div class="downloads"><a href="tables/important_file_index.tsv">Download important file index</a><a href="tables/download_manifest.tsv">Download download manifest</a><a href="../panr2_inputs/features/all_features.tsv">Download complete feature table</a><a href="../panr2_inputs/manifest/schema_validation_summary.txt">Download schema validation summary</a></div></section>
-</main></body></html>
+<a class="back-to-top" href="#top">Back to top</a>
+</main>
+<script>
+document.querySelectorAll('.table-search').forEach(function(input) {{
+  input.addEventListener('input', function() {{
+    const table = input.closest('.table-card').querySelector('tbody');
+    const query = input.value.toLowerCase();
+    table.querySelectorAll('tr').forEach(function(row) {{
+      row.style.display = row.textContent.toLowerCase().includes(query) ? '' : 'none';
+    }});
+  }});
+}});
+</script>
+</body></html>
 """,
         encoding="utf-8",
     )
