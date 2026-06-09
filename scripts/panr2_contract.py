@@ -252,6 +252,21 @@ def read_table(path: Path) -> list[dict[str, str]]:
     ]
 
 
+def iter_table(path: Path):
+    if not path.exists() or path.stat().st_size == 0:
+        return
+    delimiter = detect_delimiter(path)
+    with path.open(newline="", errors="ignore") as handle:
+        filtered_lines = (
+            line
+            for line in handle
+            if line.strip() and (not line.lstrip().startswith("#") or line.lstrip().startswith("#FILE"))
+        )
+        reader = csv.DictReader(filtered_lines, delimiter=delimiter)
+        for row in reader:
+            yield {str(key).strip(): str(value or "").strip() for key, value in row.items() if key is not None}
+
+
 def read_header(path: Path) -> list[str]:
     if not path.exists() or path.stat().st_size == 0:
         return []
@@ -11022,7 +11037,10 @@ def write_important_final_interpretation_outputs(
     )
 
     # Warnings and limitations.
-    warnings_rows = []
+    warning_count_total = 0
+    warnings_by_section_counter: dict[tuple[str, str], int] = Counter()
+    warnings_by_severity_counter: Counter[str] = Counter()
+    warning_summary_map: dict[tuple[str, str, str, str, str, str, str], dict[str, object]] = {}
 
     def severity_for_warning(warning_type: str, section: str = "") -> str:
         text = f"{warning_type} {section}".lower()
@@ -11036,13 +11054,52 @@ def write_important_final_interpretation_outputs(
             return "info"
         return "low"
 
+    def add_warning_summary(row: dict[str, str]) -> None:
+        key = (
+            row.get("section", ""),
+            row.get("severity", ""),
+            row.get("warning_type", ""),
+            row.get("affected_database", ""),
+            row.get("source_file", ""),
+            row.get("description", ""),
+            row.get("recommended_action", ""),
+        )
+        item = warning_summary_map.setdefault(
+            key,
+            {
+                "section": key[0],
+                "severity": key[1],
+                "warning_type": key[2],
+                "affected_database": key[3],
+                "source_file": key[4],
+                "description": key[5],
+                "recommended_action": key[6],
+                "warning_count": 0,
+                "affected_rows_total": 0,
+                "example_features": [],
+                "example_samples": [],
+            },
+        )
+        item["warning_count"] = int(item["warning_count"]) + 1
+        affected_rows = _float_or_none(row.get("affected_rows", ""))
+        if affected_rows is not None:
+            item["affected_rows_total"] = int(item["affected_rows_total"]) + int(affected_rows)
+        feature = row.get("affected_feature", "")
+        if feature and feature not in item["example_features"] and len(item["example_features"]) < 8:
+            item["example_features"].append(feature)
+        sample = row.get("affected_samples", "")
+        if sample and sample not in item["example_samples"] and len(item["example_samples"]) < 8:
+            item["example_samples"].append(sample)
+
     def add_warning(section: str, warning_type: str, description: str, source_file: Path, affected_database: str = "", affected_feature: str = "", affected_samples: str = "", affected_rows: str = "") -> None:
+        nonlocal warning_count_total
         if not warning_type:
             return
         for warning in [item.strip() for item in re.split(r"[;,|]", warning_type) if item.strip()]:
             severity = severity_for_warning(warning, section)
-            warnings_rows.append({
-                "warning_id": f"W{len(warnings_rows) + 1:05d}",
+            warning_count_total += 1
+            row = {
+                "warning_id": f"W{warning_count_total:05d}",
                 "section": section,
                 "severity": severity,
                 "warning_type": warning,
@@ -11053,7 +11110,41 @@ def write_important_final_interpretation_outputs(
                 "description": description,
                 "recommended_action": "Review denominators, complete TSVs, lineage/BioProject balance, and raw tool outputs before interpretation.",
                 "source_file": str(source_file.relative_to(important_dir)) if important_dir in source_file.parents else str(source_file),
+            }
+            add_warning_summary(row)
+            warnings_by_section_counter[(section, severity)] += 1
+            warnings_by_severity_counter[severity] += 1
+
+    def warning_summary_rows_from_map() -> list[dict[str, str]]:
+        severity_rank = {"critical": 0, "high": 1, "moderate": 2, "low": 3, "info": 4}
+        summary_rows = []
+        for item in warning_summary_map.values():
+            summary_rows.append({
+                "warning_id": "",
+                "section": str(item["section"]),
+                "severity": str(item["severity"]),
+                "warning_type": str(item["warning_type"]),
+                "affected_database": str(item["affected_database"]),
+                "affected_feature": "",
+                "affected_samples": "",
+                "warning_count": str(item["warning_count"]),
+                "affected_rows_total": str(item["affected_rows_total"]),
+                "affected_rows": str(item["affected_rows_total"]),
+                "example_features": "; ".join(item["example_features"]),
+                "example_samples": "; ".join(item["example_samples"]),
+                "description": str(item["description"]),
+                "recommended_action": str(item["recommended_action"]),
+                "source_file": str(item["source_file"]),
             })
+        return sorted(
+            summary_rows,
+            key=lambda row: (
+                severity_rank.get(row.get("severity", ""), 9),
+                -int(_float_or_none(row.get("warning_count", "")) or 0),
+                row.get("section", ""),
+                row.get("warning_type", ""),
+            ),
+        )
 
     warning_sources = [
         ("Geographic Distribution", tables / "geographic_warning_summary.tsv", "warning_flags"),
@@ -11069,7 +11160,7 @@ def write_important_final_interpretation_outputs(
         ("Variations", important_dir / "key_tables" / "feature_variation_summary.tsv", "warning_flags"),
     ]
     for section, path, flag_field in warning_sources:
-        for row in read_table(path):
+        for row in iter_table(path):
             if row.get(flag_field):
                 add_warning(section, row.get(flag_field, ""), f"Warning flags reported in {path.name}.", path, row.get("database", ""), row.get("feature_id", ""), row.get("assembly_accession", ""), "1")
     module_status_rows = read_table(out_dir / "manifest" / "module_status_summary.tsv")
@@ -11113,15 +11204,26 @@ def write_important_final_interpretation_outputs(
             add_warning("Feature Contract", "schema_validation_warning", schema_text.strip().splitlines()[0] if schema_text.strip() else "Schema validation warning.", schema_summary_path)
     warnings_path = tables / "warnings_and_limitations.tsv"
     warning_fields = ["warning_id", "section", "severity", "warning_type", "affected_database", "affected_feature", "affected_samples", "affected_rows", "description", "recommended_action", "source_file"]
-    write_rows(warnings_path, warnings_rows, warning_fields)
-    warnings_by_section_counter: dict[tuple[str, str], int] = Counter((row["section"], row["severity"]) for row in warnings_rows)
+    warning_summary_fields = ["section", "severity", "warning_type", "affected_database", "warning_count", "affected_rows_total", "example_features", "example_samples", "description", "recommended_action", "source_file"]
+    warnings_summary_rows = warning_summary_rows_from_map()
+    compact_warning_rows = []
+    for index, row in enumerate(warnings_summary_rows, 1):
+        compact_row = dict(row)
+        compact_row["warning_id"] = f"W{index:05d}"
+        compact_row["affected_feature"] = compact_row.get("example_features", "")
+        compact_row["affected_samples"] = compact_row.get("example_samples", "")
+        compact_row["affected_rows"] = compact_row.get("affected_rows_total", "")
+        compact_warning_rows.append(compact_row)
+    write_rows(warnings_path, compact_warning_rows, warning_fields)
+    warnings_summary_path = tables / "warnings_and_limitations_summary.tsv"
+    write_rows(warnings_summary_path, warnings_summary_rows, warning_summary_fields)
     warnings_by_section_rows = [
         {"section": section, "severity": severity, "warning_count": str(count)}
         for (section, severity), count in sorted(warnings_by_section_counter.items())
     ]
     warnings_by_section_path = tables / "warnings_by_section.tsv"
     write_rows(warnings_by_section_path, warnings_by_section_rows, ["section", "severity", "warning_count"])
-    severity_rows = [{"severity": severity, "warning_count": str(count)} for severity, count in sorted(Counter(row["severity"] for row in warnings_rows).items())]
+    severity_rows = [{"severity": severity, "warning_count": str(count)} for severity, count in sorted(warnings_by_severity_counter.items())]
     add_standard_figure(
         "warnings_summary",
         severity_rows,
@@ -11143,7 +11245,8 @@ def write_important_final_interpretation_outputs(
     required_files = [
         (sample_dir / "basic" / "enriched_genome_dataset.csv", "main user-facing files", "Enriched genome dataset CSV", "all users", "complete", "Open first for sample-level review."),
         (sample_dir / "basic" / "enriched_genome_dataset.tsv", "main user-facing files", "Enriched genome dataset TSV", "all users", "complete", "Open first for sample-level review."),
-        (warnings_path, "important tables", "Warnings and limitations", "all users", "complete", "Review before interpreting findings."),
+        (warnings_summary_path, "important tables", "Warnings and limitations summary", "all users", "summary", "Start here before opening the compact warning table."),
+        (warnings_path, "important tables", "Compact warnings and limitations", "technical users", "summary", "Use for audit/debugging after reviewing the warning category summary."),
         (notable_path, "important tables", "Notable genomes research prioritization", "research users", "complete", "Prioritize genomes for follow-up review."),
         (finding_confidence_path, "important tables", "Finding confidence summary", "research users", "complete", "Review support and warning labels."),
         (out_dir / "manifest" / "reproducibility_manifest.json", "reproducibility files", "Reproducibility manifest", "technical users", "complete", "Track run provenance."),
@@ -11197,6 +11300,7 @@ def write_important_final_interpretation_outputs(
         "important_finding_confidence_summary": str(finding_confidence_path),
         "important_evidence_by_section": str(evidence_by_section_path),
         "important_warnings_and_limitations": str(warnings_path),
+        "important_warnings_and_limitations_summary": str(warnings_summary_path),
         "important_warnings_by_section": str(warnings_by_section_path),
         "important_module_warning_summary": str(module_warning_path),
         "important_report_cap_summary": str(report_cap_path),
@@ -11291,12 +11395,23 @@ def write_important_results_report(
     concordance_feature_rows = read_table(important_dir / "tables" / "amr_concordance_feature_level.tsv")
     confidence_rows = read_table(important_dir / "tables" / "finding_confidence_summary.tsv")
     evidence_summary_rows = read_table(important_dir / "tables" / "evidence_summary.tsv")
-    warnings_rows = read_table(important_dir / "tables" / "warnings_and_limitations.tsv")
+    warnings_summary_rows = read_table(important_dir / "tables" / "warnings_and_limitations_summary.tsv")
+    warnings_rows = [] if warnings_summary_rows else read_table(important_dir / "tables" / "warnings_and_limitations.tsv")
     warnings_by_section_rows = read_table(important_dir / "tables" / "warnings_by_section.tsv")
     module_warning_rows = read_table(important_dir / "tables" / "module_warning_summary.tsv")
     report_cap_rows = read_table(important_dir / "tables" / "report_cap_summary.tsv")
     file_index_rows = read_table(important_dir / "tables" / "important_file_index.tsv")
     download_manifest_rows = read_table(important_dir / "tables" / "download_manifest.tsv")
+    report_warning_count = sum(int(_float_or_none(row.get("warning_count", "")) or 0) for row in warnings_summary_rows) if warnings_summary_rows else len(warnings_rows)
+    cards = [
+        ("Input genomes", str(len(dataset_rows)), "genomes in report"),
+        ("QC pass", f"{qc_pass}/{len(dataset_rows)}" if dataset_rows else "0", "post-QC genomes"),
+        ("Total features", str(total_features), "standardized rows"),
+        ("Databases detected", str(len(databases)), ", ".join(databases[:4]) + ("..." if len(databases) > 4 else "")),
+        ("Warnings", str(report_warning_count), f"{len(warnings_summary_rows)} categories" if warnings_summary_rows else "complete warning rows"),
+        ("Schema validation", schema_status, "feature contract status"),
+    ]
+    card_html = _report_summary_cards_html(cards)
     top_prevalence = sorted(prevalence_rows, key=lambda row: (row.get("database", ""), -(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("feature_id", "")))[:20]
     top_geographic_burden = sorted(
         [
@@ -11387,9 +11502,10 @@ def write_important_results_report(
         ),
     )[:20]
     top_warnings = sorted(
-        warnings_rows,
+        warnings_summary_rows or warnings_rows,
         key=lambda row: (
             {"critical": 0, "high": 1, "moderate": 2, "low": 3, "info": 4}.get(row.get("severity", ""), 9),
+            -int(_float_or_none(row.get("warning_count", "")) or 0),
             row.get("section", ""),
             row.get("warning_type", ""),
         ),
@@ -11422,7 +11538,7 @@ def write_important_results_report(
     concordance_summary_table_html = _html_table(concordance_summary_rows, ["comparison", "concordance_label", "feature_count", "warning_flags"], max_rows=20)
     concordance_feature_table_html = _html_table(top_concordance_features, ["feature_id", "feature_name", "drug_class", "called_by_both", "abricate_only", "amrfinderplus_only", "total_positive_genomes", "concordance_label", "warning_flags"], max_rows=20)
     confidence_table_html = _html_table(top_confidence, ["finding_id", "section", "database", "feature_id", "finding_text", "support_label", "evidence_level", "sample_size", "effect_size", "q_value", "confidence_label", "recommended_interpretation"], max_rows=20)
-    warnings_table_html = _html_table(top_warnings, ["warning_id", "section", "severity", "warning_type", "affected_database", "affected_feature", "description", "recommended_action", "source_file"], max_rows=30)
+    warnings_table_html = _html_table(top_warnings, ["section", "severity", "warning_type", "affected_database", "warning_count", "affected_rows_total", "example_features", "example_samples", "description", "recommended_action", "source_file"], max_rows=30)
     warnings_by_section_table_html = _html_table(warnings_by_section_rows, ["section", "severity", "warning_count"], max_rows=30)
     module_warning_table_html = _html_table(module_warning_rows, ["module", "status", "enabled", "samples_processed", "samples_failed", "feature_rows_created", "severity", "message"], max_rows=30)
     report_cap_table_html = _html_table(report_cap_rows, ["setting", "value", "message", "warning_flags"], max_rows=30)
@@ -11946,7 +12062,7 @@ def write_important_results_report(
         ("downloads/important_tables.zip", "Important tables ZIP", "All curated report-facing TSV tables in one archive.", "Use for downstream analysis and review."),
         ("downloads/important_figures.zip", "Important figures ZIP", "Publication-friendly PNG/SVG/PDF/data figure outputs.", "Use for presentations and manuscripts."),
         ("downloads/important_report_assets.zip", "Report assets ZIP", "Report HTML, figures, tables, and related assets.", "Use to move the important report as a bundle."),
-        ("tables/warnings_and_limitations.tsv", "Warnings table", "Structured warning descriptions, severity, affected rows, and recommended actions.", "Review before interpreting findings."),
+        ("tables/warnings_and_limitations_summary.tsv", "Warnings summary", "Compact warning categories with counts, examples, and recommended actions.", "Start here before opening the complete raw warning table."),
         ("tables/notable_genomes.tsv", "Notable genomes", "Transparent research-prioritization output with score explanations.", "Use to choose genomes for manual review."),
         ("tables/finding_confidence_summary.tsv", "Finding confidence", "Cross-section finding confidence labels and recommended interpretation.", "Use to triage strongest and exploratory findings."),
         ("../panr2_inputs/manifest/feature_contract.json", "Feature contract", "Machine-readable feature schema and allowed values.", "Use for reproducibility and parser validation."),
@@ -12207,7 +12323,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 {module_warning_table_html}
 <h3>Report caps</h3>
 {report_cap_table_html}
-<div class="downloads"><a href="tables/warnings_and_limitations.tsv">Download warnings and limitations</a><a href="tables/warnings_by_section.tsv">Download warnings by section</a><a href="tables/module_warning_summary.tsv">Download module warning summary</a><a href="tables/report_cap_summary.tsv">Download report cap summary</a></div></section>
+<div class="downloads"><a href="tables/warnings_and_limitations_summary.tsv">Download compact warning summary</a><a href="tables/warnings_and_limitations.tsv">Download compact warnings table</a><a href="tables/warnings_by_section.tsv">Download warnings by section</a><a href="tables/module_warning_summary.tsv">Download module warning summary</a><a href="tables/report_cap_summary.tsv">Download report cap summary</a></div></section>
 <section id="downloads" class="section"><h2>Downloads / Important Files</h2><p>Use these files to navigate the report-facing outputs and complete reproducibility artifacts.</p>
 <div class="downloads"><a href="../basic/enriched_genome_dataset.csv">Download enriched dataset CSV</a><a href="../basic/enriched_genome_dataset.tsv">Download enriched dataset TSV</a><a href="downloads/important_tables.zip">Download important tables ZIP</a><a href="downloads/important_figures.zip">Download important figures ZIP</a><a href="downloads/important_report_assets.zip">Download report assets ZIP</a><a href="../panr2_inputs/report/panr2_handoff_index.html">Open complete output bundle</a><a href="../panr2_inputs/manifest/reproducibility_manifest.json">Download reproducibility manifest</a><a href="../panr2_inputs/manifest/feature_contract.json">Download feature contract</a></div>
 {download_cards_html}

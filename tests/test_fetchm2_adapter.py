@@ -522,6 +522,7 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "evidence_summary.tsv",
                 "finding_confidence_summary.tsv",
                 "evidence_by_section.tsv",
+                "warnings_and_limitations_summary.tsv",
                 "warnings_and_limitations.tsv",
                 "warnings_by_section.tsv",
                 "module_warning_summary.tsv",
@@ -647,6 +648,8 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue({"confidence_label", "recommended_interpretation"}.issubset(confidence.columns))
             warnings = pd.read_csv(sample_dir / "important" / "tables" / "warnings_and_limitations.tsv", sep="\t")
             self.assertTrue({"warning_id", "section", "severity", "warning_type", "recommended_action"}.issubset(warnings.columns))
+            warning_summary = pd.read_csv(sample_dir / "important" / "tables" / "warnings_and_limitations_summary.tsv", sep="\t")
+            self.assertTrue({"section", "severity", "warning_type", "warning_count", "recommended_action"}.issubset(warning_summary.columns))
             download_manifest = pd.read_csv(sample_dir / "important" / "tables" / "download_manifest.tsv", sep="\t")
             self.assertIn("basic/enriched_genome_dataset.csv", set(download_manifest["file_path"]))
             report_controls = pd.read_csv(outputs["report_controls"], sep="\t")

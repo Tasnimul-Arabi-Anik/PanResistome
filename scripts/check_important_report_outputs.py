@@ -42,6 +42,7 @@ REQUIRED_TABLES = [
     "diversity_report_summary.tsv",
     "notable_genomes.tsv",
     "finding_confidence_summary.tsv",
+    "warnings_and_limitations_summary.tsv",
     "warnings_and_limitations.tsv",
     "download_manifest.tsv",
 ]
@@ -56,6 +57,7 @@ REQUIRED_FINAL_TABLES = [
     "evidence_summary.tsv",
     "finding_confidence_summary.tsv",
     "evidence_by_section.tsv",
+    "warnings_and_limitations_summary.tsv",
     "warnings_and_limitations.tsv",
     "warnings_by_section.tsv",
     "module_warning_summary.tsv",
