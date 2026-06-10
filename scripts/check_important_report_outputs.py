@@ -67,6 +67,7 @@ REQUIRED_FINAL_TABLES = [
 ]
 
 REQUIRED_DOWNLOADS = [
+    "important_summary_tables.zip",
     "important_tables.zip",
     "important_figures.zip",
     "important_report_assets.zip",

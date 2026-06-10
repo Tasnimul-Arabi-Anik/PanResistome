@@ -4791,6 +4791,12 @@ def _write_bar_png(path: Path, rows: list[dict[str, str]], value_field: str) -> 
     max_value = max(values) if values else 1.0
     if max_value <= 0:
         max_value = 1.0
+    # Lightweight PNG previews cannot render text, so include axes/gridlines to
+    # avoid bare floating bars. SVG remains the labeled canonical preview.
+    for x in [left + int(plot_width * frac / 4) for frac in range(5)]:
+        rect(x, top - 10, x + 1, top + row_height * max(len(rows), 1) + 4, (217, 226, 236))
+    rect(left, top + row_height * max(len(rows), 1) + 4, left + plot_width, top + row_height * max(len(rows), 1) + 5, (159, 179, 200))
+    rect(left, top - 10, left + 1, top + row_height * max(len(rows), 1) + 5, (159, 179, 200))
     for idx, value in enumerate(values):
         y = top + idx * row_height
         bar_width = int(value / max_value * plot_width)
@@ -5163,6 +5169,8 @@ def _write_cooccurrence_heatmap_svg(path: Path, rows: list[dict[str, str]], titl
     height = max(320, top + cell * max(len(y_features), 1) + 50)
     by_pair = {(row.get("feature_a_id", ""), row.get("feature_b_id", "")): row for row in rows}
     parts = _svg_base(width, height, title, "Red = significant positive association; blue = significant negative association; gray = not significant or below support threshold.")
+    parts.append(f"<text x='{left}' y='{top - 58}' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('muted')}'>Columns: feature A</text>")
+    parts.append(f"<text x='24' y='{top - 28}' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('muted')}'>Rows: feature B</text>")
     for x_idx, feature in enumerate(x_features):
         x = left + x_idx * cell + 18
         label = _short_label(feature, 22)
@@ -5186,6 +5194,11 @@ def _write_cooccurrence_heatmap_svg(path: Path, rows: list[dict[str, str]], titl
             parts.append(f"<rect x='{x}' y='{y}' width='{cell - 2}' height='{cell - 2}' rx='2' fill='{fill}' stroke='#cbd5e1'><title>{html.escape(tip)}</title></rect>")
             if label:
                 parts.append(f"<text x='{x + 4}' y='{y + 20}' font-family='{REPORT_SVG_FONT}' font-size='10' fill='#111827'>{html.escape(label)}</text>")
+    legend_x = left
+    legend_y = height - 24
+    parts.append(f"<rect x='{legend_x}' y='{legend_y - 12}' width='16' height='12' fill='{_plot_color('blue')}'/><text x='{legend_x + 22}' y='{legend_y - 2}' font-family='{REPORT_SVG_FONT}' font-size='11' fill='{_plot_color('muted')}'>negative</text>")
+    parts.append(f"<rect x='{legend_x + 98}' y='{legend_y - 12}' width='16' height='12' fill='{_plot_color('red')}'/><text x='{legend_x + 120}' y='{legend_y - 2}' font-family='{REPORT_SVG_FONT}' font-size='11' fill='{_plot_color('muted')}'>positive</text>")
+    parts.append(f"<rect x='{legend_x + 192}' y='{legend_y - 12}' width='16' height='12' fill='#f1f5f9' stroke='#cbd5e1'/><text x='{legend_x + 214}' y='{legend_y - 2}' font-family='{REPORT_SVG_FONT}' font-size='11' fill='{_plot_color('muted')}'>not significant / insufficient</text>")
     parts.append("</svg>\n")
     path.write_text("".join(parts), encoding="utf-8")
 
@@ -5218,6 +5231,8 @@ def _write_cooccurrence_heatmap_png(path: Path, rows: list[dict[str, str]]) -> N
             return (int(219 - 150 * intensity), int(234 - 120 * intensity), 254)
         return (241, 245, 249)
 
+    rect(left - 1, top - 1, left + cell * max(len(x_features), 1), top, (159, 179, 200))
+    rect(left - 1, top - 1, left, top + cell * max(len(y_features), 1), (159, 179, 200))
     for y_idx, y_feature in enumerate(y_features):
         for x_idx, x_feature in enumerate(x_features):
             x = left + x_idx * cell
@@ -5730,14 +5745,14 @@ def _write_diverging_heatmap_svg(path: Path, rows: list[dict[str, str]], title: 
     values = {(row.get(row_field, ""), row.get(column_field, "")): _float_or_none(row.get(value_field, "")) or 0.0 for row in rows}
     max_abs = max([abs(value) for value in values.values()] + [0.1])
     cell_w, cell_h = 96, 26
-    left, top = 282, 100
+    left, top = 282, 170
     width = max(1000, left + cell_w * max(len(column_labels), 1) + 80)
     height = max(270, top + cell_h * max(len(row_labels), 1) + 70)
     parts = _svg_base(width, height, title, "Red cells indicate enriched or higher values; blue cells indicate depleted or lower values; gray cells are near zero.")
     for cidx, column in enumerate(column_labels):
-        x = left + cidx * cell_w
+        x = left + cidx * cell_w + 8
         short = _short_label(column, 18)
-        parts.append(f"<text x='{x + 4}' y='{top - 16}' font-family='{REPORT_SVG_FONT}' font-size='11' fill='{_plot_color('muted')}'><title>{html.escape(column)}</title>{html.escape(short)}</text>")
+        parts.append(f"<text x='{x}' y='{top - 12}' font-family='{REPORT_SVG_FONT}' font-size='11' fill='{_plot_color('muted')}' transform='rotate(-48 {x} {top - 12})'><title>{html.escape(column)}</title>{html.escape(short)}</text>")
     for ridx, label in enumerate(row_labels):
         y = top + ridx * cell_h
         short_label = _short_label(label, 44)
@@ -5763,7 +5778,7 @@ def _write_diverging_heatmap_png(path: Path, rows: list[dict[str, str]], row_fie
     values = {(row.get(row_field, ""), row.get(column_field, "")): _float_or_none(row.get(value_field, "")) or 0.0 for row in rows}
     max_abs = max([abs(value) for value in values.values()] + [0.1])
     cell_w, cell_h = 92, 24
-    left, top = 260, 84
+    left, top = 260, 120
     width = max(840, left + cell_w * max(len(column_labels), 1) + 60)
     height = max(220, top + cell_h * max(len(row_labels), 1) + 50)
     pixels = [bytearray([248, 250, 252] * width) for _ in range(height)]
@@ -7564,23 +7579,62 @@ def write_important_cooccurrence_context_outputs(sample_dir: Path, out_dir: Path
         if any(row["feature_b_database"] == x_database and row["feature_a_database"] == y_database for row in pair_rows):
             x_database, y_database = y_database, x_database
         elif pair_rows:
-            x_database = pair_rows[0]["feature_a_database"]
-            y_database = pair_rows[0]["feature_b_database"]
+            database_pair_scores: dict[tuple[str, str], dict[str, float]] = defaultdict(lambda: {"significant": 0.0, "informative": 0.0, "max_phi": 0.0, "rows": 0.0})
+            for row in pair_rows:
+                pair = (row["feature_a_database"], row["feature_b_database"])
+                score = database_pair_scores[pair]
+                score["rows"] += 1
+                if row.get("significance_label") in {"significant_positive", "significant_negative"}:
+                    score["significant"] += 1
+                prevalence_a = _float_or_none(row.get("prevalence_a", "")) or 0.0
+                prevalence_b = _float_or_none(row.get("prevalence_b", "")) or 0.0
+                if 0.01 <= prevalence_a <= 0.95 and 0.01 <= prevalence_b <= 0.95:
+                    score["informative"] += 1
+                score["max_phi"] = max(score["max_phi"], abs(_float_or_none(row.get("phi_correlation", "")) or 0.0))
+            x_database, y_database = max(
+                database_pair_scores,
+                key=lambda pair: (
+                    pair[0] != pair[1],
+                    database_pair_scores[pair]["significant"],
+                    database_pair_scores[pair]["informative"],
+                    database_pair_scores[pair]["max_phi"],
+                    database_pair_scores[pair]["rows"],
+                ),
+            )
 
-    x_features = [
-        feature for feature, (_count, _prev) in sorted(
-            feature_prevalence.items(),
-            key=lambda item: (-item[1][0], item[0][0], item[0][1]),
-        )
-        if feature[0] == x_database
-    ][:top_n]
-    y_features = [
-        feature for feature, (_count, _prev) in sorted(
-            feature_prevalence.items(),
-            key=lambda item: (-item[1][0], item[0][0], item[0][1]),
-        )
-        if feature[0] == y_database
-    ][:top_n]
+    def ranked_heatmap_features(database: str, other_database: str, side: str) -> list[tuple[str, str]]:
+        scores: dict[tuple[str, str], tuple[int, float, int]] = {}
+        for row in pair_rows:
+            if side == "a":
+                if row.get("feature_a_database") != database or row.get("feature_b_database") != other_database:
+                    continue
+                feature = (database, row.get("feature_a_id", ""))
+            else:
+                if row.get("feature_b_database") != database or row.get("feature_a_database") != other_database:
+                    continue
+                feature = (database, row.get("feature_b_id", ""))
+            if not feature[1]:
+                continue
+            prevalence = feature_prevalence.get(feature, (0, 0.0))[1]
+            informative = int(0.01 <= prevalence <= 0.95)
+            significant = int(row.get("significance_label") in {"significant_positive", "significant_negative"})
+            phi = abs(_float_or_none(row.get("phi_correlation", "")) or 0.0)
+            count = feature_prevalence.get(feature, (0, 0.0))[0]
+            scores[feature] = max(scores.get(feature, (0, 0.0, 0)), (significant + informative, phi, count))
+        ranked = [feature for feature, _score in sorted(scores.items(), key=lambda item: (-item[1][0], -item[1][1], -item[1][2], item[0][1]))]
+        if len(ranked) < top_n:
+            fallback = [
+                feature for feature, (_count, prevalence) in sorted(
+                    feature_prevalence.items(),
+                    key=lambda item: (item[1][1] > 0.95, -item[1][0], item[0][1]),
+                )
+                if feature[0] == database and feature not in ranked
+            ]
+            ranked.extend(fallback)
+        return ranked[:top_n]
+
+    x_features = ranked_heatmap_features(x_database, y_database, "a")
+    y_features = ranked_heatmap_features(y_database, x_database, "b")
     by_pair = {}
     for row in pair_rows:
         key = ((row["feature_a_database"], row["feature_a_id"]), (row["feature_b_database"], row["feature_b_id"]))
@@ -8637,13 +8691,30 @@ def write_important_metadata_association_outputs(
             key=lambda row: -abs(_float_or_none(row.get("prevalence_difference", "")) or 0.0),
         )[:top_n]
     }
+    heatmap_group_sizes: dict[str, int] = {}
+    for row in feature_rows:
+        if row.get("database") != default_database or row.get("metadata_column") != default_column:
+            continue
+        group = row.get("metadata_group", "")
+        if group:
+            heatmap_group_sizes[group] = max(
+                heatmap_group_sizes.get(group, 0),
+                int(_float_or_none(row.get("group_n", "")) or 0),
+            )
+    heatmap_groups = {
+        group
+        for group, _size in sorted(heatmap_group_sizes.items(), key=lambda item: (-item[1], item[0]))[:12]
+    }
     heatmap_rows = [
         {
             **row,
             "feature_label": f"{row.get('database', '')}:{row.get('feature_id', '')}",
         }
         for row in feature_rows
-        if row.get("database") == default_database and row.get("metadata_column") == default_column and row.get("feature_id") in heatmap_features
+        if row.get("database") == default_database
+        and row.get("metadata_column") == default_column
+        and row.get("feature_id") in heatmap_features
+        and row.get("metadata_group") in heatmap_groups
     ]
     heatmap_base = f"metadata_enrichment_heatmap_{_safe_filename(default_database)}_{_safe_filename(default_column)}"
     heatmap_data = figures / f"{heatmap_base}.data.tsv"
@@ -10740,8 +10811,14 @@ def write_important_final_interpretation_outputs(
         if min_y == max_y:
             min_y -= 1
             max_y += 1
-        palette = ["#0f766e", "#be123c", "#1d4ed8", "#a16207", "#7c3aed", "#15803d", "#db2777", "#475569"]
-        groups = {value: palette[idx % len(palette)] for idx, value in enumerate(sorted({row.get(color_field, "") or "unknown" for row in rows}))}
+        palette = ["#0f766e", "#be123c", "#1d4ed8", "#a16207", "#7c3aed", "#15803d", "#db2777", "#475569", "#0891b2", "#c2410c"]
+        group_counts = Counter(row.get(color_field, "") or "unknown" for row in rows)
+        top_groups = {group for group, _count in group_counts.most_common(9)}
+        display_group = lambda row: (row.get(color_field, "") or "unknown") if (row.get(color_field, "") or "unknown") in top_groups else "Other"
+        group_names = [group for group, _count in group_counts.most_common(9)]
+        if len(group_counts) > len(top_groups):
+            group_names.append("Other")
+        groups = {value: palette[idx % len(palette)] for idx, value in enumerate(group_names)}
         parts = [
             f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
             "<rect width='100%' height='100%' fill='#f8fafc'/>",
@@ -10754,16 +10831,20 @@ def write_important_final_interpretation_outputs(
             y = top + plot_h - (number(row.get("PCoA2", "0")) - min_y) / (max_y - min_y) * plot_h
             burden = number(row.get("amr_burden", "0"))
             radius = 4 + min(burden, 20) / 5.0
-            group = row.get(color_field, "") or "unknown"
+            group = display_group(row)
             parts.append(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='{radius:.1f}' fill='{groups[group]}' opacity='0.82'><title>{html.escape(row.get('assembly_accession', ''))}: {html.escape(group)}</title></circle>")
-        for idx, (group, color) in enumerate(list(groups.items())[:12]):
+        for idx, (group, color) in enumerate(groups.items()):
             y = top + idx * 20
             parts.append(f"<rect x='{left + plot_w + 20}' y='{y}' width='12' height='12' fill='{color}'/><text x='{left + plot_w + 38}' y='{y + 11}' font-family='Arial' font-size='11' fill='#1f2933'>{html.escape(group[:32])}</text>")
-        parts.append(f"<text x='{left}' y='{height - 35}' font-family='Arial' font-size='12' fill='#52606d'>PCoA1 vs PCoA2; point size follows AMR burden. Annotation similarity, not phylogeny.</text>")
+        x_var = 100.0 * number(rows[0].get("explained_variance_PCoA1", "0")) if rows else 0.0
+        y_var = 100.0 * number(rows[0].get("explained_variance_PCoA2", "0")) if rows else 0.0
+        parts.append(f"<text x='{left + plot_w / 2 - 50:.1f}' y='{top + plot_h + 34}' font-family='Arial' font-size='12' fill='#52606d'>PCoA1 ({x_var:.1f}%)</text>")
+        parts.append(f"<text x='22' y='{top + plot_h / 2:.1f}' font-family='Arial' font-size='12' fill='#52606d' transform='rotate(-90 22 {top + plot_h / 2:.1f})'>PCoA2 ({y_var:.1f}%)</text>")
+        parts.append(f"<text x='{left}' y='{height - 18}' font-family='Arial' font-size='12' fill='#52606d'>Point size follows AMR burden. Annotation similarity, not phylogeny.</text>")
         parts.append("</svg>\n")
         path.write_text("".join(parts), encoding="utf-8")
 
-    def write_scatter_png(path: Path, rows: list[dict[str, str]]) -> None:
+    def write_scatter_png(path: Path, rows: list[dict[str, str]], color_field: str) -> None:
         width, height = 860, 560
         left, top, plot_w, plot_h = 80, 60, 700, 400
         xs = [number(row.get("PCoA1", "0")) for row in rows]
@@ -10777,11 +10858,29 @@ def write_important_final_interpretation_outputs(
             min_y -= 1
             max_y += 1
         pixels = [bytearray([248, 250, 252] * width) for _ in range(height)]
-        colors = [(15, 118, 110), (190, 18, 60), (29, 78, 216), (161, 98, 7), (124, 58, 237), (21, 128, 61)]
-        for idx, row in enumerate(rows):
+        colors = [(15, 118, 110), (190, 18, 60), (29, 78, 216), (161, 98, 7), (124, 58, 237), (21, 128, 61), (219, 39, 119), (71, 85, 105), (8, 145, 178), (194, 65, 12)]
+        group_counts = Counter(row.get(color_field, "") or "unknown" for row in rows)
+        top_groups = {group for group, _count in group_counts.most_common(9)}
+        group_names = [group for group, _count in group_counts.most_common(9)]
+        if len(group_counts) > len(top_groups):
+            group_names.append("Other")
+        group_colors = {group: colors[idx % len(colors)] for idx, group in enumerate(group_names)}
+
+        def set_pixel(x: int, y: int, color: tuple[int, int, int]) -> None:
+            if 0 <= x < width and 0 <= y < height:
+                offset = x * 3
+                pixels[y][offset:offset + 3] = bytes(color)
+
+        for x in range(left, left + plot_w + 1):
+            set_pixel(x, top + plot_h, (159, 179, 200))
+        for y in range(top, top + plot_h + 1):
+            set_pixel(left, y, (159, 179, 200))
+        for row in rows:
             x = int(left + (number(row.get("PCoA1", "0")) - min_x) / (max_x - min_x) * plot_w)
             y = int(top + plot_h - (number(row.get("PCoA2", "0")) - min_y) / (max_y - min_y) * plot_h)
-            color = colors[idx % len(colors)]
+            raw_group = row.get(color_field, "") or "unknown"
+            group = raw_group if raw_group in top_groups else "Other"
+            color = group_colors[group]
             for yy in range(y - 4, y + 5):
                 for xx in range(x - 4, x + 5):
                     if 0 <= xx < width and 0 <= yy < height and (xx - x) ** 2 + (yy - y) ** 2 <= 16:
@@ -10800,7 +10899,7 @@ def write_important_final_interpretation_outputs(
             ordination_rows,
             ordination_fields,
             lambda path, field=field, stem=stem: write_scatter_svg(path, ordination_rows, stem.replace("_", " ").title(), field),
-            lambda path: write_scatter_png(path, ordination_rows),
+            lambda path, field=field: write_scatter_png(path, ordination_rows, field),
             ["Feature-profile ordination reflects annotation similarity, not whole-genome phylogeny."],
         )
 
@@ -11282,9 +11381,38 @@ def write_important_final_interpretation_outputs(
     table_files = [path for path in important_dir.rglob("*") if path.is_file() and path.suffix in {".tsv", ".csv", ".txt", ".json"} and "figures" not in path.parts and "downloads" not in path.parts]
     figure_files = [path for path in important_dir.rglob("*") if path.is_file() and path.parent == figures and path.suffix in {".png", ".svg", ".pdf", ".tsv", ".html"}]
     asset_files = [important_dir / "results.html", *table_files, *figure_files]
+    summary_table_names = {
+        "download_manifest.tsv",
+        "important_file_index.tsv",
+        "feature_prevalence_top.tsv",
+        "prevalence_summary_by_database.tsv",
+        "geographic_distribution_summary.tsv",
+        "geographic_warning_summary.tsv",
+        "feature_variation_summary.tsv",
+        "feature_variation_database_summary.tsv",
+        "temporal_trend_summary.tsv",
+        "cooccurrence_context_summary.tsv",
+        "metadata_association_summary.tsv",
+        "metadata_usability_summary.tsv",
+        "lineage_report_summary.tsv",
+        "lineage_distribution.tsv",
+        "diversity_report_summary.tsv",
+        "diversity_core_accessory_summary_by_database.tsv",
+        "notable_genomes.tsv",
+        "finding_confidence_summary.tsv",
+        "evidence_summary.tsv",
+        "evidence_by_section.tsv",
+        "warnings_and_limitations_summary.tsv",
+        "warnings_by_section.tsv",
+        "module_warning_summary.tsv",
+        "report_cap_summary.tsv",
+    }
+    summary_table_files = [path for path in table_files if path.name in summary_table_names]
+    important_summary_tables_zip = downloads / "important_summary_tables.zip"
     important_tables_zip = downloads / "important_tables.zip"
     important_figures_zip = downloads / "important_figures.zip"
     important_assets_zip = downloads / "important_report_assets.zip"
+    _write_zip_bundle(important_summary_tables_zip, summary_table_files, important_dir)
     _write_zip_bundle(important_tables_zip, table_files, important_dir)
     _write_zip_bundle(important_figures_zip, figure_files, important_dir)
     _write_zip_bundle(important_assets_zip, [path for path in asset_files if path.exists()], important_dir)
@@ -11306,6 +11434,7 @@ def write_important_final_interpretation_outputs(
         "important_report_cap_summary": str(report_cap_path),
         "important_file_index": str(file_index_path),
         "important_download_manifest": str(download_manifest_path),
+        "important_summary_tables_zip": str(important_summary_tables_zip),
         "important_tables_zip": str(important_tables_zip),
         "important_figures_zip": str(important_figures_zip),
         "important_report_assets_zip": str(important_assets_zip),
@@ -11403,21 +11532,31 @@ def write_important_results_report(
     file_index_rows = read_table(important_dir / "tables" / "important_file_index.tsv")
     download_manifest_rows = read_table(important_dir / "tables" / "download_manifest.tsv")
     report_warning_count = sum(int(_float_or_none(row.get("warning_count", "")) or 0) for row in warnings_summary_rows) if warnings_summary_rows else len(warnings_rows)
+    warning_category_count = len(warnings_summary_rows) if warnings_summary_rows else len(warnings_rows)
+    high_warning_categories = sum(1 for row in warnings_summary_rows if row.get("severity") in {"critical", "high"})
     cards = [
         ("Input genomes", str(len(dataset_rows)), "genomes in report"),
         ("QC pass", f"{qc_pass}/{len(dataset_rows)}" if dataset_rows else "0", "post-QC genomes"),
         ("Total features", str(total_features), "standardized rows"),
         ("Databases detected", str(len(databases)), ", ".join(databases[:4]) + ("..." if len(databases) > 4 else "")),
-        ("Warnings", str(report_warning_count), f"{len(warnings_summary_rows)} categories" if warnings_summary_rows else "complete warning rows"),
+        ("Warning categories", str(warning_category_count), f"{high_warning_categories} high/critical; {report_warning_count:,} row-level flags"),
         ("Schema validation", schema_status, "feature contract status"),
     ]
     card_html = _report_summary_cards_html(cards)
     top_prevalence = sorted(prevalence_rows, key=lambda row: (row.get("database", ""), -(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("feature_id", "")))[:20]
-    top_geographic_burden = sorted(
-        [
+    geographic_candidates = [
+        row for row in geographic_burden_rows
+        if row.get("geo_level") == "country"
+        and row.get("group_name") not in {"missing", "unknown", "missing (unknown)"}
+        and int(_float_or_none(row.get("total_genomes", "")) or 0) >= 10
+    ]
+    if not geographic_candidates:
+        geographic_candidates = [
             row for row in geographic_burden_rows
             if row.get("geo_level") == "country" and row.get("group_name") not in {"missing", "unknown", "missing (unknown)"}
-        ],
+        ]
+    top_geographic_burden = sorted(
+        geographic_candidates,
         key=lambda row: (-(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("database", ""), row.get("group_name", "")),
     )[:20]
     top_geographic_features = sorted(
@@ -11428,13 +11567,43 @@ def write_important_results_report(
         key=lambda row: (-(_float_or_none(row.get("prevalence_percent", "")) or 0.0), row.get("database", ""), row.get("feature_id", ""), row.get("group_name", "")),
     )[:20]
     top_variation = sorted(variation_rows, key=lambda row: (-(_float_or_none(row.get("iqr_identity", "")) or 0.0), row.get("database", ""), row.get("feature_id", "")))[:20]
-    top_temporal = sorted(temporal_rows, key=lambda row: (-abs(_float_or_none(row.get("change_percent_points", "")) or 0.0), row.get("database", ""), row.get("feature_id", "")))[:20]
-    top_cooccurrence = sorted(cooccurrence_rows, key=lambda row: (-abs(_float_or_none(row.get("phi_correlation", "")) or 0.0), row.get("feature_a_database", ""), row.get("feature_a_id", "")))[:20]
+    temporal_candidates = [
+        row for row in temporal_rows
+        if row.get("support_label") not in {"insufficient_support", "descriptive_only"}
+        and not any(flag in row.get("warning_flags", "") for flag in {"low_sample_count", "low_positive_count"})
+    ] or temporal_rows
+    top_temporal = sorted(temporal_candidates, key=lambda row: (-abs(_float_or_none(row.get("change_percent_points", "")) or 0.0), row.get("database", ""), row.get("feature_id", "")))[:20]
+    nonself_cooccurrence = [
+        row for row in cooccurrence_rows
+        if (row.get("feature_a_database"), row.get("feature_a_id")) != (row.get("feature_b_database"), row.get("feature_b_id"))
+    ]
+    informative_cooccurrence = [
+        row for row in nonself_cooccurrence
+        if (_float_or_none(row.get("prevalence_a", "")) or 0.0) <= 0.95
+        and (_float_or_none(row.get("prevalence_b", "")) or 0.0) <= 0.95
+    ] or nonself_cooccurrence
+    top_cooccurrence = sorted(
+        informative_cooccurrence,
+        key=lambda row: (
+            row.get("feature_a_database") == row.get("feature_b_database"),
+            row.get("significance_label") not in {"significant_positive", "significant_negative"},
+            -abs(_float_or_none(row.get("phi_correlation", "")) or 0.0),
+            row.get("feature_a_database", ""),
+            row.get("feature_a_id", ""),
+        ),
+    )[:20]
     top_context = context_rows[:20]
+    lineage_metadata_columns = {"mlst_ST", "ani_cluster", "combined_lineage_label", "dominant_lineage_label"}
+    metadata_candidates = [
+        row for row in metadata_feature_rows
+        if int(_float_or_none(row.get("group_n", "")) or 0) >= 10
+        and not (row.get("database") == "mlst" and row.get("metadata_column") in lineage_metadata_columns)
+    ]
     top_metadata_features = sorted(
-        metadata_feature_rows,
+        metadata_candidates or metadata_feature_rows,
         key=lambda row: (
             row.get("interpretation_label", "") not in {"strong_supported", "moderate_supported"},
+            any(flag in row.get("warning_flags", "") for flag in {"lineage_dominance", "bioproject_dominance", "small_group_warning"}),
             -abs(_float_or_none(row.get("prevalence_difference", "")) or 0.0),
             row.get("database", ""),
             row.get("feature_id", ""),
@@ -12046,12 +12215,13 @@ def write_important_results_report(
         _report_figure_card_html(important_dir, "evidence_confidence_summary", "Evidence confidence", "Confidence labels summarize support and warning burden across report sections.", [("Confidence", "pass")]),
         _report_figure_card_html(important_dir, "diversity_core_common_accessory_rare_by_database", "Feature class composition", "Core/common/accessory/rare feature classes by database.", [("Descriptive", "descriptive")]),
         _report_figure_card_html(important_dir, "warnings_summary", "Warning severity", "Warnings are grouped by severity so limitations are visible before interpretation.", [("Warnings", "warning")]),
-        _report_figure_card_html(important_dir, "lineage_distribution_mlst_st", "Lineage distribution", "Dominant lineages help interpret metadata and feature associations.", [("Lineage", "lineage")]),
+        _report_figure_card_html(important_dir, "lineage_distribution_mlst_ST", "Lineage distribution", "Dominant lineages help interpret metadata and feature associations.", [("Lineage", "lineage")]),
         _report_figure_card_html(important_dir, "prevalence_feature_counts_by_database", "Detected feature counts", "Database contributions to the report-facing feature set.", [("Descriptive", "descriptive")]),
     ])
     top_download_links = _report_download_links_html([
         ("../basic/enriched_genome_dataset.csv", "Download enriched dataset"),
-        ("downloads/important_tables.zip", "Download important tables ZIP"),
+        ("downloads/important_summary_tables.zip", "Download summary tables ZIP"),
+        ("downloads/important_tables.zip", "Download complete tables ZIP"),
         ("downloads/important_figures.zip", "Download important figures ZIP"),
         ("../panr2_inputs/report/panr2_handoff_index.html", "Open complete output bundle"),
         ("../panr2_inputs/manifest/reproducibility_manifest.json", "Download reproducibility manifest"),
@@ -12059,10 +12229,11 @@ def write_important_results_report(
     ])
     download_cards_html = _report_download_cards_html(important_dir, [
         ("../basic/enriched_genome_dataset.csv", "Enriched dataset", "One row per genome with metadata, QC, annotation burdens, lineage labels, and module provenance.", "Start here for spreadsheet review."),
-        ("downloads/important_tables.zip", "Important tables ZIP", "All curated report-facing TSV tables in one archive.", "Use for downstream analysis and review."),
+        ("downloads/important_summary_tables.zip", "Summary tables ZIP", "Compact report summaries and prioritized findings without the largest exhaustive matrices.", "Start here for routine review."),
+        ("downloads/important_tables.zip", "Complete tables ZIP", "All curated report-facing TSV tables, including large exhaustive association tables.", "Use for downstream analysis and complete review."),
         ("downloads/important_figures.zip", "Important figures ZIP", "Publication-friendly PNG/SVG/PDF/data figure outputs.", "Use for presentations and manuscripts."),
         ("downloads/important_report_assets.zip", "Report assets ZIP", "Report HTML, figures, tables, and related assets.", "Use to move the important report as a bundle."),
-        ("tables/warnings_and_limitations_summary.tsv", "Warnings summary", "Compact warning categories with counts, examples, and recommended actions.", "Start here before opening the complete raw warning table."),
+        ("tables/warnings_and_limitations_summary.tsv", "Warnings summary", "Compact warning categories with counts, examples, and recommended actions.", "Start here before opening detailed source tables."),
         ("tables/notable_genomes.tsv", "Notable genomes", "Transparent research-prioritization output with score explanations.", "Use to choose genomes for manual review."),
         ("tables/finding_confidence_summary.tsv", "Finding confidence", "Cross-section finding confidence labels and recommended interpretation.", "Use to triage strongest and exploratory findings."),
         ("../panr2_inputs/manifest/feature_contract.json", "Feature contract", "Machine-readable feature schema and allowed values.", "Use for reproducibility and parser validation."),
@@ -12187,7 +12358,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 <main>
 <header class="report-header">
 <h1>PanResistome Important Report</h1>
-<p>Taxon: {html.escape(report_taxon)} | Genomes analyzed: {len(dataset_rows)} | QC PASS: {qc_pass}/{len(dataset_rows)} | Total features: {total_features} | Databases detected: {html.escape(", ".join(databases) or "none")} | Warnings: {len(warnings_rows) or warning_count} | Schema validation: {html.escape(schema_status)}</p>
+<p>Taxon: {html.escape(report_taxon)} | Genomes analyzed: {len(dataset_rows)} | QC PASS: {qc_pass}/{len(dataset_rows)} | Total features: {total_features} | Databases detected: {html.escape(", ".join(databases) or "none")} | Warning categories: {warning_category_count} | Schema validation: {html.escape(schema_status)}</p>
 {top_download_links}
 </header>
 <section id="featured" class="section"><h1>Featured Results</h1>{card_html}<p>{db_badges}</p>
@@ -12325,7 +12496,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 {report_cap_table_html}
 <div class="downloads"><a href="tables/warnings_and_limitations_summary.tsv">Download compact warning summary</a><a href="tables/warnings_and_limitations.tsv">Download compact warnings table</a><a href="tables/warnings_by_section.tsv">Download warnings by section</a><a href="tables/module_warning_summary.tsv">Download module warning summary</a><a href="tables/report_cap_summary.tsv">Download report cap summary</a></div></section>
 <section id="downloads" class="section"><h2>Downloads / Important Files</h2><p>Use these files to navigate the report-facing outputs and complete reproducibility artifacts.</p>
-<div class="downloads"><a href="../basic/enriched_genome_dataset.csv">Download enriched dataset CSV</a><a href="../basic/enriched_genome_dataset.tsv">Download enriched dataset TSV</a><a href="downloads/important_tables.zip">Download important tables ZIP</a><a href="downloads/important_figures.zip">Download important figures ZIP</a><a href="downloads/important_report_assets.zip">Download report assets ZIP</a><a href="../panr2_inputs/report/panr2_handoff_index.html">Open complete output bundle</a><a href="../panr2_inputs/manifest/reproducibility_manifest.json">Download reproducibility manifest</a><a href="../panr2_inputs/manifest/feature_contract.json">Download feature contract</a></div>
+<div class="downloads"><a href="../basic/enriched_genome_dataset.csv">Download enriched dataset CSV</a><a href="../basic/enriched_genome_dataset.tsv">Download enriched dataset TSV</a><a href="downloads/important_summary_tables.zip">Download summary tables ZIP</a><a href="downloads/important_tables.zip">Download complete tables ZIP</a><a href="downloads/important_figures.zip">Download important figures ZIP</a><a href="downloads/important_report_assets.zip">Download report assets ZIP</a><a href="../panr2_inputs/report/panr2_handoff_index.html">Open complete output bundle</a><a href="../panr2_inputs/manifest/reproducibility_manifest.json">Download reproducibility manifest</a><a href="../panr2_inputs/manifest/feature_contract.json">Download feature contract</a></div>
 {download_cards_html}
 {file_index_table_html}
 <div class="downloads"><a href="tables/important_file_index.tsv">Download important file index</a><a href="tables/download_manifest.tsv">Download download manifest</a><a href="../panr2_inputs/features/all_features.tsv">Download complete feature table</a><a href="../panr2_inputs/manifest/schema_validation_summary.txt">Download schema validation summary</a></div></section>

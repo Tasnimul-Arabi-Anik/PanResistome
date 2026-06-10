@@ -531,6 +531,7 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "download_manifest.tsv",
             ]:
                 self.assertTrue((sample_dir / "important" / "tables" / table_name).exists())
+            self.assertTrue((sample_dir / "important" / "downloads" / "important_summary_tables.zip").exists())
             self.assertTrue((sample_dir / "important" / "downloads" / "important_tables.zip").exists())
             self.assertTrue((sample_dir / "important" / "downloads" / "important_figures.zip").exists())
             self.assertTrue((sample_dir / "important" / "downloads" / "important_report_assets.zip").exists())
@@ -722,7 +723,8 @@ class FetchM2AdapterTests(unittest.TestCase):
                 self.assertIn(css_token, report_html)
             self.assertIn("Featured figure gallery", report_html)
             self.assertIn("Download enriched dataset", report_html)
-            self.assertIn("Download important tables ZIP", report_html)
+            self.assertIn("Download summary tables ZIP", report_html)
+            self.assertIn("Download complete tables ZIP", report_html)
             self.assertIn("Download important figures ZIP", report_html)
             self.assertIn("Download report assets ZIP", report_html)
             self.assertIn("PNG</a>", report_html)
@@ -731,7 +733,7 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("alt='", report_html)
             self.assertIn("Showing ", report_html)
             self.assertIn("download the full TSV", report_html)
-            for zip_name in ["important_tables.zip", "important_figures.zip", "important_report_assets.zip"]:
+            for zip_name in ["important_summary_tables.zip", "important_tables.zip", "important_figures.zip", "important_report_assets.zip"]:
                 self.assertGreater((sample_dir / "important" / "downloads" / zip_name).stat().st_size, 0)
             qa = subprocess.run(
                 [sys.executable, str(REPO_ROOT / "scripts" / "check_important_report_outputs.py"), str(sample_dir)],
