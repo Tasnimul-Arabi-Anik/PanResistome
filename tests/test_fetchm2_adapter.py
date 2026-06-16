@@ -526,6 +526,9 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "evidence_summary.tsv",
                 "finding_confidence_summary.tsv",
                 "evidence_by_section.tsv",
+                "report_highlights.tsv",
+                "warning_priority_summary.tsv",
+                "report_visual_index.tsv",
                 "warnings_and_limitations_summary.tsv",
                 "warnings_and_limitations.tsv",
                 "warnings_by_section.tsv",
@@ -651,6 +654,12 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue({"called_by_both", "abricate_only", "amrfinderplus_only", "concordance_label"}.issubset(concordance.columns))
             confidence = pd.read_csv(sample_dir / "important" / "tables" / "finding_confidence_summary.tsv", sep="\t")
             self.assertTrue({"confidence_label", "recommended_interpretation"}.issubset(confidence.columns))
+            highlights = pd.read_csv(sample_dir / "important" / "tables" / "report_highlights.tsv", sep="\t")
+            self.assertTrue({"rank", "section", "highlight_type", "triage_score", "recommended_action"}.issubset(highlights.columns))
+            warning_priorities = pd.read_csv(sample_dir / "important" / "tables" / "warning_priority_summary.tsv", sep="\t")
+            self.assertTrue({"rank", "section", "severity", "warning_type", "priority_score", "why_it_matters"}.issubset(warning_priorities.columns))
+            visual_index = pd.read_csv(sample_dir / "important" / "tables" / "report_visual_index.tsv", sep="\t")
+            self.assertTrue({"figure_stem", "section", "interpretation_type", "svg_path", "recommended_use"}.issubset(visual_index.columns))
             warnings = pd.read_csv(sample_dir / "important" / "tables" / "warnings_and_limitations.tsv", sep="\t")
             self.assertTrue({"warning_id", "section", "severity", "warning_type", "recommended_action"}.issubset(warnings.columns))
             warning_summary = pd.read_csv(sample_dir / "important" / "tables" / "warnings_and_limitations_summary.tsv", sep="\t")
@@ -726,6 +735,9 @@ class FetchM2AdapterTests(unittest.TestCase):
             ]:
                 self.assertIn(css_token, report_html)
             self.assertIn("Featured figure gallery", report_html)
+            self.assertIn("What to review first", report_html)
+            self.assertIn("Download report highlights", report_html)
+            self.assertIn("Visual index", report_html)
             self.assertIn("Download enriched dataset", report_html)
             self.assertIn("Download summary tables ZIP", report_html)
             self.assertIn("Download complete tables ZIP", report_html)

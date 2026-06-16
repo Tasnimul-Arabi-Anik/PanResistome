@@ -11393,10 +11393,348 @@ def write_important_final_interpretation_outputs(
         ["Review warning-heavy sections before interpretation."],
     )
 
+    # Report-level triage tables for public-facing readability.
+    important_databases = {"amr", "amrfinderplus", "plasmidfinder", "integronfinder", "mobileelementfinder", "mge", "prophage", "mobsuite"}
+    low_signal_databases = {"mlst"}
+    severe_warning_terms = {"bioproject_dominance", "lineage_dominance", "single_lineage_dominance", "single_ST_dominance", "metadata_lineage_confounding"}
+    moderate_warning_terms = {"small_group_warning", "low_sample_count", "low_positive_count", "missing_metadata", "same_genome_only"}
+
+    def split_flags(value: str) -> set[str]:
+        return {item.strip() for item in re.split(r"[;,|]", value or "") if item.strip()}
+
+    def warning_severity_from_flags(flags: set[str]) -> str:
+        if flags & severe_warning_terms:
+            return "high"
+        if flags & moderate_warning_terms:
+            return "moderate"
+        if flags:
+            return "low"
+        return "none"
+
+    def warning_penalty(flags: set[str]) -> float:
+        severity = warning_severity_from_flags(flags)
+        return {"high": 40.0, "moderate": 18.0, "low": 6.0, "none": 0.0}.get(severity, 0.0)
+
+    def database_bonus(*dbs: str) -> float:
+        present = {db for db in dbs if db}
+        score = 0.0
+        if present & important_databases:
+            score += 14.0
+        if present and not present <= low_signal_databases:
+            score += 6.0
+        if len(present) > 1:
+            score += 8.0
+        return score
+
+    def add_highlight(
+        rows: list[dict[str, str]],
+        section: str,
+        highlight_type: str,
+        title: str,
+        description: str,
+        source_table: str,
+        section_anchor: str,
+        score: float,
+        row: dict[str, str],
+        primary_database: str = "",
+        primary_feature: str = "",
+        secondary_database: str = "",
+        secondary_feature: str = "",
+        metadata_context: str = "",
+        denominator: str = "",
+        effect_size: str = "",
+        q_value: str = "",
+    ) -> None:
+        flags = split_flags(row.get("warning_flags", "") or row.get("lineage_warning_flags", ""))
+        severity = warning_severity_from_flags(flags)
+        rows.append({
+            "rank": "0",
+            "section": section,
+            "highlight_type": highlight_type,
+            "title": title,
+            "description": description,
+            "support_label": row.get("support_label", ""),
+            "confidence_label": row.get("confidence_label", ""),
+            "warning_severity": severity,
+            "warning_flags": ";".join(sorted(flags)),
+            "primary_database": primary_database,
+            "primary_feature": primary_feature,
+            "secondary_database": secondary_database,
+            "secondary_feature": secondary_feature,
+            "metadata_context": metadata_context,
+            "denominator": denominator,
+            "effect_size": effect_size,
+            "q_value": q_value,
+            "section_anchor": section_anchor,
+            "source_table": source_table,
+            "triage_score": f"{score:.2f}",
+            "recommended_action": "Review this first in the linked section and confirm denominators, warnings, and complete TSV context.",
+        })
+
+    highlight_rows: list[dict[str, str]] = []
+    for row in read_table(tables / "feature_prevalence.tsv"):
+        db = row.get("database", "")
+        prevalence = number(row.get("prevalence_percent", "0"))
+        total = number(row.get("total_genomes", "0"))
+        positive = number(row.get("positive_genomes", "0"))
+        if total <= 0 or positive <= 0:
+            continue
+        flags = split_flags(row.get("warning_flags", ""))
+        nontrivial = 1.0 - min(abs(prevalence - 50.0) / 50.0, 1.0)
+        score = 20.0 + database_bonus(db) + min(total, 100.0) / 5.0 + nontrivial * 16.0 - warning_penalty(flags)
+        add_highlight(
+            highlight_rows,
+            "Prevalence",
+            "best_supported_prevalence",
+            f"{row.get('feature_id', '')} prevalence in {db}",
+            f"{row.get('feature_id', '')} was detected in {row.get('prevalence_display') or row.get('prevalence_percent', '')} of analyzed genomes.",
+            "tables/feature_prevalence.tsv",
+            "#prevalence",
+            score,
+            row,
+            primary_database=db,
+            primary_feature=row.get("feature_id", ""),
+            denominator=f"{row.get('positive_genomes', '')}/{row.get('total_genomes', '')}",
+        )
+    for row in read_table(tables / "geographic_database_burden.tsv"):
+        if row.get("geo_level") != "country" or row.get("group_name") in {"", "missing", "unknown", "missing (unknown)"}:
+            continue
+        total = number(row.get("total_genomes", "0"))
+        if total < 10:
+            continue
+        db = row.get("database", "")
+        flags = split_flags(row.get("warning_flags", ""))
+        score = 24.0 + database_bonus(db) + min(total, 80.0) / 4.0 + number(row.get("prevalence_percent", "0")) / 4.0 - warning_penalty(flags)
+        add_highlight(
+            highlight_rows,
+            "Geographic Distribution",
+            "supported_geographic_pattern",
+            f"{db} in {row.get('group_name', '')}",
+            f"{db} burden/prevalence is highest in {row.get('group_name', '')} among supported country groups ({row.get('prevalence_display', '')}).",
+            "tables/geographic_database_burden.tsv",
+            "#geography",
+            score,
+            row,
+            primary_database=db,
+            metadata_context=f"country={row.get('group_name', '')}",
+            denominator=f"{row.get('positive_genomes', '')}/{row.get('total_genomes', '')}",
+        )
+    for row in temporal_rows:
+        db = row.get("database", "")
+        flags = split_flags(row.get("warning_flags", ""))
+        change = abs(number(row.get("change_percent_points", "0")))
+        if change <= 0:
+            continue
+        support_bonus = 14.0 if row.get("support_label") not in {"insufficient_support", "descriptive_only"} else -10.0
+        score = 18.0 + database_bonus(db) + min(change, 100.0) / 2.0 + support_bonus - warning_penalty(flags)
+        add_highlight(
+            highlight_rows,
+            "Temporal Trends",
+            "supported_temporal_pattern",
+            f"{row.get('feature_id', '')} {row.get('trend_label', '')}",
+            f"{row.get('feature_id', '')} changed by {row.get('change_percent_points', '')} percentage points across observed years.",
+            "key_tables/temporal_trend_summary.tsv",
+            "#temporal",
+            score,
+            row,
+            primary_database=db,
+            primary_feature=row.get("feature_id", ""),
+            effect_size=row.get("change_percent_points", ""),
+            q_value=row.get("q_value", ""),
+        )
+    for row in cooccurrence_pair_rows:
+        db_a = row.get("feature_a_database", "")
+        db_b = row.get("feature_b_database", "")
+        feat_a = row.get("feature_a_id", "")
+        feat_b = row.get("feature_b_id", "")
+        if (db_a, feat_a) == (db_b, feat_b):
+            continue
+        flags = split_flags(row.get("warning_flags", ""))
+        cross_db = db_a != db_b
+        phi = abs(number(row.get("phi_correlation", "0")))
+        significance_bonus = 18.0 if row.get("significance_label") in {"significant_positive", "significant_negative"} else 0.0
+        score = 16.0 + database_bonus(db_a, db_b) + (20.0 if cross_db else 0.0) + phi * 45.0 + significance_bonus - warning_penalty(flags)
+        add_highlight(
+            highlight_rows,
+            "Co-occurrence / Genomic Context",
+            "informative_cooccurrence",
+            f"{feat_a} with {feat_b}",
+            f"{feat_a} and {feat_b} co-occur with phi={row.get('phi_correlation', '')}; same-genome co-occurrence is separate from physical context.",
+            "tables/cooccurrence_pair_summary.tsv",
+            "#cooccurrence",
+            score,
+            row,
+            primary_database=db_a,
+            primary_feature=feat_a,
+            secondary_database=db_b,
+            secondary_feature=feat_b,
+            denominator=row.get("n_total", ""),
+            effect_size=row.get("phi_correlation", ""),
+            q_value=row.get("q_value", ""),
+        )
+    for row in read_table(tables / "metadata_feature_enrichment.tsv"):
+        db = row.get("database", "")
+        if db in low_signal_databases:
+            continue
+        group_n = number(row.get("group_n", "0"))
+        if group_n < 10:
+            continue
+        flags = split_flags(row.get("warning_flags", ""))
+        clean_supported = not (flags & severe_warning_terms) and row.get("interpretation_label") in {"strong_supported", "moderate_supported", "feature_enriched", "feature_depleted"}
+        score = 20.0 + database_bonus(db) + min(group_n, 100.0) / 5.0 + abs(number(row.get("prevalence_difference", "0"))) * 70.0 - warning_penalty(flags)
+        add_highlight(
+            highlight_rows,
+            "Metadata Associations",
+            "clean_supported_metadata" if clean_supported else "warning_heavy_metadata",
+            f"{row.get('feature_id', '')} vs {row.get('metadata_column', '')}",
+            f"{row.get('feature_id', '')} differs for {row.get('metadata_column', '')}={row.get('metadata_group', '')}; warning status is {warning_severity_from_flags(flags)}.",
+            "tables/metadata_feature_enrichment.tsv",
+            "#metadata-associations",
+            score,
+            row,
+            primary_database=db,
+            primary_feature=row.get("feature_id", ""),
+            metadata_context=f"{row.get('metadata_column', '')}={row.get('metadata_group', '')}",
+            denominator=row.get("group_n", ""),
+            effect_size=row.get("prevalence_difference", ""),
+            q_value=row.get("q_value", ""),
+        )
+    for row in read_table(tables / "lineage_adjusted_top_findings.tsv"):
+        flags = split_flags(row.get("lineage_warning_flags", ""))
+        db = row.get("database", "")
+        severity = row.get("lineage_adjusted_interpretation", "")
+        severity_bonus = 25.0 if "strong" in severity or "severe" in severity else 12.0
+        score = 18.0 + database_bonus(db) + severity_bonus + number(row.get("supporting_samples", "0")) / 5.0
+        add_highlight(
+            highlight_rows,
+            "Lineage / Clonal Structure",
+            "lineage_confounding_review",
+            f"{row.get('feature_id', '')} lineage caution",
+            f"{row.get('feature_id', '')} has lineage-adjusted interpretation {severity}; review before treating metadata association as broad.",
+            "tables/lineage_adjusted_top_findings.tsv",
+            "#lineage",
+            score,
+            row,
+            primary_database=db,
+            primary_feature=row.get("feature_id", ""),
+            metadata_context=f"{row.get('metadata_column', '')}={row.get('metadata_group', '')}",
+            denominator=row.get("supporting_samples", ""),
+        )
+    for row in notable_rows[:50]:
+        flags = split_flags(row.get("warning_flags", ""))
+        score = 30.0 + number(row.get("notable_genome_score", "0")) - warning_penalty(flags) / 2.0
+        add_highlight(
+            highlight_rows,
+            "Notable Genomes",
+            "notable_genome_review",
+            row.get("assembly_accession", ""),
+            row.get("score_explanation", "") or "Genome ranked for research review.",
+            "tables/notable_genomes.tsv",
+            "#notable-genomes",
+            score,
+            row,
+            denominator=row.get("rank", ""),
+            effect_size=row.get("notable_genome_score", ""),
+        )
+    highlight_rows.sort(key=lambda item: (-number(item.get("triage_score", "0")), item.get("section", ""), item.get("title", "")))
+    for idx, row in enumerate(highlight_rows, 1):
+        row["rank"] = str(idx)
+    highlight_fields = [
+        "rank", "section", "highlight_type", "title", "description", "support_label", "confidence_label",
+        "warning_severity", "warning_flags", "primary_database", "primary_feature", "secondary_database",
+        "secondary_feature", "metadata_context", "denominator", "effect_size", "q_value", "section_anchor",
+        "source_table", "triage_score", "recommended_action",
+    ]
+    highlights_path = tables / "report_highlights.tsv"
+    write_rows(highlights_path, highlight_rows, highlight_fields)
+
+    warning_priority_rows = []
+    for row in warnings_summary_rows:
+        severity = row.get("severity", "")
+        priority_score = (
+            {"critical": 100.0, "high": 75.0, "moderate": 45.0, "low": 18.0, "info": 5.0}.get(severity, 10.0)
+            + min(number(row.get("warning_count", "0")), 1000.0) / 20.0
+            + min(number(row.get("affected_rows_total", "0")), 1000.0) / 40.0
+        )
+        warning_priority_rows.append({
+            "rank": "0",
+            "section": row.get("section", ""),
+            "severity": severity,
+            "warning_type": row.get("warning_type", ""),
+            "affected_database": row.get("affected_database", ""),
+            "warning_count": row.get("warning_count", ""),
+            "affected_rows_total": row.get("affected_rows_total", ""),
+            "example_features": row.get("example_features", ""),
+            "why_it_matters": "This warning can change whether a finding is broad, lineage-driven, BioProject-driven, or under-supported.",
+            "recommended_action": row.get("recommended_action", ""),
+            "source_file": row.get("source_file", ""),
+            "priority_score": f"{priority_score:.2f}",
+        })
+    warning_priority_rows.sort(key=lambda item: (-number(item.get("priority_score", "0")), item.get("section", ""), item.get("warning_type", "")))
+    for idx, row in enumerate(warning_priority_rows, 1):
+        row["rank"] = str(idx)
+    warning_priority_path = tables / "warning_priority_summary.tsv"
+    warning_priority_fields = [
+        "rank", "section", "severity", "warning_type", "affected_database", "warning_count", "affected_rows_total",
+        "example_features", "why_it_matters", "recommended_action", "source_file", "priority_score",
+    ]
+    write_rows(warning_priority_path, warning_priority_rows, warning_priority_fields)
+
+    figure_section_map = [
+        ("prevalence", "Prevalence", "descriptive", "Feature prevalence and burden summaries."),
+        ("geographic", "Geographic Distribution", "exploratory", "Dataset-specific geography summaries with sampling cautions."),
+        ("variation", "Variations", "review", "Identity, coverage, and hit variation summaries."),
+        ("temporal", "Temporal Trends", "exploratory", "Collection-year trend summaries."),
+        ("cooccurrence", "Co-occurrence / Genomic Context", "exploratory", "Feature-pair and genomic-context summaries."),
+        ("metadata", "Metadata Associations", "warning-aware", "Metadata enrichment and burden screens."),
+        ("lineage", "Lineage / Clonal Structure", "lineage", "Lineage context and confounding summaries."),
+        ("diversity", "Diversity / Pan-feature Summary", "descriptive", "Feature richness and pan-feature summaries."),
+        ("feature_profile", "Feature-profile Ordination", "descriptive", "PCoA from feature-profile distances."),
+        ("notable", "Notable Genomes", "research-review", "Genome research-prioritization plots."),
+        ("amr_concordance", "Concordance / Database Agreement", "review", "AMR tool/database agreement summaries."),
+        ("evidence", "Evidence & Confidence", "confidence", "Cross-section evidence and confidence summaries."),
+        ("warnings", "Warnings & Limitations", "warning", "Warning severity and section summaries."),
+    ]
+    visual_rows = []
+    for svg_path in sorted(figures.glob("*.svg")):
+        stem = svg_path.stem
+        section = "Other"
+        interpretation = "descriptive"
+        description = "Report-facing figure with companion downloads."
+        for prefix, candidate_section, candidate_interpretation, candidate_description in figure_section_map:
+            if stem.startswith(prefix):
+                section = candidate_section
+                interpretation = candidate_interpretation
+                description = candidate_description
+                break
+        warning_status = "warning" if interpretation in {"warning", "warning-aware", "lineage"} else "none"
+        visual_rows.append({
+            "figure_stem": stem,
+            "section": section,
+            "title": stem.replace("_", " ").title(),
+            "interpretation_type": interpretation,
+            "warning_status": warning_status,
+            "description": description,
+            "png_path": f"figures/{stem}.png" if (figures / f"{stem}.png").exists() else "",
+            "svg_path": f"figures/{stem}.svg",
+            "pdf_path": f"figures/{stem}.pdf" if (figures / f"{stem}.pdf").exists() else "",
+            "data_tsv_path": f"figures/{stem}.data.tsv" if (figures / f"{stem}.data.tsv").exists() else "",
+            "recommended_use": "Use SVG for inspection, PNG for slides, PDF for documents, and data TSV for reproducibility.",
+        })
+    visual_index_path = tables / "report_visual_index.tsv"
+    visual_index_fields = [
+        "figure_stem", "section", "title", "interpretation_type", "warning_status", "description",
+        "png_path", "svg_path", "pdf_path", "data_tsv_path", "recommended_use",
+    ]
+    write_rows(visual_index_path, visual_rows, visual_index_fields)
+
     # Download manifests and final ZIPs.
     required_files = [
         (sample_dir / "basic" / "enriched_genome_dataset.csv", "main user-facing files", "Enriched genome dataset CSV", "all users", "complete", "Open first for sample-level review."),
         (sample_dir / "basic" / "enriched_genome_dataset.tsv", "main user-facing files", "Enriched genome dataset TSV", "all users", "complete", "Open first for sample-level review."),
+        (highlights_path, "important tables", "Report highlights triage", "all users", "summary", "Start here for supported and review-worthy findings."),
+        (warning_priority_path, "important tables", "Warning priority summary", "all users", "summary", "Review highest-priority limitations before interpreting findings."),
+        (visual_index_path, "important tables", "Report visual index", "all users", "summary", "Find figures and companion downloads by section."),
         (warnings_summary_path, "important tables", "Warnings and limitations summary", "all users", "summary", "Start here before opening the compact warning table."),
         (warnings_path, "important tables", "Compact warnings and limitations", "technical users", "summary", "Use for audit/debugging after reviewing the warning category summary."),
         (notable_path, "important tables", "Notable genomes research prioritization", "research users", "complete", "Prioritize genomes for follow-up review."),
@@ -11451,6 +11789,9 @@ def write_important_final_interpretation_outputs(
         "lineage_distribution.tsv",
         "diversity_report_summary.tsv",
         "diversity_core_accessory_summary_by_database.tsv",
+        "report_highlights.tsv",
+        "warning_priority_summary.tsv",
+        "report_visual_index.tsv",
         "notable_genomes.tsv",
         "finding_confidence_summary.tsv",
         "evidence_summary.tsv",
@@ -11480,6 +11821,9 @@ def write_important_final_interpretation_outputs(
         "important_evidence_summary": str(evidence_summary_path),
         "important_finding_confidence_summary": str(finding_confidence_path),
         "important_evidence_by_section": str(evidence_by_section_path),
+        "important_report_highlights": str(highlights_path),
+        "important_warning_priority_summary": str(warning_priority_path),
+        "important_report_visual_index": str(visual_index_path),
         "important_warnings_and_limitations": str(warnings_path),
         "important_warnings_and_limitations_summary": str(warnings_summary_path),
         "important_warnings_by_section": str(warnings_by_section_path),
@@ -11577,6 +11921,9 @@ def write_important_results_report(
     concordance_feature_rows = read_table(important_dir / "tables" / "amr_concordance_feature_level.tsv")
     confidence_rows = read_table(important_dir / "tables" / "finding_confidence_summary.tsv")
     evidence_summary_rows = read_table(important_dir / "tables" / "evidence_summary.tsv")
+    report_highlight_rows = read_table(important_dir / "tables" / "report_highlights.tsv")
+    warning_priority_rows = read_table(important_dir / "tables" / "warning_priority_summary.tsv")
+    visual_index_rows = read_table(important_dir / "tables" / "report_visual_index.tsv")
     warnings_summary_rows = read_table(important_dir / "tables" / "warnings_and_limitations_summary.tsv")
     warnings_rows = [] if warnings_summary_rows else read_table(important_dir / "tables" / "warnings_and_limitations.tsv")
     warnings_by_section_rows = read_table(important_dir / "tables" / "warnings_by_section.tsv")
@@ -11724,7 +12071,7 @@ def write_important_results_report(
         ),
     )[:20]
     top_warnings = sorted(
-        warnings_summary_rows or warnings_rows,
+        warning_priority_rows or warnings_summary_rows or warnings_rows,
         key=lambda row: (
             {"critical": 0, "high": 1, "moderate": 2, "low": 3, "info": 4}.get(row.get("severity", ""), 9),
             -int(_float_or_none(row.get("warning_count", "")) or 0),
@@ -11732,6 +12079,14 @@ def write_important_results_report(
             row.get("warning_type", ""),
         ),
     )[:30]
+    top_report_highlights = sorted(
+        report_highlight_rows,
+        key=lambda row: (int(_float_or_none(row.get("rank", "")) or 999999), -(_float_or_none(row.get("triage_score", "")) or 0.0)),
+    )[:30]
+    top_visuals = sorted(
+        visual_index_rows,
+        key=lambda row: (row.get("section", ""), row.get("title", "")),
+    )[:60]
     top_files = sorted(
         file_index_rows,
         key=lambda row: (row.get("category", ""), row.get("file_path", "")),
@@ -11760,10 +12115,20 @@ def write_important_results_report(
     concordance_summary_table_html = _html_table(concordance_summary_rows, ["comparison", "concordance_label", "feature_count", "warning_flags"], max_rows=20)
     concordance_feature_table_html = _html_table(top_concordance_features, ["feature_id", "feature_name", "drug_class", "called_by_both", "abricate_only", "amrfinderplus_only", "total_positive_genomes", "concordance_label", "warning_flags"], max_rows=20)
     confidence_table_html = _html_table(top_confidence, ["finding_id", "section", "database", "feature_id", "finding_text", "support_label", "evidence_level", "sample_size", "effect_size", "q_value", "confidence_label", "recommended_interpretation"], max_rows=20)
-    warnings_table_html = _html_table(top_warnings, ["section", "severity", "warning_type", "affected_database", "warning_count", "affected_rows_total", "example_features", "example_samples", "description", "recommended_action", "source_file"], max_rows=30)
+    report_highlights_table_html = _html_table(
+        top_report_highlights,
+        ["rank", "section", "highlight_type", "title", "description", "warning_severity", "primary_database", "primary_feature", "secondary_database", "secondary_feature", "metadata_context", "denominator", "effect_size", "q_value", "triage_score"],
+        max_rows=20,
+    )
+    warnings_table_html = _html_table(top_warnings, ["rank", "section", "severity", "warning_type", "affected_database", "warning_count", "affected_rows_total", "example_features", "example_samples", "why_it_matters", "recommended_action", "source_file"], max_rows=30)
     warnings_by_section_table_html = _html_table(warnings_by_section_rows, ["section", "severity", "warning_count"], max_rows=30)
     module_warning_table_html = _html_table(module_warning_rows, ["module", "status", "enabled", "samples_processed", "samples_failed", "feature_rows_created", "severity", "message"], max_rows=30)
     report_cap_table_html = _html_table(report_cap_rows, ["setting", "value", "message", "warning_flags"], max_rows=30)
+    visual_index_table_html = _html_table(
+        top_visuals,
+        ["section", "title", "interpretation_type", "warning_status", "description", "png_path", "svg_path", "pdf_path", "data_tsv_path"],
+        max_rows=40,
+    )
     file_index_table_html = _html_table(top_files, ["file_path", "category", "description", "audience", "complete_or_capped", "recommended_use", "exists", "row_count"], max_rows=40)
     prevalence_total_rows = sum(int(_float_or_none(row.get("feature_rows", "")) or 0) for row in prevalence_rows)
     prevalence_unique_features = len(prevalence_rows)
@@ -12224,7 +12589,38 @@ def write_important_results_report(
             "</article>"
         )
 
-    featured_finding_cards_html = "<div class='finding-grid'>" + "".join([
+    severity_to_badge = {
+        "none": ("Supported", "pass"),
+        "low": ("Low warning", "descriptive"),
+        "moderate": ("Review warning", "warning"),
+        "high": ("Warning-heavy", "warning"),
+        "critical": ("Critical warning", "failed"),
+    }
+    selected_highlights = []
+    seen_highlight_sections = set()
+    for row in top_report_highlights:
+        section = row.get("section", "")
+        if section in seen_highlight_sections:
+            continue
+        selected_highlights.append(row)
+        seen_highlight_sections.add(section)
+        if len(selected_highlights) >= 6:
+            break
+    if len(selected_highlights) < 6:
+        selected_highlights.extend([row for row in top_report_highlights if row not in selected_highlights][: 6 - len(selected_highlights)])
+    if selected_highlights:
+        featured_finding_cards_html = "<div class='finding-grid'>" + "".join(
+            featured_finding_card(
+                row.get("title", "") or row.get("highlight_type", "Report highlight"),
+                row.get("description", "") or "Report highlight selected by support, warning burden, and biological relevance.",
+                row.get("section_anchor", "#featured") or "#featured",
+                severity_to_badge.get(row.get("warning_severity", "none"), ("Review", "warning"))[0],
+                severity_to_badge.get(row.get("warning_severity", "none"), ("Review", "warning"))[1],
+            )
+            for row in selected_highlights
+        ) + "</div>"
+    else:
+        featured_finding_cards_html = "<div class='finding-grid'>" + "".join([
         featured_finding_card(
             "Top prevalence finding",
             (
@@ -12289,7 +12685,7 @@ def write_important_results_report(
             "Research review",
             "exploratory",
         ),
-    ]) + "</div>"
+        ]) + "</div>"
     featured_figures_html = _report_figure_grid_html([
         _report_figure_card_html(important_dir, "notable_genomes_ranked", "Notable genomes", "Top genomes ranked for research review, not clinical risk.", [("Research review", "exploratory")]),
         _report_figure_card_html(important_dir, "evidence_confidence_summary", "Evidence confidence", "Confidence labels summarize support and warning burden across report sections.", [("Confidence", "pass")]),
@@ -12313,6 +12709,9 @@ def write_important_results_report(
         ("downloads/important_tables.zip", "Complete tables ZIP", "All curated report-facing TSV tables, including large exhaustive association tables.", "Use for downstream analysis and complete review."),
         ("downloads/important_figures.zip", "Important figures ZIP", "Publication-friendly PNG/SVG/PDF/data figure outputs.", "Use for presentations and manuscripts."),
         ("downloads/important_report_assets.zip", "Report assets ZIP", "Report HTML, figures, tables, and related assets.", "Use to move the important report as a bundle."),
+        ("tables/report_highlights.tsv", "Report highlights", "Ranked cross-section findings selected by support, warning burden, and review value.", "Use as the first triage table."),
+        ("tables/warning_priority_summary.tsv", "Warning priorities", "Highest-priority warning categories with counts, examples, and recommended actions.", "Use before interpreting warning-heavy sections."),
+        ("tables/report_visual_index.tsv", "Visual index", "Figure inventory with section, interpretation type, and companion download paths.", "Use to find publication-friendly figure assets."),
         ("tables/warnings_and_limitations_summary.tsv", "Warnings summary", "Compact warning categories with counts, examples, and recommended actions.", "Start here before opening detailed source tables."),
         ("tables/notable_genomes.tsv", "Notable genomes", "Transparent research-prioritization output with score explanations.", "Use to choose genomes for manual review."),
         ("tables/finding_confidence_summary.tsv", "Finding confidence", "Cross-section finding confidence labels and recommended interpretation.", "Use to triage strongest and exploratory findings."),
@@ -12444,6 +12843,10 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 <section id="featured" class="section"><h1>Featured Results</h1>{card_html}<p>{db_badges}</p>
 <details class="details-block"><summary>How to use this report</summary><p>Start with the cards and featured figures, then use the sidebar to inspect each analysis section. Complete TSVs are preserved even when report-facing tables and figures are capped for readability.</p></details>
 <h2>Top findings</h2>{featured_finding_cards_html}
+<h2>What to review first</h2>
+<p>These rows are ranked by support, denominator size, warning burden, cross-database context, and biological relevance. Warning-heavy rows remain useful, but should be interpreted through the linked section and complete TSVs.</p>
+{report_highlights_table_html}
+<div class="downloads"><a href="tables/report_highlights.tsv">Download report highlights</a><a href="tables/warning_priority_summary.tsv">Download warning priorities</a><a href="tables/report_visual_index.tsv">Download visual index</a></div>
 <h2>Featured figure gallery</h2>{featured_figures_html}</section>
 <section id="overview" class="section">{_report_section_header_html("Run Overview", "Curated outputs are summarized here while complete advanced outputs remain available in the PanR2 handoff bundle.", [("Schema " + schema_status, "pass" if schema_status == "PASS" else "warning")])}
 {top_download_links}</section>
@@ -12578,6 +12981,9 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 <section id="downloads" class="section"><h2>Downloads / Important Files</h2><p>Use these files to navigate the report-facing outputs and complete reproducibility artifacts.</p>
 <div class="downloads"><a href="../basic/enriched_genome_dataset.csv">Download enriched dataset CSV</a><a href="../basic/enriched_genome_dataset.tsv">Download enriched dataset TSV</a><a href="downloads/important_summary_tables.zip">Download summary tables ZIP</a><a href="downloads/important_tables.zip">Download complete tables ZIP</a><a href="downloads/important_figures.zip">Download important figures ZIP</a><a href="downloads/important_report_assets.zip">Download report assets ZIP</a><a href="../panr2_inputs/report/panr2_handoff_index.html">Open complete output bundle</a><a href="../panr2_inputs/manifest/reproducibility_manifest.json">Download reproducibility manifest</a><a href="../panr2_inputs/manifest/feature_contract.json">Download feature contract</a></div>
 {download_cards_html}
+<h3>Visual index</h3>
+{visual_index_table_html}
+<div class="downloads"><a href="tables/report_visual_index.tsv">Download visual index</a><a href="tables/report_highlights.tsv">Download report highlights</a><a href="tables/warning_priority_summary.tsv">Download warning priorities</a></div>
 {file_index_table_html}
 <div class="downloads"><a href="tables/important_file_index.tsv">Download important file index</a><a href="tables/download_manifest.tsv">Download download manifest</a><a href="../panr2_inputs/features/all_features.tsv">Download complete feature table</a><a href="../panr2_inputs/manifest/schema_validation_summary.txt">Download schema validation summary</a></div></section>
 <a class="back-to-top" href="#top">Back to top</a>
