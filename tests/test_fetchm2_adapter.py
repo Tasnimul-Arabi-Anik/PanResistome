@@ -527,8 +527,10 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "finding_confidence_summary.tsv",
                 "evidence_by_section.tsv",
                 "report_highlights.tsv",
+                "report_highlights_by_section.tsv",
                 "warning_priority_summary.tsv",
                 "report_visual_index.tsv",
+                "report_visual_quality.tsv",
                 "warnings_and_limitations_summary.tsv",
                 "warnings_and_limitations.tsv",
                 "warnings_by_section.tsv",
@@ -656,10 +658,17 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue({"confidence_label", "recommended_interpretation"}.issubset(confidence.columns))
             highlights = pd.read_csv(sample_dir / "important" / "tables" / "report_highlights.tsv", sep="\t")
             self.assertTrue({"rank", "section", "highlight_type", "triage_score", "recommended_action"}.issubset(highlights.columns))
+            self.assertNotIn("database_burden", set(highlights.head(20)["primary_feature"].fillna("").astype(str)))
+            highlight_sections = set(highlights.head(20)["section"].fillna("").astype(str))
+            self.assertGreaterEqual(len(highlight_sections), 2)
+            by_section = pd.read_csv(sample_dir / "important" / "tables" / "report_highlights_by_section.tsv", sep="\t")
+            self.assertTrue({"section_rank", "section", "highlight_type", "triage_score"}.issubset(by_section.columns))
             warning_priorities = pd.read_csv(sample_dir / "important" / "tables" / "warning_priority_summary.tsv", sep="\t")
             self.assertTrue({"rank", "section", "severity", "warning_type", "priority_score", "why_it_matters"}.issubset(warning_priorities.columns))
             visual_index = pd.read_csv(sample_dir / "important" / "tables" / "report_visual_index.tsv", sep="\t")
             self.assertTrue({"figure_stem", "section", "interpretation_type", "svg_path", "recommended_use"}.issubset(visual_index.columns))
+            visual_quality = pd.read_csv(sample_dir / "important" / "tables" / "report_visual_quality.tsv", sep="\t")
+            self.assertTrue({"figure_stem", "quality_label", "svg_available", "data_tsv_available"}.issubset(visual_quality.columns))
             warnings = pd.read_csv(sample_dir / "important" / "tables" / "warnings_and_limitations.tsv", sep="\t")
             self.assertTrue({"warning_id", "section", "severity", "warning_type", "recommended_action"}.issubset(warnings.columns))
             warning_summary = pd.read_csv(sample_dir / "important" / "tables" / "warnings_and_limitations_summary.tsv", sep="\t")
@@ -736,8 +745,12 @@ class FetchM2AdapterTests(unittest.TestCase):
                 self.assertIn(css_token, report_html)
             self.assertIn("Featured figure gallery", report_html)
             self.assertIn("What to review first", report_html)
+            self.assertIn("What to trust first", report_html)
+            self.assertIn("What needs caution", report_html)
+            self.assertIn("Balanced highlights by section", report_html)
             self.assertIn("Download report highlights", report_html)
             self.assertIn("Visual index", report_html)
+            self.assertIn("Visual quality", report_html)
             self.assertIn("Download enriched dataset", report_html)
             self.assertIn("Download summary tables ZIP", report_html)
             self.assertIn("Download complete tables ZIP", report_html)
