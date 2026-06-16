@@ -303,6 +303,32 @@ def is_missing_value(value: str) -> bool:
     return not text or text in {"-", ".", "?"} or text.lower() in {"na", "n/a", "nan", "none", "null", "unknown"}
 
 
+PLACEHOLDER_DATE_VALUES = {
+    "1-01-01",
+    "01-01-01",
+    "0001-01-01",
+    "0001/01/01",
+    "1/01/01",
+    "not applicable",
+    "missing",
+    "unknown",
+}
+
+
+def _is_placeholder_date_value(value: str) -> bool:
+    text = str(value or "").strip()
+    if is_missing_value(text):
+        return True
+    lowered = text.lower()
+    if lowered in PLACEHOLDER_DATE_VALUES:
+        return True
+    if re.fullmatch(r"0{0,3}1[-/]0?1[-/]0?1", lowered):
+        return True
+    if re.fullmatch(r"1900([-/]0?1[-/]0?1)?", lowered):
+        return True
+    return False
+
+
 def is_placeholder_mlst_feature(value: str) -> bool:
     text = str(value or "").strip()
     if is_missing_value(text):
@@ -3427,6 +3453,147 @@ def _figure_asset_links(important_dir: Path, stem: str) -> list[tuple[str, str]]
     return links
 
 
+def _display_database_name(value: str) -> str:
+    mapping = {
+        "amr": "AMR",
+        "amrfinderplus": "AMRFinderPlus",
+        "vfdb": "VFDB",
+        "plasmidfinder": "PlasmidFinder",
+        "integronfinder": "IntegronFinder",
+        "mobileelementfinder": "MobileElementFinder",
+        "mlst": "MLST",
+        "mge": "MGE",
+        "genomad": "geNomAD",
+        "prophage": "Prophage",
+        "mobsuite": "MOB-suite",
+        "defensefinder": "DefenseFinder",
+    }
+    text = str(value or "")
+    return mapping.get(text.lower(), text)
+
+
+def _humanize_label(value: str) -> str:
+    words = []
+    for token in str(value or "").split("_"):
+        if not token:
+            continue
+        words.append(_display_database_name(token) if token.lower() in REPORT_DATABASE_COLORS else token)
+    text = " ".join(words)
+    replacements = {
+        "pcoa": "PCoA",
+        "qc": "QC",
+        "amr": "AMR",
+        "vfdb": "VFDB",
+        "mlst": "MLST",
+        "bioproject": "BioProject",
+        "jaccard": "Jaccard",
+    }
+    return " ".join(replacements.get(word.lower(), word[:1].upper() + word[1:] if word.islower() else word) for word in text.split())
+
+
+def _human_figure_title(stem: str) -> str:
+    text = str(stem or "")
+    explicit = {
+        "amr_concordance_summary": "AMR concordance summary",
+        "amr_concordance_by_feature": "AMR concordance by feature",
+        "diversity_feature_richness_by_sample": "Feature richness by genome",
+        "diversity_database_by_sample_heatmap": "Database diversity by sample",
+        "diversity_core_common_accessory_rare_by_database": "Core/common/accessory/rare features by database",
+        "diversity_pan_feature_accumulation": "Pan-feature accumulation curve",
+        "diversity_jaccard_heatmap": "Jaccard feature-profile distance heatmap",
+        "evidence_by_section": "Evidence by section",
+        "evidence_confidence_summary": "Evidence confidence summary",
+        "warnings_summary": "Warnings by severity",
+        "warnings_by_section": "Warnings by section",
+        "notable_genomes_ranked": "Ranked notable genomes",
+        "notable_genome_score_heatmap": "Notable genome score components",
+    }
+    if text in explicit:
+        return explicit[text]
+    parts = text.split("_")
+    if text.startswith("geographic_map_") and len(parts) >= 3:
+        db = _display_database_name(parts[2])
+        feature = "_".join(parts[3:])
+        return f"{db} {feature} geographic distribution" if feature else f"{db} geographic distribution"
+    match = re.fullmatch(r"geographic_(country|continent|subcontinent|region)_bar_(.+)", text)
+    if match:
+        geo_level = match.group(1)
+        remainder = match.group(2)
+        if remainder.endswith("_burden"):
+            db = _display_database_name(remainder[: -len("_burden")])
+            return f"{db} burden by {geo_level}"
+        pieces = remainder.split("_", 1)
+        db = _display_database_name(pieces[0])
+        feature = pieces[1] if len(pieces) > 1 else ""
+        return f"{db} {feature} prevalence by {geo_level}" if feature else f"{db} prevalence by {geo_level}"
+    if text.startswith("diversity_richness_by_metadata_"):
+        return f"Feature richness by {_humanize_label(text.replace('diversity_richness_by_metadata_', ''))}"
+    if text.startswith("feature_profile_pcoa_by_"):
+        return f"Feature-profile PCoA by {_humanize_label(text.replace('feature_profile_pcoa_by_', ''))}"
+    if text.startswith("prevalence_top_features_"):
+        return f"{_display_database_name(text.replace('prevalence_top_features_', ''))} top feature prevalence"
+    if text.startswith("lineage_distribution_"):
+        return f"Lineage distribution by {_humanize_label(text.replace('lineage_distribution_', ''))}"
+    return _humanize_label(text)
+
+
+def _figure_caption_for(section: str, stem: str) -> str:
+    section = section or ""
+    stem = stem or ""
+    if section == "Notable Genomes" or stem.startswith("notable_"):
+        return "Notable genome scores combine annotation burden, context evidence, rare features, and warning penalties for research review only."
+    if section == "Feature-profile Ordination" or stem.startswith("feature_profile_"):
+        return "PCoA shows feature-profile similarity from Jaccard distances; it is not whole-genome phylogeny."
+    if section == "Concordance / Database Agreement" or stem.startswith("amr_concordance"):
+        return "Concordance summarizes overlapping and tool-specific AMR calls; tool-specific calls remain available for review."
+    if section == "Evidence & Confidence" or stem.startswith("evidence_"):
+        return "Confidence labels combine support, warning burden, and evidence level to guide interpretation."
+    if section == "Warnings & Limitations" or stem.startswith("warnings_"):
+        return "Warnings are grouped by severity and section so limitations are visible before interpretation."
+    if section == "Geographic Distribution" or stem.startswith("geographic_"):
+        return "Geographic summaries are dataset-specific and should not be interpreted as regional or global prevalence."
+    if section == "Co-occurrence / Genomic Context" or stem.startswith("cooccurrence_"):
+        return "Sample-level co-occurrence is separate from same-contig and proximity context evidence."
+    if section == "Metadata Associations" or stem.startswith("metadata_"):
+        return "Metadata associations are exploratory and may reflect sampling, BioProject, lineage, geography, or year bias."
+    if section == "Temporal Trends" or stem.startswith("temporal_"):
+        return "Temporal summaries use valid collection years and remain exploratory because sampling can vary by year."
+    if section == "Lineage / Clonal Structure" or stem.startswith("lineage_"):
+        return "Lineage summaries provide clonal-structure context and do not replace formal phylogenetic analysis."
+    if section == "Diversity / Pan-feature Summary" or stem.startswith("diversity_"):
+        return "Diversity summaries reflect detected annotation features, not complete biological diversity."
+    if section == "Prevalence" or stem.startswith("prevalence_"):
+        return "Prevalence is calculated from positive genome denominators; feature rows may exceed genome counts."
+    return "Figure preview with companion PNG, SVG, PDF, and plotted-data TSV links when available."
+
+
+def _section_balanced_rows(
+    rows: list[dict[str, str]],
+    per_section: int,
+    max_total: int,
+    section_order: list[str] | None = None,
+) -> list[dict[str, str]]:
+    if not rows:
+        return []
+    order = {section: idx for idx, section in enumerate(section_order or [])}
+    grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row in rows:
+        grouped[row.get("section", "")].append(row)
+    balanced: list[dict[str, str]] = []
+    for section in sorted(grouped, key=lambda item: (order.get(item, 999), item)):
+        section_rows = sorted(
+            grouped[section],
+            key=lambda row: (
+                int(_float_or_none(row.get("section_rank", "")) or _float_or_none(row.get("rank", "")) or 999999),
+                -(_float_or_none(row.get("triage_score", "")) or 0.0),
+            ),
+        )
+        balanced.extend(section_rows[:per_section])
+        if len(balanced) >= max_total:
+            return balanced[:max_total]
+    return balanced[:max_total]
+
+
 def _report_figure_card_html(
     important_dir: Path,
     stem: str,
@@ -5172,6 +5339,19 @@ def _safe_filename(value: str) -> str:
     return text.strip("_") or "unknown"
 
 
+def _normalized_feature_key(value: str) -> str:
+    text = str(value or "").strip().lower()
+    text = re.sub(r"^(amr|amrfinderplus|abricate|ncbi|vfdb|plasmidfinder|integronfinder|mlst)[:|_ -]+", "", text)
+    text = re.sub(r"[^a-z0-9]+", "", text)
+    return text
+
+
+def _is_same_feature_pair(feature_a: str, feature_b: str) -> bool:
+    norm_a = _normalized_feature_key(feature_a)
+    norm_b = _normalized_feature_key(feature_b)
+    return bool(norm_a and norm_b and norm_a == norm_b)
+
+
 def _cooccurrence_direction(phi: float, q_value: float | None, min_abs_phi: float = 0.2, q_threshold: float = 0.05) -> tuple[str, str]:
     if q_value is None or q_value > q_threshold or abs(phi) < min_abs_phi:
         return "not_significant", "not_significant"
@@ -5896,11 +6076,16 @@ def _write_burden_boxplot_png(path: Path, rows: list[dict[str, str]]) -> None:
 
 
 def _extract_year(value: str) -> int | None:
-    match = re.search(r"(19|20)\d{2}", str(value or ""))
+    text = str(value or "").strip()
+    if _is_placeholder_date_value(text):
+        return None
+    match = re.search(r"(19|20)\d{2}", text)
     if not match:
         return None
     year = int(match.group(0))
-    if 1900 <= year <= 2100:
+    if year == 1900:
+        return None
+    if 1901 <= year <= 2100:
         return year
     return None
 
@@ -6291,7 +6476,12 @@ def write_important_prevalence_outputs(sample_dir: Path, out_dir: Path, importan
         db_burden = [row for row in burden_rows if row["database"] == database]
         unique_counts = [int(_float_or_none(row.get("unique_features", "")) or 0) for row in db_burden]
         unique_stats = _summary_stats_full([float(value) for value in unique_counts])
-        positive_genomes = sum(1 for row in db_burden if row.get("has_feature") == "true")
+        database_positive_samples = {
+            sample
+            for (sample, db), features_present in sample_database_features.items()
+            if db == database and features_present
+        }
+        positive_genomes = len(database_positive_samples)
         total_rows = sum(int(_float_or_none(row.get("feature_rows", "")) or 0) for row in db_features)
         top_feature = db_features[0] if db_features else {}
         positive_percent = positive_genomes / sample_count * 100 if sample_count else 0.0
@@ -8274,9 +8464,19 @@ def write_important_metadata_association_outputs(
             reasons.append("high_missingness")
         if largest_group_fraction >= 0.80 and unique_values >= 2:
             reasons.append("dominant_group")
+        placeholder_date_dominated = (
+            column.lower() in {"collection_year", "assembly_release_date", "collection_date"}
+            or "date" in column.lower()
+            or "year" in column.lower()
+        ) and largest_group and _is_placeholder_date_value(largest_group)
+        if placeholder_date_dominated:
+            reasons.append("placeholder_date_dominance")
         if not reasons:
             reasons.append("usable")
-        if not eligible:
+        if placeholder_date_dominated:
+            eligible = False
+            recommended_use = "descriptive_or_bias_check"
+        elif not eligible:
             recommended_use = "exclude"
         elif non_missing_count < 10 or missing_fraction >= 0.50 or largest_group_fraction >= 0.80:
             recommended_use = "descriptive_or_bias_check"
@@ -10610,6 +10810,11 @@ def write_important_final_interpretation_outputs(
         (row.get("database", ""), row.get("feature_id", ""))
         for row in temporal_rows
         if "increasing" in row.get("trend_label", "")
+        and row.get("support_label") != "low_support"
+        and not any(
+            flag in row.get("warning_flags", "")
+            for flag in ["insufficient_temporal_support", "small_year_group", "few_positive_genomes"]
+        )
     }
     context_rows = read_table(tables / "genomic_context_evidence.tsv")
     context_by_sample: dict[str, Counter[str]] = defaultdict(Counter)
@@ -11538,6 +11743,8 @@ def write_important_final_interpretation_outputs(
         change = abs(number(row.get("change_percent_points", "0")))
         if change <= 0:
             continue
+        if row.get("support_label") == "low_support" or flags & {"insufficient_temporal_support", "small_year_group", "few_positive_genomes"}:
+            continue
         support_bonus = 14.0 if row.get("support_label") not in {"insufficient_support", "descriptive_only"} else -10.0
         score = 18.0 + database_bonus(db) + min(change, 100.0) / 2.0 + support_bonus - warning_penalty(flags)
         add_highlight(
@@ -11561,6 +11768,8 @@ def write_important_final_interpretation_outputs(
         feat_a = row.get("feature_a_id", "")
         feat_b = row.get("feature_b_id", "")
         if (db_a, feat_a) == (db_b, feat_b):
+            continue
+        if _is_same_feature_pair(feat_a, feat_b):
             continue
         if (number(row.get("prevalence_a", "0")) > 0.95 or number(row.get("prevalence_b", "0")) > 0.95) and db_a == db_b:
             continue
@@ -11761,20 +11970,37 @@ def write_important_final_interpretation_outputs(
         png_available = (figures / f"{stem}.png").exists()
         pdf_available = (figures / f"{stem}.pdf").exists()
         data_available = (figures / f"{stem}.data.tsv").exists()
+        human_title = _human_figure_title(stem)
+        caption = _figure_caption_for(section, stem)
+        asset_quality_label = "asset_ready" if png_available and pdf_available and data_available else "asset_incomplete"
+        interpretation_quality_label = (
+            "interpretation_ready"
+            if interpretation in {"descriptive", "confidence", "research-review", "review"} and warning_status == "none"
+            else "exploratory_interpretation"
+        )
+        title_quality_label = "human_readable_title" if human_title and human_title.lower() != stem.replace("_", " ").lower() else "generic_title"
+        caption_quality_label = "specific_caption" if not caption.startswith("Figure preview") else "generic_caption"
+        final_publication_label = (
+            "publication_ready"
+            if asset_quality_label == "asset_ready"
+            and interpretation_quality_label == "interpretation_ready"
+            and title_quality_label == "human_readable_title"
+            and caption_quality_label == "specific_caption"
+            else "supporting_only"
+        )
         visual_rows.append({
             "figure_stem": stem,
             "section": section,
-            "title": stem.replace("_", " ").title(),
+            "title": human_title,
             "interpretation_type": interpretation,
             "warning_status": warning_status,
-            "description": description,
+            "description": caption if caption else description,
             "png_path": f"figures/{stem}.png" if png_available else "",
             "svg_path": f"figures/{stem}.svg",
             "pdf_path": f"figures/{stem}.pdf" if pdf_available else "",
             "data_tsv_path": f"figures/{stem}.data.tsv" if data_available else "",
             "recommended_use": "Use SVG for inspection, PNG for slides, PDF for documents, and data TSV for reproducibility.",
         })
-        quality_label = "publication_ready" if png_available and pdf_available and data_available and warning_status == "none" else ("warning_heavy" if warning_status == "warning" else "supporting_only")
         visual_quality_rows.append({
             "figure_stem": stem,
             "section": section,
@@ -11782,10 +12008,15 @@ def write_important_final_interpretation_outputs(
             "svg_available": "true",
             "pdf_available": str(pdf_available).lower(),
             "data_tsv_available": str(data_available).lower(),
-            "caption_status": "section_captioned",
+            "caption_status": caption_quality_label,
             "warning_status": warning_status,
-            "quality_label": quality_label,
-            "recommended_action": "Use as a featured/public figure." if quality_label == "publication_ready" else "Use as supporting context and review warnings/caption.",
+            "asset_quality_label": asset_quality_label,
+            "interpretation_quality_label": interpretation_quality_label,
+            "title_quality_label": title_quality_label,
+            "caption_quality_label": caption_quality_label,
+            "final_publication_label": final_publication_label,
+            "quality_label": final_publication_label,
+            "recommended_action": "Use as a featured/public figure." if final_publication_label == "publication_ready" else "Use as supporting context and review warnings/caption.",
         })
     visual_index_path = tables / "report_visual_index.tsv"
     visual_index_fields = [
@@ -11796,7 +12027,8 @@ def write_important_final_interpretation_outputs(
     visual_quality_path = tables / "report_visual_quality.tsv"
     visual_quality_fields = [
         "figure_stem", "section", "png_available", "svg_available", "pdf_available", "data_tsv_available",
-        "caption_status", "warning_status", "quality_label", "recommended_action",
+        "caption_status", "warning_status", "asset_quality_label", "interpretation_quality_label",
+        "title_quality_label", "caption_quality_label", "final_publication_label", "quality_label", "recommended_action",
     ]
     write_rows(visual_quality_path, visual_quality_rows, visual_quality_fields)
 
@@ -11816,7 +12048,7 @@ def write_important_final_interpretation_outputs(
         (out_dir / "manifest" / "reproducibility_manifest.json", "reproducibility files", "Reproducibility manifest", "technical users", "complete", "Track run provenance."),
         (out_dir / "manifest" / "feature_contract.json", "reproducibility files", "Feature contract", "technical users", "complete", "Validate downstream feature-table assumptions."),
         (out_dir / "manifest" / "schema_validation_summary.txt", "reproducibility files", "Schema validation summary", "technical users", "complete", "Check feature contract status."),
-        (sample_dir / "all" / "file_index.tsv", "complete outputs", "Complete all-mode file index", "technical users", "complete", "Find complete outputs when available."),
+        (sample_dir / "all" / "file_index.tsv", "complete outputs", "Complete all-mode file index", "technical users", "not_generated_in_important_mode", "Generated only in all-output mode; use the important file index and PanR2 handoff index for this report."),
     ]
     file_index_rows = []
     for file_path in sorted({path for path in important_dir.rglob("*") if path.is_file()} | {item[0] for item in required_files}):
@@ -12049,13 +12281,14 @@ def write_important_results_report(
     top_variation = sorted(variation_rows, key=lambda row: (-(_float_or_none(row.get("iqr_identity", "")) or 0.0), row.get("database", ""), row.get("feature_id", "")))[:20]
     temporal_candidates = [
         row for row in temporal_rows
-        if row.get("support_label") not in {"insufficient_support", "descriptive_only"}
-        and not any(flag in row.get("warning_flags", "") for flag in {"low_sample_count", "low_positive_count"})
+        if row.get("support_label") not in {"insufficient_support", "descriptive_only", "low_support"}
+        and not any(flag in row.get("warning_flags", "") for flag in {"low_sample_count", "low_positive_count", "small_year_group", "few_positive_genomes"})
     ] or temporal_rows
     top_temporal = sorted(temporal_candidates, key=lambda row: (-abs(_float_or_none(row.get("change_percent_points", "")) or 0.0), row.get("database", ""), row.get("feature_id", "")))[:20]
     nonself_cooccurrence = [
         row for row in cooccurrence_rows
         if (row.get("feature_a_database"), row.get("feature_a_id")) != (row.get("feature_b_database"), row.get("feature_b_id"))
+        and not _is_same_feature_pair(row.get("feature_a_id", ""), row.get("feature_b_id", ""))
     ]
     informative_cooccurrence = [
         row for row in nonself_cooccurrence
@@ -12159,23 +12392,39 @@ def write_important_results_report(
             row.get("warning_type", ""),
         ),
     )[:30]
-    top_report_highlights = sorted(
+    report_section_order = [
+        "Prevalence",
+        "Concordance / Database Agreement",
+        "Evidence & Confidence",
+        "Diversity / Pan-feature Summary",
+        "Geographic Distribution",
+        "Temporal Trends",
+        "Metadata Associations",
+        "Lineage / Clonal Structure",
+        "Co-occurrence / Genomic Context",
+        "Notable Genomes",
+    ]
+    ranked_report_highlights = sorted(
         report_highlight_rows,
         key=lambda row: (int(_float_or_none(row.get("rank", "")) or 999999), -(_float_or_none(row.get("triage_score", "")) or 0.0)),
-    )[:30]
-    top_report_highlights_by_section = sorted(
+    )
+    top_report_highlights = _section_balanced_rows(ranked_report_highlights, per_section=2, max_total=30, section_order=report_section_order) or ranked_report_highlights[:30]
+    ranked_report_highlights_by_section = sorted(
         report_highlight_by_section_rows,
         key=lambda row: (row.get("section", ""), int(_float_or_none(row.get("section_rank", "")) or 999999), -(_float_or_none(row.get("triage_score", "")) or 0.0)),
-    )[:60]
-    trust_first_highlights = [
-        row for row in top_report_highlights_by_section
+    )
+    top_report_highlights_by_section = _section_balanced_rows(ranked_report_highlights_by_section, per_section=3, max_total=60, section_order=report_section_order)
+    trust_candidates = [
+        row for row in ranked_report_highlights_by_section
         if row.get("warning_severity") in {"none", "low"}
         and row.get("highlight_type") != "notable_genome_review"
-    ][:12]
-    caution_first_highlights = [
-        row for row in top_report_highlights_by_section
+    ]
+    trust_first_highlights = _section_balanced_rows(trust_candidates, per_section=2, max_total=12, section_order=report_section_order)
+    caution_candidates = [
+        row for row in ranked_report_highlights_by_section
         if row.get("warning_severity") in {"moderate", "high", "critical"}
-    ][:12]
+    ]
+    caution_first_highlights = _section_balanced_rows(caution_candidates, per_section=2, max_total=12, section_order=report_section_order)
     top_visuals = sorted(
         visual_index_rows,
         key=lambda row: (row.get("section", ""), row.get("title", "")),
@@ -12183,7 +12432,7 @@ def write_important_results_report(
     top_visual_quality = sorted(
         visual_quality_rows,
         key=lambda row: (
-            row.get("quality_label", "") != "publication_ready",
+            row.get("final_publication_label", row.get("quality_label", "")) != "publication_ready",
             row.get("section", ""),
             row.get("figure_stem", ""),
         ),
@@ -12247,7 +12496,7 @@ def write_important_results_report(
     )
     visual_quality_table_html = _html_table(
         top_visual_quality,
-        ["figure_stem", "section", "quality_label", "png_available", "svg_available", "pdf_available", "data_tsv_available", "warning_status", "recommended_action"],
+        ["figure_stem", "section", "asset_quality_label", "interpretation_quality_label", "title_quality_label", "caption_quality_label", "final_publication_label", "png_available", "svg_available", "pdf_available", "data_tsv_available", "warning_status", "recommended_action"],
         max_rows=40,
     )
     file_index_table_html = _html_table(top_files, ["file_path", "category", "description", "audience", "complete_or_capped", "recommended_use", "exists", "row_count"], max_rows=40)
@@ -12363,7 +12612,7 @@ def write_important_results_report(
             _report_figure_card_html(
                 important_dir,
                 stem,
-                stem.replace("_", " "),
+                _human_figure_title(stem),
                 "Bars summarize dataset-specific geographic prevalence or burden; small groups are flagged in the plotted data.",
                 [("Exploratory", "exploratory")],
             )
@@ -12374,7 +12623,7 @@ def write_important_results_report(
             _report_figure_card_html(
                 important_dir,
                 stem,
-                stem.replace("_", " "),
+                _human_figure_title(stem),
                 "Map colors reflect the analyzed dataset and should not be read as regional or global prevalence.",
                 [("Exploratory", "exploratory")],
             )
@@ -12488,9 +12737,9 @@ def write_important_results_report(
     metadata_excluded = metadata_summary.get("metadata_columns_excluded", "0")
     metadata_warning_rows = int(_float_or_none(metadata_summary.get("warning_rows", "0")) or 0)
     metadata_feature_comparisons = int(_float_or_none(metadata_summary.get("feature_enrichment_rows", "0")) or 0)
-    metadata_warning_fraction = (metadata_warning_rows / metadata_feature_comparisons) if metadata_feature_comparisons else 0.0
+    metadata_warning_density = (metadata_warning_rows / metadata_feature_comparisons) if metadata_feature_comparisons else 0.0
     metadata_warning_note = (
-        f" Warning rows represent {metadata_warning_fraction * 100:.1f}% of feature-by-group comparisons, so warning-heavy associations should be treated as exploratory."
+        f" Warning flags average {metadata_warning_density:.2f} per feature-by-group comparison; one comparison can carry multiple warning flags."
         if metadata_feature_comparisons else ""
     )
     metadata_summary_html = (
@@ -12631,7 +12880,7 @@ def write_important_results_report(
             _report_figure_card_html(
                 important_dir,
                 stem,
-                stem.replace("_", " "),
+                _human_figure_title(stem),
                 "Richness-by-metadata summaries are descriptive and should be interpreted alongside sampling and lineage warnings.",
                 [("Descriptive", "descriptive")],
             )
@@ -12640,12 +12889,14 @@ def write_important_results_report(
     def figure_cards(figure_specs: list[tuple[str, str]]) -> str:
         items = []
         for figure_name, title in figure_specs:
+            human_title = title or _human_figure_title(figure_name)
+            caption = _figure_caption_for("", figure_name)
             items.append(
                 _report_figure_card_html(
                     important_dir,
                     figure_name,
-                    title,
-                    "Report-facing figure with PNG, SVG, PDF when available, and plotted-data TSV links.",
+                    human_title,
+                    caption,
                     [("Report figure", "descriptive")],
                 )
             )

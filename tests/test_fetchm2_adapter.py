@@ -12,7 +12,17 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from normalize_fetchm2_output import normalize_fetchm2_output
 from export_panr2_inputs import parse_version_line
-from panr2_contract import export_contract, _kruskal_wallis, write_important_diversity_outputs, write_important_geographic_outputs, write_important_lineage_outputs, write_important_prevalence_outputs
+from panr2_contract import (
+    export_contract,
+    _human_figure_title,
+    _is_same_feature_pair,
+    _kruskal_wallis,
+    write_important_diversity_outputs,
+    write_important_geographic_outputs,
+    write_important_lineage_outputs,
+    write_important_prevalence_outputs,
+    write_important_temporal_outputs,
+)
 from check_genomad_readiness import resolve_database_dir
 from check_container_readiness import as_list as container_as_list
 from check_container_readiness import image_exec_command
@@ -114,9 +124,51 @@ class FetchM2AdapterTests(unittest.TestCase):
 
             summary = pd.read_csv(sample_dir / "important" / "tables" / "prevalence_summary_by_database.tsv", sep="\t")
             self.assertTrue({"total_feature_rows", "unique_features", "median_features_per_genome", "top_feature_id"}.issubset(summary.columns))
+            amr_summary = summary[summary["database"] == "amr"].iloc[0]
+            self.assertEqual(int(amr_summary["positive_genomes"]), 2)
+            self.assertGreaterEqual(int(amr_summary["positive_genomes"]), int(amr_summary["top_feature_positive_genomes"]))
+            self.assertGreaterEqual(float(amr_summary["genomes_positive_percent"]), float(amr_summary["top_feature_prevalence_percent"]))
             html = (sample_dir / "important" / "figures" / "prevalence_analysis.html").read_text(encoding="utf-8")
             for control in ["Database", "Top 20", "Complete", "Genome prevalence %", "Positive genome count", "Feature row count", "Minimum prevalence %"]:
                 self.assertIn(control, html)
+
+    def test_temporal_outputs_drop_placeholder_years(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            sample_dir = root / "Sample"
+            basic_dir = sample_dir / "basic"
+            features_dir = root / "panr2_inputs" / "features"
+            basic_dir.mkdir(parents=True)
+            features_dir.mkdir(parents=True)
+            pd.DataFrame(
+                [
+                    {"assembly_accession": "G1", "sample_id": "s1", "collection_year": "1-01-01", "bioproject": "PRJ1"},
+                    {"assembly_accession": "G2", "sample_id": "s2", "collection_year": "1900", "bioproject": "PRJ1"},
+                    {"assembly_accession": "G3", "sample_id": "s3", "collection_year": "2020", "bioproject": "PRJ2"},
+                    {"assembly_accession": "G4", "sample_id": "s4", "collection_year": "2021", "bioproject": "PRJ3"},
+                    {"assembly_accession": "G5", "sample_id": "s5", "collection_year": "2022", "bioproject": "PRJ4"},
+                ]
+            ).to_csv(basic_dir / "enriched_genome_dataset.csv", index=False)
+            pd.DataFrame(
+                [
+                    {"assembly_accession": "G1", "sample_id": "s1", "database": "amr", "feature_id": "blaA", "presence": "1"},
+                    {"assembly_accession": "G2", "sample_id": "s2", "database": "amr", "feature_id": "blaA", "presence": "1"},
+                    {"assembly_accession": "G3", "sample_id": "s3", "database": "amr", "feature_id": "blaA", "presence": "1"},
+                    {"assembly_accession": "G4", "sample_id": "s4", "database": "amr", "feature_id": "blaA", "presence": "1"},
+                    {"assembly_accession": "G5", "sample_id": "s5", "database": "amr", "feature_id": "blaA", "presence": "1"},
+                ]
+            ).to_csv(features_dir / "all_features.tsv", sep="\t", index=False)
+
+            write_important_temporal_outputs(sample_dir, root / "panr2_inputs", sample_dir / "important")
+            burden = pd.read_csv(sample_dir / "important" / "key_tables" / "temporal_database_burden.tsv", sep="\t")
+            self.assertNotIn(1900, set(burden["collection_year"].astype(int)))
+            self.assertEqual(set(burden["collection_year"].astype(int)), {2020, 2021, 2022})
+
+    def test_human_figure_title_conversions(self):
+        self.assertEqual(_human_figure_title("geographic_map_vfdb_adeH"), "VFDB adeH geographic distribution")
+        self.assertEqual(_human_figure_title("diversity_richness_by_metadata_isolation_source"), "Feature richness by Isolation Source")
+        self.assertEqual(_human_figure_title("feature_profile_pcoa_by_bioproject"), "Feature-profile PCoA by BioProject")
+        self.assertTrue(_is_same_feature_pair("aph(3'')-Ib", "aph(3'')-Ib"))
 
     def test_important_lineage_report_counts_and_warnings(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -572,6 +624,10 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue({"trend_label", "support_label", "temporal_pattern_label", "warning_flags"}.issubset(temporal_summary.columns))
             prevalence = pd.read_csv(sample_dir / "important" / "tables" / "feature_prevalence.tsv", sep="\t")
             self.assertTrue({"positive_genomes", "total_genomes", "prevalence_percent", "feature_rows", "mean_hits_per_positive_genome", "prevalence_label", "warning_flags"}.issubset(prevalence.columns))
+            prevalence_db = pd.read_csv(sample_dir / "important" / "tables" / "prevalence_summary_by_database.tsv", sep="\t")
+            for _, db_row in prevalence_db.iterrows():
+                self.assertGreaterEqual(int(db_row["positive_genomes"]), int(db_row["top_feature_positive_genomes"]))
+                self.assertGreaterEqual(float(db_row["genomes_positive_percent"]), float(db_row["top_feature_prevalence_percent"]))
             prevalence_html = (sample_dir / "important" / "figures" / "prevalence_analysis.html").read_text(encoding="utf-8")
             for control in ["Database", "Top 10", "Top 20", "Top 50", "Complete", "Genome prevalence %", "Minimum positive genomes"]:
                 self.assertIn(control, prevalence_html)
@@ -650,6 +706,8 @@ class FetchM2AdapterTests(unittest.TestCase):
             component_sum = components[components["assembly_accession"] == top_sample]["component_score"].astype(float).sum()
             top_score = float(notable[notable["assembly_accession"] == top_sample]["notable_genome_score"].iloc[0])
             self.assertAlmostEqual(component_sum, top_score, places=2)
+            temporal_components = components[components["component"] == "temporal_increasing_feature_score"]
+            self.assertTrue((temporal_components["component_score"].astype(float) >= 0).all())
             ordination = pd.read_csv(sample_dir / "important" / "tables" / "feature_profile_ordination.tsv", sep="\t")
             self.assertTrue({"PCoA1", "PCoA2", "explained_variance_PCoA1", "explained_variance_PCoA2"}.issubset(ordination.columns))
             concordance = pd.read_csv(sample_dir / "important" / "tables" / "amr_concordance_feature_level.tsv", sep="\t")
@@ -659,6 +717,9 @@ class FetchM2AdapterTests(unittest.TestCase):
             highlights = pd.read_csv(sample_dir / "important" / "tables" / "report_highlights.tsv", sep="\t")
             self.assertTrue({"rank", "section", "highlight_type", "triage_score", "recommended_action"}.issubset(highlights.columns))
             self.assertNotIn("database_burden", set(highlights.head(20)["primary_feature"].fillna("").astype(str)))
+            informative_pairs = highlights[highlights["highlight_type"] == "informative_cooccurrence"]
+            for _, row in informative_pairs.iterrows():
+                self.assertFalse(_is_same_feature_pair(str(row.get("primary_feature", "")), str(row.get("secondary_feature", ""))))
             highlight_sections = set(highlights.head(20)["section"].fillna("").astype(str))
             self.assertGreaterEqual(len(highlight_sections), 2)
             by_section = pd.read_csv(sample_dir / "important" / "tables" / "report_highlights_by_section.tsv", sep="\t")
@@ -666,19 +727,49 @@ class FetchM2AdapterTests(unittest.TestCase):
             warning_priorities = pd.read_csv(sample_dir / "important" / "tables" / "warning_priority_summary.tsv", sep="\t")
             self.assertTrue({"rank", "section", "severity", "warning_type", "priority_score", "why_it_matters"}.issubset(warning_priorities.columns))
             visual_index = pd.read_csv(sample_dir / "important" / "tables" / "report_visual_index.tsv", sep="\t")
-            self.assertTrue({"figure_stem", "section", "interpretation_type", "svg_path", "recommended_use"}.issubset(visual_index.columns))
+            self.assertTrue({"figure_stem", "section", "interpretation_type", "svg_path", "recommended_use", "title"}.issubset(visual_index.columns))
+            pcoa_rows = visual_index[visual_index["figure_stem"] == "feature_profile_pcoa_by_bioproject"]
+            if not pcoa_rows.empty:
+                self.assertEqual(pcoa_rows.iloc[0]["title"], "Feature-profile PCoA by BioProject")
             visual_quality = pd.read_csv(sample_dir / "important" / "tables" / "report_visual_quality.tsv", sep="\t")
-            self.assertTrue({"figure_stem", "quality_label", "svg_available", "data_tsv_available"}.issubset(visual_quality.columns))
+            self.assertTrue({
+                "figure_stem",
+                "quality_label",
+                "svg_available",
+                "data_tsv_available",
+                "asset_quality_label",
+                "interpretation_quality_label",
+                "title_quality_label",
+                "caption_quality_label",
+                "final_publication_label",
+            }.issubset(visual_quality.columns))
+            exploratory_quality = visual_quality[visual_quality["section"].isin(["Geographic Distribution", "Co-occurrence / Genomic Context", "Lineage / Clonal Structure"])]
+            if not exploratory_quality.empty:
+                self.assertNotIn("publication_ready", set(exploratory_quality["final_publication_label"].fillna("").astype(str)))
             warnings = pd.read_csv(sample_dir / "important" / "tables" / "warnings_and_limitations.tsv", sep="\t")
             self.assertTrue({"warning_id", "section", "severity", "warning_type", "recommended_action"}.issubset(warnings.columns))
             warning_summary = pd.read_csv(sample_dir / "important" / "tables" / "warnings_and_limitations_summary.tsv", sep="\t")
             self.assertTrue({"section", "severity", "warning_type", "warning_count", "recommended_action"}.issubset(warning_summary.columns))
             download_manifest = pd.read_csv(sample_dir / "important" / "tables" / "download_manifest.tsv", sep="\t")
             self.assertIn("basic/enriched_genome_dataset.csv", set(download_manifest["file_path"]))
+            all_index_rows = download_manifest[download_manifest["file_path"] == "all/file_index.tsv"]
+            if not all_index_rows.empty:
+                self.assertEqual(all_index_rows.iloc[0]["complete_or_capped"], "not_generated_in_important_mode")
             report_controls = pd.read_csv(outputs["report_controls"], sep="\t")
             self.assertIn("important_lineage_feature_cap_per_database", set(report_controls["setting"]))
             self.assertIn("important_diversity_jaccard_heatmap_cap", set(report_controls["setting"]))
             report_html = (sample_dir / "important" / "results.html").read_text(encoding="utf-8")
+            self.assertNotIn("Report-facing figure with PNG", report_html)
+            self.assertNotIn("Warning rows represent", report_html)
+            self.assertIn("Warning flags average", report_html)
+            if by_section["section"].nunique() >= 5:
+                balanced_preview = report_html.split("<h2>Balanced highlights by section</h2>", 1)[1].split('<div class="downloads"', 1)[0]
+                preview_sections = [
+                    section
+                    for section in sorted(set(by_section["section"].fillna("").astype(str)))
+                    if section and section in balanced_preview
+                ]
+                self.assertGreaterEqual(len(preview_sections), 5)
             for section in [
                 "Featured Results",
                 "Run Overview",
@@ -757,7 +848,7 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("Download important figures ZIP", report_html)
             self.assertIn("Download report assets ZIP", report_html)
             self.assertIn("Interpret these patterns as dataset-specific sampling summaries", report_html)
-            self.assertIn("warning-heavy associations should be treated as exploratory", report_html)
+            self.assertIn("Warning flags average", report_html)
             self.assertIn("PNG</a>", report_html)
             self.assertIn("SVG</a>", report_html)
             self.assertIn("Data TSV</a>", report_html)
