@@ -71,6 +71,10 @@ class FetchM2AdapterTests(unittest.TestCase):
             html = (sample_dir / "important" / "figures" / "geographic_distribution.html").read_text(encoding="utf-8")
             for control in ["Database", "Mode", "Feature", "Geographic level", "Minimum group size", "Warning filter"]:
                 self.assertIn(control, html)
+            svg = (sample_dir / "important" / "figures" / "geographic_distribution_map.svg").read_text(encoding="utf-8")
+            self.assertIn("Color shows dataset prevalence/burden", svg)
+            self.assertIn("not a regional or global prevalence estimate", svg)
+            self.assertIn("small group", svg)
 
     def test_important_prevalence_counts_unique_genomes_and_duplicate_rows(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -727,6 +731,8 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("Download complete tables ZIP", report_html)
             self.assertIn("Download important figures ZIP", report_html)
             self.assertIn("Download report assets ZIP", report_html)
+            self.assertIn("Interpret these patterns as dataset-specific sampling summaries", report_html)
+            self.assertIn("warning-heavy associations should be treated as exploratory", report_html)
             self.assertIn("PNG</a>", report_html)
             self.assertIn("SVG</a>", report_html)
             self.assertIn("Data TSV</a>", report_html)

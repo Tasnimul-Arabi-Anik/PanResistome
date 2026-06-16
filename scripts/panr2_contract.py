@@ -3940,26 +3940,50 @@ def _geo_metric_value(row: dict[str, str], metric: str) -> float:
 
 def _svg_geographic_map(rows: list[dict[str, str]], title: str) -> str:
     width, height = 960, 480
-    points = []
+    total_rows = len(rows)
+    mappable_rows = []
+    missing_coords = 0
     for row in rows:
         xy = _country_xy(row.get("country", ""), width, height)
         if not xy:
+            missing_coords += 1
             continue
         prevalence = (_float_or_none(row.get("prevalence_percent", "")) or 0.0) / 100.0
         if row.get("prevalence_percent", "") == "":
             prevalence = _float_or_none(row.get("prevalence", "")) or 0.0
         total = int(_float_or_none(row.get("total_genomes", "")) or 0)
-        radius = max(5, min(28, 4 + math.sqrt(max(total, 1)) * 4))
-        red = int(230 * prevalence)
-        blue = int(200 * (1 - prevalence))
-        fill = "#cbd5e1" if "small_group_warning" in row.get("warning_flags", "") else f"rgb({red},80,{blue})"
         positive = row.get("positive_genomes", "") or row.get("positive_genomes_with_database", "0")
-        label = f"{row.get('country', '')}: {positive}/{row.get('total_genomes', '0')} ({prevalence * 100:.1f}%); warnings={row.get('warning_flags', '')}"
+        mappable_rows.append((row, xy, prevalence, total, positive))
+    label_countries = {
+        row.get("country", "")
+        for row, _xy, prevalence, total, _positive in sorted(
+            mappable_rows,
+            key=lambda item: (-item[3], -item[2], item[0].get("country", "")),
+        )[:10]
+    }
+    points = []
+    for row, xy, prevalence, total, positive in mappable_rows:
+        radius = max(5, min(28, 4 + math.sqrt(max(total, 1)) * 4))
+        red = int(55 + 185 * prevalence)
+        green = int(115 - 45 * prevalence)
+        blue = int(210 - 170 * prevalence)
+        fill = "#cbd5e1" if "small_group_warning" in row.get("warning_flags", "") else f"rgb({red},{green},{blue})"
+        label = (
+            f"{row.get('country', '')}: {positive}/{row.get('total_genomes', '0')} "
+            f"({prevalence * 100:.1f}%); warnings={row.get('warning_flags', '') or 'none'}"
+        )
+        text = ""
+        if row.get("country", "") in label_countries:
+            text = (
+                f"<text x='{xy[0] + radius + 3:.1f}' y='{xy[1] + 4:.1f}' "
+                "font-family='Arial' font-size='11' fill='#1f2933'>"
+                f"{html.escape(row.get('country', ''))}</text>"
+            )
         points.append(
             f"<circle cx='{xy[0]:.1f}' cy='{xy[1]:.1f}' r='{radius:.1f}' fill='{fill}' "
             "fill-opacity='0.75' stroke='#1f2933' stroke-width='1'>"
             f"<title>{html.escape(label)}</title></circle>"
-            f"<text x='{xy[0] + radius + 3:.1f}' y='{xy[1] + 4:.1f}' font-size='11' fill='#1f2933'>{html.escape(row.get('country', ''))}</text>"
+            f"{text}"
         )
     grid = []
     for lon in range(-120, 181, 60):
@@ -3968,14 +3992,34 @@ def _svg_geographic_map(rows: list[dict[str, str]], title: str) -> str:
     for lat in range(-60, 91, 30):
         y = (90 - lat) / 180 * height
         grid.append(f"<line x1='0' y1='{y:.1f}' x2='{width}' y2='{y:.1f}' stroke='#d9e2ec' stroke-width='1'/>")
+    legend_y = height + 66
+    note = (
+        f"{len(mappable_rows)} of {total_rows} country groups mapped"
+        + (f"; {missing_coords} lacked coordinates" if missing_coords else "")
+        + ". Color shows dataset prevalence/burden, point size shows genomes, gray marks small groups."
+    )
+    legend = (
+        f"<g transform='translate(20,{legend_y})' font-family='Arial' font-size='12' fill='#52606d'>"
+        "<circle cx='8' cy='0' r='6' fill='rgb(55,115,210)' fill-opacity='0.75' stroke='#1f2933'/>"
+        "<text x='22' y='4'>lower prevalence</text>"
+        "<circle cx='158' cy='0' r='10' fill='rgb(148,92,125)' fill-opacity='0.75' stroke='#1f2933'/>"
+        "<text x='176' y='4'>mid</text>"
+        "<circle cx='244' cy='0' r='14' fill='rgb(240,70,40)' fill-opacity='0.75' stroke='#1f2933'/>"
+        "<text x='266' y='4'>higher prevalence</text>"
+        "<circle cx='444' cy='0' r='9' fill='#cbd5e1' fill-opacity='0.75' stroke='#1f2933'/>"
+        "<text x='462' y='4'>small group</text>"
+        f"<text x='0' y='28'>{html.escape(note)}</text>"
+        "<text x='0' y='48'>This map describes the analyzed dataset only and is not a regional or global prevalence estimate.</text>"
+        "</g>"
+    )
     return (
-        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height + 58}' viewBox='0 0 {width} {height + 58}'>"
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height + 132}' viewBox='0 0 {width} {height + 132}'>"
         "<rect width='100%' height='100%' fill='#f8fafc'/>"
         f"<text x='20' y='28' font-size='20' font-family='Arial' font-weight='700' fill='#102a43'>{html.escape(title)}</text>"
         f"<g transform='translate(0,48)'><rect x='0' y='0' width='{width}' height='{height}' fill='#eff6ff' stroke='#bcccdc'/>"
         + "".join(grid)
         + "".join(points)
-        + "</g></svg>\n"
+        + f"</g>{legend}</svg>\n"
     )
 
 
@@ -4050,8 +4094,8 @@ def _write_zip_bundle(path: Path, files: list[Path], base_dir: Path) -> str:
 
 
 def _geographic_map_png(rows: list[dict[str, str]], path: Path) -> None:
-    width, map_height, header = 960, 480, 48
-    height = map_height + header + 10
+    width, map_height, header, footer = 960, 480, 48, 54
+    height = map_height + header + footer
     pixels = [bytearray([248, 250, 252] * width) for _ in range(height)]
 
     def set_pixel(x: int, y: int, color: tuple[int, int, int]) -> None:
@@ -4092,8 +4136,17 @@ def _geographic_map_png(rows: list[dict[str, str]], path: Path) -> None:
             prevalence = _float_or_none(row.get("prevalence", "")) or 0.0
         total = int(_float_or_none(row.get("total_genomes", "")) or 0)
         radius = max(5, min(28, 4 + math.sqrt(max(total, 1)) * 4))
-        color = (203, 213, 225) if "small_group_warning" in row.get("warning_flags", "") else (int(230 * prevalence), 80, int(200 * (1 - prevalence)))
+        color = (
+            (203, 213, 225)
+            if "small_group_warning" in row.get("warning_flags", "")
+            else (int(55 + 185 * prevalence), int(115 - 45 * prevalence), int(210 - 170 * prevalence))
+        )
         draw_circle(xy[0], xy[1] + header, radius, color)
+    legend_y = header + map_height + 18
+    for idx, prevalence in enumerate([0.0, 0.5, 1.0]):
+        color = (int(55 + 185 * prevalence), int(115 - 45 * prevalence), int(210 - 170 * prevalence))
+        draw_rect(20 + idx * 38, legend_y, 50 + idx * 38, legend_y + 18, color)
+    draw_rect(150, legend_y, 180, legend_y + 18, (203, 213, 225))
     _write_png(path, width, height, pixels)
 
 
@@ -11767,24 +11820,43 @@ def write_important_results_report(
     geographic_databases = len({row.get("database", "") for row in geographic_burden_rows if row.get("database", "")})
     geographic_country_groups = len({row.get("group_name", "") for row in geographic_burden_rows if row.get("geo_level") == "country" and row.get("group_name") not in {"", "missing", "unknown", "missing (unknown)"}})
     geographic_missing_country = max([int(_float_or_none(row.get("missing_country_count", "")) or 0) for row in geographic_summary_rows] or [0])
+    geographic_missing_fraction = max([_float_or_none(row.get("missing_country_fraction", "")) or 0.0 for row in geographic_summary_rows] or [0.0])
+    geographic_min_n_groups = max([int(_float_or_none(row.get("groups_passing_min_n", "")) or 0) for row in geographic_summary_rows if row.get("geo_level") == "country"] or [0])
     geographic_warning_count = sum(1 for row in geographic_warning_rows if row.get("warning_flags", ""))
+    geographic_warning_flags = Counter(
+        flag
+        for row in geographic_warning_rows
+        for flag in row.get("warning_flags", "").split(";")
+        if flag and flag != "exploratory_only"
+    )
+    top_geo_warning = geographic_warning_flags.most_common(1)[0][0] if geographic_warning_flags else "none"
     geographic_cards_html = (
         "<div class='cards'>"
         f"<div class='card'><span>Databases</span><strong>{geographic_databases}</strong></div>"
         f"<div class='card'><span>Country groups</span><strong>{geographic_country_groups}</strong></div>"
+        f"<div class='card'><span>Country groups n&gt;=5</span><strong>{geographic_min_n_groups}</strong></div>"
         f"<div class='card'><span>Missing country metadata</span><strong>{geographic_missing_country}</strong></div>"
         f"<div class='card'><span>Warning groups</span><strong>{geographic_warning_count}</strong></div>"
+        f"<div class='card'><span>Most common warning</span><strong>{html.escape(top_geo_warning)}</strong></div>"
         "</div>"
     )
-    best_geo = next((row for row in geographic_summary_rows if row.get("mode") == "database_burden" and row.get("geo_level") == "country" and row.get("top_group")), {})
+    best_geo = top_geographic_burden[0] if top_geographic_burden else {}
+    best_geo_total = int(_float_or_none(best_geo.get("total_genomes", "")) or 0)
+    best_geo_support = "standard denominator" if best_geo_total >= 10 else ("small denominator" if best_geo_total else "not available")
+    missing_geo_note = ""
+    if geographic_missing_country:
+        missing_geo_note = f" Country metadata was missing for {geographic_missing_country} genome(s) ({geographic_missing_fraction * 100:.1f}%)."
+    warning_geo_note = ""
+    if geographic_warning_count:
+        warning_geo_note = f" {geographic_warning_count} geographic group(s) carry interpretation warnings; the most common non-generic warning is {top_geo_warning}."
     geographic_summary_html = (
         "<p>"
         f"Geographic summaries cover {geographic_databases} detected database(s) across {geographic_country_groups} country group(s). "
-        f"The default country-level view highlights {html.escape(best_geo.get('database', 'detected features'))}; "
-        f"the top group is {html.escape(best_geo.get('top_group', 'not available'))} "
-        f"({html.escape(best_geo.get('top_group_prevalence_percent', ''))}% "
-        f"{html.escape(best_geo.get('top_group_positive_genomes', ''))}/{html.escape(best_geo.get('top_group_total_genomes', ''))}). "
-        f"Country metadata was missing for {geographic_missing_country} genome(s)."
+        f"The ranked country view highlights {html.escape(best_geo.get('database', 'detected features'))}; "
+        f"the leading country group is {html.escape(best_geo.get('group_name', 'not available'))} "
+        f"({html.escape(best_geo.get('prevalence_display', 'not available'))}, {best_geo_support})."
+        f"{missing_geo_note}{warning_geo_note} "
+        "Interpret these patterns as dataset-specific sampling summaries, not regional or global prevalence estimates."
         "</p>"
         if geographic_summary_rows else "<p>No geographic summaries were generated because country metadata or feature rows were unavailable.</p>"
     )
@@ -11928,6 +12000,13 @@ def write_important_results_report(
     metadata_usable = metadata_summary.get("metadata_columns_usable", "0")
     metadata_sparse = metadata_summary.get("metadata_columns_sparse_or_biased", "0")
     metadata_excluded = metadata_summary.get("metadata_columns_excluded", "0")
+    metadata_warning_rows = int(_float_or_none(metadata_summary.get("warning_rows", "0")) or 0)
+    metadata_feature_comparisons = int(_float_or_none(metadata_summary.get("feature_enrichment_rows", "0")) or 0)
+    metadata_warning_fraction = (metadata_warning_rows / metadata_feature_comparisons) if metadata_feature_comparisons else 0.0
+    metadata_warning_note = (
+        f" Warning rows represent {metadata_warning_fraction * 100:.1f}% of feature-by-group comparisons, so warning-heavy associations should be treated as exploratory."
+        if metadata_feature_comparisons else ""
+    )
     metadata_summary_html = (
         "<p>"
         f"Metadata association screening evaluated {html.escape(metadata_summary.get('metadata_columns_screened', '0'))} metadata columns, "
@@ -11936,6 +12015,7 @@ def write_important_results_report(
         f"Strong feature associations: {html.escape(metadata_summary.get('strong_feature_associations', '0'))}; "
         f"moderate feature associations: {html.escape(metadata_summary.get('moderate_feature_associations', '0'))}; "
         f"warning rows: {html.escape(metadata_summary.get('warning_rows', '0'))}."
+        f"{metadata_warning_note}"
         "</p>"
     )
     metadata_usability_cards = (
