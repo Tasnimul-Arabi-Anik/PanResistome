@@ -11639,6 +11639,7 @@ def write_important_final_interpretation_outputs(
     highlight_rows.sort(key=lambda item: (-number(item.get("triage_score", "0")), item.get("section", ""), item.get("title", "")))
     for idx, row in enumerate(highlight_rows, 1):
         row["rank"] = str(idx)
+    highlight_rows = highlight_rows[:5000]
     highlight_fields = [
         "rank", "section", "highlight_type", "title", "description", "support_label", "confidence_label",
         "warning_severity", "warning_flags", "primary_database", "primary_feature", "secondary_database",
