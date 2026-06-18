@@ -94,6 +94,7 @@ params.report_mode = 'publication'
 params.output_mode = 'all'
 params.figure_formats = 'png,svg,tsv'
 params.publication_figures = false
+params.clean = false
 params.max_features_heatmap = null
 params.max_features_network = null
 params.max_metadata_columns = null
@@ -456,6 +457,7 @@ def helpMessage() {
                               basic publishes only basic/enriched_genome_dataset.csv and .tsv
       --figure_formats         Requested user-facing figure formats [default: png,svg,tsv; first-pass geographic map writes html,png,svg,tsv]
       --publication_figures    Request publication-style figure expansion where supported [default: false]
+      --clean                  After a successful run, remove the Nextflow work directory and transient caches; published outputs and manifests are preserved [default: false]
       --max_features_heatmap   Maximum features retained in handoff presence/absence matrices [default: 300; 150 in large-dataset mode]
       --max_features_network   Maximum features used for cross-database co-occurrence/proximity summaries [default: --panr2_cross_database_max_features; 150 in large-dataset mode]
       --max_metadata_columns   Maximum metadata audit rows shown in handoff HTML pages [default: 80; 20 in large-dataset mode]
@@ -2987,14 +2989,6 @@ workflow {
 }
 
 workflow.onComplete {
-    def tracePath = "${launchDir}/pipeline_trace.txt"
-    def traceFile = file(tracePath)
-    if (!traceFile.exists() || traceFile.lastModified() < pipelineStartMillis) {
-        log.info "Runtime/resource summary skipped because no current-run Nextflow trace was found."
-        return
-    }
-    def summaryPath = "${params.outdir}/pipeline_runtime_summary.tsv"
-    def taskPath = "${params.outdir}/pipeline_runtime_tasks.tsv"
     def pythonExe = "python3"
     try {
         def pythonCheck = [pythonExe, "--version"].execute()
@@ -3005,25 +2999,68 @@ workflow.onComplete {
     } catch (Exception ignored) {
         pythonExe = "python"
     }
-    def command = [
-        pythonExe,
-        "${baseDir}/scripts/summarize_nextflow_trace.py",
-        "--trace",
-        tracePath,
-        "--out",
-        summaryPath,
-        "--tasks-out",
-        taskPath,
-    ]
-    try {
-        def process = command.execute()
-        process.waitFor()
-        if (process.exitValue() == 0) {
-            log.info "Runtime/resource summary saved to: ${summaryPath}"
-        } else {
-            log.warn "Runtime/resource summary failed: ${process.err.text}"
+
+    def tracePath = "${launchDir}/pipeline_trace.txt"
+    def traceFile = file(tracePath)
+    if (!traceFile.exists() || traceFile.lastModified() < pipelineStartMillis) {
+        log.info "Runtime/resource summary skipped because no current-run Nextflow trace was found."
+    } else {
+        def summaryPath = "${params.outdir}/pipeline_runtime_summary.tsv"
+        def taskPath = "${params.outdir}/pipeline_runtime_tasks.tsv"
+        def command = [
+            pythonExe,
+            "${baseDir}/scripts/summarize_nextflow_trace.py",
+            "--trace",
+            tracePath,
+            "--out",
+            summaryPath,
+            "--tasks-out",
+            taskPath,
+        ]
+        try {
+            def process = command.execute()
+            process.waitFor()
+            if (process.exitValue() == 0) {
+                log.info "Runtime/resource summary saved to: ${summaryPath}"
+            } else {
+                log.warn "Runtime/resource summary failed: ${process.err.text}"
+            }
+        } catch (Exception error) {
+            log.warn "Runtime/resource summary could not be generated: ${error.message}"
         }
-    } catch (Exception error) {
-        log.warn "Runtime/resource summary could not be generated: ${error.message}"
+    }
+
+    if (truthyParam(params.clean)) {
+        if (!workflow.success) {
+            log.warn "Post-run cleanup skipped because the workflow did not complete successfully."
+            return
+        }
+        def cleanupSummaryPath = "${params.outdir}/pipeline_cleanup_summary.tsv"
+        def workDirPath = workflow.workDir ? workflow.workDir.toString() : "${launchDir}/work"
+        def cleanupCommand = [
+            pythonExe,
+            "${baseDir}/scripts/cleanup_after_run.py",
+            "--work-dir",
+            workDirPath,
+            "--launch-dir",
+            launchDir.toString(),
+            "--outdir",
+            params.outdir.toString(),
+            "--summary",
+            cleanupSummaryPath,
+            "--nextflow-session-id",
+            workflow.sessionId ? workflow.sessionId.toString() : "",
+        ]
+        try {
+            def cleanupProcess = cleanupCommand.execute()
+            cleanupProcess.waitFor()
+            if (cleanupProcess.exitValue() == 0) {
+                log.info "Post-run cleanup summary saved to: ${cleanupSummaryPath}"
+            } else {
+                log.warn "Post-run cleanup completed with warnings; inspect ${cleanupSummaryPath}. ${cleanupProcess.err.text}"
+            }
+        } catch (Exception error) {
+            log.warn "Post-run cleanup could not be completed: ${error.message}"
+        }
     }
 }

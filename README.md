@@ -58,6 +58,12 @@ pipeline_runtime_summary.tsv
 pipeline_runtime_tasks.tsv
 ```
 
+When `--clean true` is enabled, the post-run cleanup audit is written as:
+
+```text
+pipeline_cleanup_summary.tsv
+```
+
 PanR2 handoff exports also write machine-readable reproducibility and schema
 manifests under `panr2_inputs/manifest/`:
 
@@ -566,6 +572,7 @@ PanResistome/
 | `--output_mode` | str | all | Final user-facing output bundle: `basic`, `important`, or `all`; `basic` publishes only `basic/enriched_genome_dataset.csv` and `.tsv` |
 | `--figure_formats` | str | png,svg,tsv | Requested user-facing figure formats; important report figures write portable HTML, PNG, SVG, plotted TSV, and PDF companions where supported without extra plotting dependencies |
 | `--publication_figures` | bool | false | Reserved switch for expanded PDF/publication figure generation in later report phases |
+| `--clean` | bool | false | After a successful run, remove the Nextflow work directory, current Nextflow session cache, and transient Python/test caches; published outputs and manifests are preserved and an audit TSV is written |
 | `--max_features_heatmap` | int | 300 | Maximum features retained in exported presence/absence matrices; defaults to 150 in large-dataset mode |
 | `--max_features_network` | int | `--panr2_cross_database_max_features` | Maximum features used for co-occurrence/proximity summaries; defaults to 150 in large-dataset mode |
 | `--max_metadata_columns` | int | 80 | Maximum metadata audit rows shown in handoff HTML pages; defaults to 20 in large-dataset mode |
@@ -985,14 +992,26 @@ Every new PanResistome module should export PanR2-compatible records when possib
 
 ## 🧼 Work Directory
 
-By default, the `.nextflow` and `work/` directories are preserved for reproducibility. To remove intermediate files after a successful run:
+By default, `.nextflow/` and the Nextflow `work/` directory are preserved for `-resume`, debugging, and reproducibility. If you want a cleaner result directory after a successful run, enable the opt-in cleanup pass:
+
+```bash
+nextflow run main.nf ... --clean true
+```
+
+`--clean true` runs only after the workflow completes successfully. It removes the Nextflow work directory, the current run's Nextflow session cache, and transient Python/test caches, while preserving published outputs such as `basic/`, `important/`, `panr2_inputs/`, manifests, logs, and runtime summaries. The audit file is written to:
+
+```text
+<outdir>/pipeline_cleanup_summary.tsv
+```
+
+If cleanup reports permission warnings because Docker or another container runtime created root-owned files, inspect the audit TSV first. You can still clean manually after confirming the published outputs:
 
 ```bash
 nextflow clean -f
 rm -rf work/
 ```
 
-Only do this once you've verified the results.
+Only remove intermediate files once you've verified the results or no longer need `-resume`.
 
 ---
 

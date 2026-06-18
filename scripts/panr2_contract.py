@@ -3564,7 +3564,163 @@ def _figure_caption_for(section: str, stem: str) -> str:
         return "Diversity summaries reflect detected annotation features, not complete biological diversity."
     if section == "Prevalence" or stem.startswith("prevalence_"):
         return "Prevalence is calculated from positive genome denominators; feature rows may exceed genome counts."
-    return "Figure preview with companion PNG, SVG, PDF, and plotted-data TSV links when available."
+    return "Supporting report figure; review the linked source table, warning status, and companion plotted-data TSV before interpretation."
+
+
+REPORT_FIGURE_REGISTRY = {
+    "prevalence_genomes_positive_by_database": {
+        "default_visibility": "featured",
+        "display_reason": "Curated high-level prevalence denominator figure.",
+    },
+    "prevalence_core_accessory_rare_by_database": {
+        "default_visibility": "featured",
+        "display_reason": "Curated high-level feature-class composition figure.",
+    },
+    "diversity_core_common_accessory_rare_by_database": {
+        "default_visibility": "featured",
+        "display_reason": "Curated high-level pan-feature composition figure.",
+    },
+    "diversity_pan_feature_accumulation": {
+        "default_visibility": "featured",
+        "display_reason": "Curated high-level pan-feature accumulation figure.",
+    },
+    "feature_profile_pcoa_by_lineage": {
+        "default_visibility": "featured",
+        "display_reason": "Curated ordination figure for feature-profile structure.",
+    },
+    "notable_genomes_ranked": {
+        "default_visibility": "featured",
+        "display_reason": "Curated research-prioritization figure.",
+    },
+    "notable_genome_score_heatmap": {
+        "default_visibility": "featured",
+        "display_reason": "Curated score-component figure for notable genomes.",
+    },
+    "evidence_confidence_summary": {
+        "default_visibility": "featured",
+        "display_reason": "Curated evidence/confidence overview figure.",
+    },
+    "warnings_summary": {
+        "default_visibility": "featured",
+        "display_reason": "Curated warning-severity overview figure.",
+    },
+    "amr_concordance_summary": {
+        "default_visibility": "featured",
+        "display_reason": "Curated AMR tool/database concordance figure.",
+    },
+}
+
+REPORT_TECHNICAL_FIGURE_PREFIXES = (
+    "cooccurrence_network_",
+    "temporal_top_",
+    "temporal_feature_heatmap",
+    "variation_identity_",
+    "variation_coverage_",
+    "variation_identity_coverage_",
+)
+
+REPORT_SUPPORTING_FIGURE_PREFIXES = (
+    "geographic_",
+    "metadata_",
+    "lineage_metadata_overlap_",
+    "lineage_feature_enrichment_",
+    "lineage_feature_presence_",
+    "diversity_jaccard_heatmap",
+    "diversity_richness_by_metadata_",
+    "feature_profile_pcoa_by_country",
+    "feature_profile_pcoa_by_source",
+    "feature_profile_pcoa_by_bioproject",
+)
+
+REPORT_STANDARD_FIGURE_PREFIXES = (
+    "qc_",
+    "prevalence_",
+    "diversity_feature_richness_by_sample",
+    "diversity_database_by_sample_heatmap",
+    "lineage_distribution_",
+    "lineage_database_burden_",
+    "lineage_feature_heatmap_",
+    "lineage_confounding_top_findings",
+    "cooccurrence_heatmap_",
+    "cooccurrence_context_",
+    "context_evidence_",
+    "top_context_",
+    "contig_neighborhood",
+    "amr_concordance_",
+    "evidence_",
+    "warnings_",
+    "notable_",
+)
+
+
+def _figure_visibility_metadata(
+    stem: str,
+    section: str,
+    interpretation_type: str,
+    warning_status: str,
+    asset_quality_label: str,
+    interpretation_quality_label: str,
+    title_quality_label: str,
+    caption_quality_label: str,
+) -> dict[str, str]:
+    """Classify report figures for default display without dropping any assets."""
+    stem = str(stem or "")
+    section = str(section or "")
+    interpretation_type = str(interpretation_type or "")
+    warning_status = str(warning_status or "none")
+
+    registry_entry = REPORT_FIGURE_REGISTRY.get(stem, {})
+    if registry_entry and asset_quality_label == "asset_ready":
+        visibility = registry_entry.get("default_visibility", "featured")
+        reason = registry_entry.get("display_reason", "Curated high-level figure with complete companion assets.")
+    elif stem.startswith(REPORT_TECHNICAL_FIGURE_PREFIXES):
+        visibility = "technical"
+        reason = "Technical or high-volume diagnostic figure; preserved for download and detailed review."
+    elif stem.startswith(REPORT_SUPPORTING_FIGURE_PREFIXES) or warning_status == "warning" or interpretation_quality_label != "interpretation_ready":
+        visibility = "supporting"
+        reason = "Interpretation-sensitive figure; useful context but not ideal as a first-view plot."
+    elif stem.startswith(REPORT_STANDARD_FIGURE_PREFIXES) or section in {"Prevalence", "Diversity / Pan-feature Summary", "Evidence & Confidence", "Warnings & Limitations"}:
+        visibility = "standard"
+        reason = "Useful report-facing figure with broad interpretability."
+    else:
+        visibility = "supporting"
+        reason = "Supplementary report figure; preserved in the visual index and figure ZIPs."
+
+    if asset_quality_label != "asset_ready" and visibility == "featured":
+        visibility = "standard"
+        reason = "Curated figure, but one or more companion formats are missing."
+
+    if visibility == "featured":
+        audience = "all users"
+        priority = 100
+    elif visibility == "standard":
+        audience = "all users"
+        priority = 70
+    elif visibility == "supporting":
+        audience = "research users"
+        priority = 40
+    else:
+        audience = "technical users"
+        priority = 10
+    if warning_status == "warning":
+        priority -= 10
+    if title_quality_label != "human_readable_title" or caption_quality_label != "specific_caption":
+        priority -= 5
+
+    publication_candidate = (
+        visibility in {"featured", "standard"}
+        and asset_quality_label == "asset_ready"
+        and interpretation_quality_label == "interpretation_ready"
+        and title_quality_label == "human_readable_title"
+        and caption_quality_label == "specific_caption"
+    )
+    return {
+        "default_visibility": visibility,
+        "display_reason": reason,
+        "recommended_audience": audience,
+        "main_report_priority": str(max(priority, 0)),
+        "publication_candidate": str(publication_candidate).lower(),
+    }
 
 
 def _section_balanced_rows(
@@ -11979,7 +12135,11 @@ def write_important_final_interpretation_outputs(
             else "exploratory_interpretation"
         )
         title_quality_label = "human_readable_title" if human_title and human_title.lower() != stem.replace("_", " ").lower() else "generic_title"
-        caption_quality_label = "specific_caption" if not caption.startswith("Figure preview") else "generic_caption"
+        caption_quality_label = (
+            "generic_caption"
+            if caption.startswith("Figure preview") or caption.startswith("Supporting report figure")
+            else "specific_caption"
+        )
         final_publication_label = (
             "publication_ready"
             if asset_quality_label == "asset_ready"
@@ -11988,6 +12148,17 @@ def write_important_final_interpretation_outputs(
             and caption_quality_label == "specific_caption"
             else "supporting_only"
         )
+        visibility = _figure_visibility_metadata(
+            stem,
+            section,
+            interpretation,
+            warning_status,
+            asset_quality_label,
+            interpretation_quality_label,
+            title_quality_label,
+            caption_quality_label,
+        )
+        final_publication_label = "publication_ready" if visibility["publication_candidate"] == "true" else "supporting_only"
         visual_rows.append({
             "figure_stem": stem,
             "section": section,
@@ -11995,6 +12166,7 @@ def write_important_final_interpretation_outputs(
             "interpretation_type": interpretation,
             "warning_status": warning_status,
             "description": caption if caption else description,
+            **visibility,
             "png_path": f"figures/{stem}.png" if png_available else "",
             "svg_path": f"figures/{stem}.svg",
             "pdf_path": f"figures/{stem}.pdf" if pdf_available else "",
@@ -12016,11 +12188,13 @@ def write_important_final_interpretation_outputs(
             "caption_quality_label": caption_quality_label,
             "final_publication_label": final_publication_label,
             "quality_label": final_publication_label,
+            **visibility,
             "recommended_action": "Use as a featured/public figure." if final_publication_label == "publication_ready" else "Use as supporting context and review warnings/caption.",
         })
     visual_index_path = tables / "report_visual_index.tsv"
     visual_index_fields = [
         "figure_stem", "section", "title", "interpretation_type", "warning_status", "description",
+        "default_visibility", "display_reason", "recommended_audience", "main_report_priority", "publication_candidate",
         "png_path", "svg_path", "pdf_path", "data_tsv_path", "recommended_use",
     ]
     write_rows(visual_index_path, visual_rows, visual_index_fields)
@@ -12028,14 +12202,38 @@ def write_important_final_interpretation_outputs(
     visual_quality_fields = [
         "figure_stem", "section", "png_available", "svg_available", "pdf_available", "data_tsv_available",
         "caption_status", "warning_status", "asset_quality_label", "interpretation_quality_label",
-        "title_quality_label", "caption_quality_label", "final_publication_label", "quality_label", "recommended_action",
+        "title_quality_label", "caption_quality_label", "final_publication_label", "quality_label",
+        "default_visibility", "display_reason", "recommended_audience", "main_report_priority", "publication_candidate",
+        "recommended_action",
     ]
     write_rows(visual_quality_path, visual_quality_rows, visual_quality_fields)
 
     # Download manifests and final ZIPs.
+    downloads.mkdir(parents=True, exist_ok=True)
+    publication_candidate_zip = downloads / "publication_candidate_figures.zip"
+    publication_candidate_stems = [
+        row["figure_stem"]
+        for row in visual_rows
+        if row.get("publication_candidate") == "true"
+    ]
+    if not publication_candidate_stems:
+        publication_candidate_stems = [
+            row["figure_stem"]
+            for row in sorted(visual_rows, key=lambda item: -number(item.get("main_report_priority", "0")))
+            if row.get("default_visibility") in {"featured", "standard"}
+        ][:10]
+    publication_candidate_files: list[Path] = []
+    for stem in publication_candidate_stems:
+        for suffix in [".png", ".svg", ".pdf", ".data.tsv"]:
+            path = figures / f"{stem}{suffix}"
+            if path.exists():
+                publication_candidate_files.append(path)
+    _write_zip_bundle(publication_candidate_zip, publication_candidate_files, important_dir)
+
     required_files = [
         (sample_dir / "basic" / "enriched_genome_dataset.csv", "main user-facing files", "Enriched genome dataset CSV", "all users", "complete", "Open first for sample-level review."),
         (sample_dir / "basic" / "enriched_genome_dataset.tsv", "main user-facing files", "Enriched genome dataset TSV", "all users", "complete", "Open first for sample-level review."),
+        (publication_candidate_zip, "downloads", "Publication-candidate figures ZIP", "all users", "curated", "Start here when choosing figures for talks, manuscripts, or reports."),
         (highlights_path, "important tables", "Report highlights triage", "all users", "summary", "Start here for supported and review-worthy findings."),
         (by_section_path, "important tables", "Report highlights by section", "all users", "summary", "Review balanced highlights from each major section."),
         (warning_priority_path, "important tables", "Warning priority summary", "all users", "summary", "Review highest-priority limitations before interpreting findings."),
@@ -12144,6 +12342,7 @@ def write_important_final_interpretation_outputs(
         "important_summary_tables_zip": str(important_summary_tables_zip),
         "important_tables_zip": str(important_tables_zip),
         "important_figures_zip": str(important_figures_zip),
+        "important_publication_candidate_figures_zip": str(publication_candidate_zip),
         "important_report_assets_zip": str(important_assets_zip),
     }
 
@@ -12427,16 +12626,65 @@ def write_important_results_report(
     caution_first_highlights = _section_balanced_rows(caution_candidates, per_section=2, max_total=12, section_order=report_section_order)
     top_visuals = sorted(
         visual_index_rows,
-        key=lambda row: (row.get("section", ""), row.get("title", "")),
+        key=lambda row: (
+            {"featured": 0, "standard": 1, "supporting": 2, "technical": 3}.get(row.get("default_visibility", ""), 4),
+            -(_float_or_none(row.get("main_report_priority", "0")) or 0.0),
+            row.get("section", ""),
+            row.get("title", ""),
+        ),
     )[:60]
     top_visual_quality = sorted(
         visual_quality_rows,
         key=lambda row: (
-            row.get("final_publication_label", row.get("quality_label", "")) != "publication_ready",
+            row.get("publication_candidate", "") != "true",
+            {"featured": 0, "standard": 1, "supporting": 2, "technical": 3}.get(row.get("default_visibility", ""), 4),
+            -(_float_or_none(row.get("main_report_priority", "0")) or 0.0),
             row.get("section", ""),
             row.get("figure_stem", ""),
         ),
     )[:60]
+    visual_by_stem = {row.get("figure_stem", ""): row for row in visual_index_rows}
+
+    def figure_visibility(stem: str) -> str:
+        return visual_by_stem.get(stem, {}).get("default_visibility", "standard")
+
+    def figure_priority(stem: str) -> float:
+        return _float_or_none(visual_by_stem.get(stem, {}).get("main_report_priority", "0")) or 0.0
+
+    def curated_figure_html(
+        items: list[tuple[str, str]],
+        empty_message: str,
+        max_primary: int = 6,
+        supporting_summary: str = "More supporting and technical figures",
+    ) -> str:
+        present = [(stem, card) for stem, card in items if card]
+        if not present:
+            return f"<p>{html.escape(empty_message)}</p>"
+        primary = [
+            (stem, card)
+            for stem, card in present
+            if figure_visibility(stem) in {"featured", "standard"}
+        ]
+        supporting = [
+            (stem, card)
+            for stem, card in present
+            if figure_visibility(stem) not in {"featured", "standard"}
+        ]
+        primary.sort(key=lambda item: (-figure_priority(item[0]), item[0]))
+        supporting.sort(key=lambda item: (-figure_priority(item[0]), item[0]))
+        if not primary and supporting:
+            primary, supporting = supporting[:1], supporting[1:]
+        output = _report_figure_grid_html([card for _stem, card in primary[:max_primary]])
+        hidden = primary[max_primary:] + supporting
+        if hidden:
+            output += (
+                f"<details class='details-block'><summary>{html.escape(supporting_summary)} "
+                f"({len(hidden)})</summary>"
+                f"{_report_figure_grid_html([card for _stem, card in hidden])}"
+                "</details>"
+            )
+        return output
+
     top_files = sorted(
         file_index_rows,
         key=lambda row: (row.get("category", ""), row.get("file_path", "")),
@@ -12491,12 +12739,12 @@ def write_important_results_report(
     report_cap_table_html = _html_table(report_cap_rows, ["setting", "value", "message", "warning_flags"], max_rows=30)
     visual_index_table_html = _html_table(
         top_visuals,
-        ["section", "title", "interpretation_type", "warning_status", "description", "png_path", "svg_path", "pdf_path", "data_tsv_path"],
+        ["section", "title", "default_visibility", "recommended_audience", "publication_candidate", "interpretation_type", "warning_status", "description", "png_path", "svg_path", "pdf_path", "data_tsv_path"],
         max_rows=40,
     )
     visual_quality_table_html = _html_table(
         top_visual_quality,
-        ["figure_stem", "section", "asset_quality_label", "interpretation_quality_label", "title_quality_label", "caption_quality_label", "final_publication_label", "png_available", "svg_available", "pdf_available", "data_tsv_available", "warning_status", "recommended_action"],
+        ["figure_stem", "section", "default_visibility", "publication_candidate", "asset_quality_label", "interpretation_quality_label", "title_quality_label", "caption_quality_label", "final_publication_label", "png_available", "svg_available", "pdf_available", "data_tsv_available", "warning_status", "recommended_action"],
         max_rows=40,
     )
     file_index_table_html = _html_table(top_files, ["file_path", "category", "description", "audience", "complete_or_capped", "recommended_use", "exists", "row_count"], max_rows=40)
@@ -12530,12 +12778,15 @@ def write_important_results_report(
         ("prevalence_database_burden_by_sample", "Database burden by sample"),
     ]:
         prevalence_figure_items.append(
-            _report_figure_card_html(
-                important_dir,
+            (
                 figure_name,
-                title,
-                "Prevalence is calculated as genomes with at least one hit; labels and tables preserve denominators.",
-                [("Descriptive", "descriptive")],
+                _report_figure_card_html(
+                    important_dir,
+                    figure_name,
+                    title,
+                    "Prevalence is calculated as genomes with at least one hit; labels and tables preserve denominators.",
+                    [("Descriptive", "descriptive")],
+                ),
             )
         )
     prevalence_figures = []
@@ -12543,15 +12794,22 @@ def write_important_results_report(
         database = path.name.replace("prevalence_top_features_", "").replace(".svg", "")
         stem = path.stem
         prevalence_figures.append(
-            _report_figure_card_html(
-                important_dir,
+            (
                 stem,
-                f"{database} prevalence",
-                "Horizontal bars show dataset prevalence with positive-genome denominators in the plotted data.",
-                [("Descriptive", "descriptive")],
+                _report_figure_card_html(
+                    important_dir,
+                    stem,
+                    f"{database} prevalence",
+                    "Horizontal bars show dataset prevalence with positive-genome denominators in the plotted data.",
+                    [("Descriptive", "descriptive")],
+                ),
             )
         )
-    prevalence_figures_html = _report_figure_grid_html((prevalence_figure_items + prevalence_figures)[:8]) if (prevalence_figure_items or prevalence_figures) else "<p>No prevalence figures were generated because no feature rows were available.</p>"
+    prevalence_figures_html = curated_figure_html(
+        prevalence_figure_items + prevalence_figures,
+        "No prevalence figures were generated because no feature rows were available.",
+        max_primary=6,
+    )
     geographic_databases = len({row.get("database", "") for row in geographic_burden_rows if row.get("database", "")})
     geographic_country_groups = len({row.get("group_name", "") for row in geographic_burden_rows if row.get("geo_level") == "country" and row.get("group_name") not in {"", "missing", "unknown", "missing (unknown)"}})
     geographic_missing_country = max([int(_float_or_none(row.get("missing_country_count", "")) or 0) for row in geographic_summary_rows] or [0])
@@ -12609,26 +12867,37 @@ def write_important_results_report(
     for path in sorted((important_dir / "figures").glob("geographic_*_bar_*.svg"))[:6]:
         stem = path.stem
         geographic_figure_items.append(
-            _report_figure_card_html(
-                important_dir,
+            (
                 stem,
-                _human_figure_title(stem),
-                "Bars summarize dataset-specific geographic prevalence or burden; small groups are flagged in the plotted data.",
-                [("Exploratory", "exploratory")],
+                _report_figure_card_html(
+                    important_dir,
+                    stem,
+                    _human_figure_title(stem),
+                    "Bars summarize dataset-specific geographic prevalence or burden; small groups are flagged in the plotted data.",
+                    [("Exploratory", "exploratory")],
+                ),
             )
         )
     for path in sorted((important_dir / "figures").glob("geographic_map_*.svg"))[:2]:
         stem = path.stem
         geographic_figure_items.append(
-            _report_figure_card_html(
-                important_dir,
+            (
                 stem,
-                _human_figure_title(stem),
-                "Map colors reflect the analyzed dataset and should not be read as regional or global prevalence.",
-                [("Exploratory", "exploratory")],
+                _report_figure_card_html(
+                    important_dir,
+                    stem,
+                    _human_figure_title(stem),
+                    "Map colors reflect the analyzed dataset and should not be read as regional or global prevalence.",
+                    [("Exploratory", "exploratory")],
+                ),
             )
         )
-    geographic_figures_html = _report_figure_grid_html(geographic_figure_items[:8]) if geographic_figure_items else "<p>No geographic figures were generated because no mappable country groups were available.</p>"
+    geographic_figures_html = curated_figure_html(
+        geographic_figure_items,
+        "No geographic figures were generated because no mappable country groups were available.",
+        max_primary=3,
+        supporting_summary="More geographic figures",
+    )
     variation_unique_features = len(variation_rows)
     variation_total_hits = sum(int(_float_or_none(row.get("total_hits", "")) or 0) for row in variation_rows)
     variation_high_features = sum(1 for row in variation_rows if row.get("variation_label") == "high_variation")
@@ -12668,15 +12937,23 @@ def write_important_results_report(
             title = figure_name
         stem = path.stem
         variation_figures.append(
-            _report_figure_card_html(
-                important_dir,
+            (
                 stem,
-                title,
-                "Variation reflects detected hit identity and coverage, not necessarily functional or phenotypic differences.",
-                [("Review", "warning")],
+                _report_figure_card_html(
+                    important_dir,
+                    stem,
+                    title,
+                    "Variation reflects detected hit identity and coverage, not necessarily functional or phenotypic differences.",
+                    [("Review", "warning")],
+                ),
             )
         )
-    variation_figures_html = _report_figure_grid_html(variation_figures[:6]) if variation_figures else "<p>No variation figures were generated because no identity/coverage feature rows were available.</p>"
+    variation_figures_html = curated_figure_html(
+        variation_figures,
+        "No variation figures were generated because no identity/coverage feature rows were available.",
+        max_primary=2,
+        supporting_summary="More variation review figures",
+    )
     temporal_figure_items = []
     for figure_name, title in [
         ("temporal_selected_feature_prevalence", "Selected feature prevalence"),
@@ -12690,15 +12967,23 @@ def write_important_results_report(
         if not svg_path.exists():
             continue
         temporal_figure_items.append(
-            _report_figure_card_html(
-                important_dir,
+            (
                 figure_name,
-                title,
-                "Temporal trends are exploratory and may reflect uneven sampling by year, lineage, geography, or BioProject.",
-                [("Exploratory", "exploratory")],
+                _report_figure_card_html(
+                    important_dir,
+                    figure_name,
+                    title,
+                    "Temporal trends are exploratory and may reflect uneven sampling by year, lineage, geography, or BioProject.",
+                    [("Exploratory", "exploratory")],
+                ),
             )
         )
-    temporal_figures_html = _report_figure_grid_html(temporal_figure_items) if temporal_figure_items else "<p>No temporal figures were generated because collection-year metadata or feature rows were unavailable.</p>"
+    temporal_figures_html = curated_figure_html(
+        temporal_figure_items,
+        "No temporal figures were generated because collection-year metadata or feature rows were unavailable.",
+        max_primary=2,
+        supporting_summary="More temporal exploratory figures",
+    )
     cooccurrence_summary = cooccurrence_summary_rows[0] if cooccurrence_summary_rows else {}
     cooccurrence_summary_html = (
         "<p>"
@@ -12722,15 +13007,23 @@ def write_important_results_report(
             continue
         stem = figure_path.stem
         cooccurrence_figure_items.append(
-            _report_figure_card_html(
-                important_dir,
+            (
                 stem,
-                title,
-                "Sample-level co-occurrence is separate from same-contig and proximity context evidence.",
-                [("Context", "exploratory")],
+                _report_figure_card_html(
+                    important_dir,
+                    stem,
+                    title,
+                    "Sample-level co-occurrence is separate from same-contig and proximity context evidence.",
+                    [("Context", "exploratory")],
+                ),
             )
         )
-    cooccurrence_figures_html = _report_figure_grid_html(cooccurrence_figure_items) if cooccurrence_figure_items else "<p>No co-occurrence/context figures were generated because feature-pair data were unavailable.</p>"
+    cooccurrence_figures_html = curated_figure_html(
+        cooccurrence_figure_items,
+        "No co-occurrence/context figures were generated because feature-pair data were unavailable.",
+        max_primary=3,
+        supporting_summary="More co-occurrence and network figures",
+    )
     metadata_summary = {row.get("metric", ""): row.get("value", "") for row in metadata_summary_rows}
     metadata_usable = metadata_summary.get("metadata_columns_usable", "0")
     metadata_sparse = metadata_summary.get("metadata_columns_sparse_or_biased", "0")
@@ -12777,15 +13070,23 @@ def write_important_results_report(
             continue
         stem = figure_path.stem
         metadata_figure_items.append(
-            _report_figure_card_html(
-                important_dir,
+            (
                 stem,
-                title,
-                "Metadata associations are exploratory and may reflect sampling, BioProject, lineage, geography, or year bias.",
-                [("Exploratory", "exploratory")],
+                _report_figure_card_html(
+                    important_dir,
+                    stem,
+                    title,
+                    "Metadata associations are exploratory and may reflect sampling, BioProject, lineage, geography, or year bias.",
+                    [("Exploratory", "exploratory")],
+                ),
             )
         )
-    metadata_figures_html = _report_figure_grid_html(metadata_figure_items) if metadata_figure_items else "<p>No metadata association figures were generated because metadata groups or feature rows were unavailable.</p>"
+    metadata_figures_html = curated_figure_html(
+        metadata_figure_items,
+        "No metadata association figures were generated because metadata groups or feature rows were unavailable.",
+        max_primary=2,
+        supporting_summary="More metadata association figures",
+    )
     lineage_summary = {row.get("metric", ""): row.get("value", "") for row in lineage_summary_rows}
     lineage_cards_html = (
         "<div class='cards'>"
@@ -12825,15 +13126,23 @@ def write_important_results_report(
             continue
         stem = figure_path.stem
         lineage_figure_items.append(
-            _report_figure_card_html(
-                important_dir,
+            (
                 stem,
-                title,
-                "Lineage summaries provide clonal-structure context and do not replace formal phylogenetic analysis.",
-                [("Lineage warning", "lineage")],
+                _report_figure_card_html(
+                    important_dir,
+                    stem,
+                    title,
+                    "Lineage summaries provide clonal-structure context and do not replace formal phylogenetic analysis.",
+                    [("Lineage warning", "lineage")],
+                ),
             )
         )
-    lineage_figures_html = _report_figure_grid_html(lineage_figure_items) if lineage_figure_items else "<p>No lineage figures were generated because lineage context was unavailable.</p>"
+    lineage_figures_html = curated_figure_html(
+        lineage_figure_items,
+        "No lineage figures were generated because lineage context was unavailable.",
+        max_primary=4,
+        supporting_summary="More lineage context figures",
+    )
     diversity_summary = {row.get("metric", ""): row.get("value", "") for row in diversity_summary_rows}
     diversity_cards_html = (
         "<div class='cards'>"
@@ -12866,41 +13175,55 @@ def write_important_results_report(
         if not svg_path.exists():
             continue
         diversity_figure_items.append(
-            _report_figure_card_html(
-                important_dir,
+            (
                 figure_name,
-                title,
-                "Diversity summaries reflect detected annotation features, not complete biological diversity.",
-                [("Descriptive", "descriptive")],
+                _report_figure_card_html(
+                    important_dir,
+                    figure_name,
+                    title,
+                    "Diversity summaries reflect detected annotation features, not complete biological diversity.",
+                    [("Descriptive", "descriptive")],
+                ),
             )
         )
     for svg_path in sorted((important_dir / "figures").glob("diversity_richness_by_metadata_*.svg"))[:1]:
         stem = svg_path.stem
         diversity_figure_items.append(
-            _report_figure_card_html(
-                important_dir,
+            (
                 stem,
-                _human_figure_title(stem),
-                "Richness-by-metadata summaries are descriptive and should be interpreted alongside sampling and lineage warnings.",
-                [("Descriptive", "descriptive")],
+                _report_figure_card_html(
+                    important_dir,
+                    stem,
+                    _human_figure_title(stem),
+                    "Richness-by-metadata summaries are descriptive and should be interpreted alongside sampling and lineage warnings.",
+                    [("Descriptive", "descriptive")],
+                ),
             )
         )
-    diversity_figures_html = _report_figure_grid_html(diversity_figure_items) if diversity_figure_items else "<p>No diversity figures were generated because feature rows were unavailable.</p>"
+    diversity_figures_html = curated_figure_html(
+        diversity_figure_items,
+        "No diversity figures were generated because feature rows were unavailable.",
+        max_primary=5,
+        supporting_summary="More diversity supporting figures",
+    )
     def figure_cards(figure_specs: list[tuple[str, str]]) -> str:
         items = []
         for figure_name, title in figure_specs:
             human_title = title or _human_figure_title(figure_name)
             caption = _figure_caption_for("", figure_name)
             items.append(
-                _report_figure_card_html(
-                    important_dir,
+                (
                     figure_name,
-                    human_title,
-                    caption,
-                    [("Report figure", "descriptive")],
+                    _report_figure_card_html(
+                        important_dir,
+                        figure_name,
+                        human_title,
+                        caption,
+                        [("Report figure", "descriptive")],
+                    ),
                 )
             )
-        return _report_figure_grid_html(items)
+        return curated_figure_html(items, "No figures were generated for this section.", max_primary=4)
 
     notable_figures_html = figure_cards([
         ("notable_genomes_ranked", "Ranked notable genomes"),
@@ -12924,22 +13247,28 @@ def write_important_results_report(
         ("warnings_summary", "Warnings by severity"),
         ("warnings_by_section", "Warnings by section"),
     ])
-    qc_figures_html = _report_figure_grid_html([
-        _report_figure_card_html(
-            important_dir,
+    qc_figures_html = curated_figure_html([
+        (
             "qc_funnel",
-            "QC funnel",
-            "Genome counts through the report-facing quality-control steps.",
-            [("QC", "pass" if qc_pass == len(dataset_rows) and dataset_rows else "warning")],
+            _report_figure_card_html(
+                important_dir,
+                "qc_funnel",
+                "QC funnel",
+                "Genome counts through the report-facing quality-control steps.",
+                [("QC", "pass" if qc_pass == len(dataset_rows) and dataset_rows else "warning")],
+            ),
         ),
-        _report_figure_card_html(
-            important_dir,
+        (
             "qc_status_overview",
-            "QC status overview",
-            "Enabled, skipped, passing, warning, and failing QC statuses by step.",
-            [("Status", "descriptive")],
+            _report_figure_card_html(
+                important_dir,
+                "qc_status_overview",
+                "QC status overview",
+                "Enabled, skipped, passing, warning, and failing QC statuses by step.",
+                [("Status", "descriptive")],
+            ),
         ),
-    ])
+    ], "No QC figures were generated.", max_primary=2)
     top_prevalence_card = top_prevalence[0] if top_prevalence else {}
     top_geography_card = top_geographic_burden[0] if top_geographic_burden else {}
     top_temporal_card = top_temporal[0] if top_temporal else {}
@@ -13058,19 +13387,35 @@ def write_important_results_report(
             "exploratory",
         ),
         ]) + "</div>"
+    featured_figure_specs = [
+        (row.get("figure_stem", ""), row.get("title", ""), row.get("description", ""))
+        for row in sorted(visual_index_rows, key=lambda item: (-(_float_or_none(item.get("main_report_priority", "0")) or 0.0), item.get("figure_stem", "")))
+        if row.get("default_visibility") == "featured"
+    ][:6]
+    if not featured_figure_specs:
+        featured_figure_specs = [
+            ("notable_genomes_ranked", "Notable genomes", "Top genomes ranked for research review, not clinical risk."),
+            ("evidence_confidence_summary", "Evidence confidence", "Confidence labels summarize support and warning burden across report sections."),
+            ("diversity_core_common_accessory_rare_by_database", "Feature class composition", "Core/common/accessory/rare feature classes by database."),
+            ("warnings_summary", "Warning severity", "Warnings are grouped by severity so limitations are visible before interpretation."),
+            ("prevalence_genomes_positive_by_database", "Genomes positive by database", "Database-level positive genome counts preserve denominators."),
+        ]
     featured_figures_html = _report_figure_grid_html([
-        _report_figure_card_html(important_dir, "notable_genomes_ranked", "Notable genomes", "Top genomes ranked for research review, not clinical risk.", [("Research review", "exploratory")]),
-        _report_figure_card_html(important_dir, "evidence_confidence_summary", "Evidence confidence", "Confidence labels summarize support and warning burden across report sections.", [("Confidence", "pass")]),
-        _report_figure_card_html(important_dir, "diversity_core_common_accessory_rare_by_database", "Feature class composition", "Core/common/accessory/rare feature classes by database.", [("Descriptive", "descriptive")]),
-        _report_figure_card_html(important_dir, "warnings_summary", "Warning severity", "Warnings are grouped by severity so limitations are visible before interpretation.", [("Warnings", "warning")]),
-        _report_figure_card_html(important_dir, "lineage_distribution_mlst_ST", "Lineage distribution", "Dominant lineages help interpret metadata and feature associations.", [("Lineage", "lineage")]),
-        _report_figure_card_html(important_dir, "prevalence_feature_counts_by_database", "Detected feature counts", "Database contributions to the report-facing feature set.", [("Descriptive", "descriptive")]),
+        _report_figure_card_html(
+            important_dir,
+            stem,
+            title or _human_figure_title(stem),
+            caption or _figure_caption_for("", stem),
+            [("Featured", "pass")],
+        )
+        for stem, title, caption in featured_figure_specs
     ])
     top_download_links = _report_download_links_html([
         ("../basic/enriched_genome_dataset.csv", "Download enriched dataset"),
         ("downloads/important_summary_tables.zip", "Download summary tables ZIP"),
         ("downloads/important_tables.zip", "Download complete tables ZIP"),
         ("downloads/important_figures.zip", "Download important figures ZIP"),
+        ("downloads/publication_candidate_figures.zip", "Download publication candidates ZIP"),
         ("../panr2_inputs/report/panr2_handoff_index.html", "Open complete output bundle"),
         ("../panr2_inputs/manifest/reproducibility_manifest.json", "Download reproducibility manifest"),
         ("../panr2_inputs/manifest/feature_contract.json", "Download feature contract"),
@@ -13080,6 +13425,7 @@ def write_important_results_report(
         ("downloads/important_summary_tables.zip", "Summary tables ZIP", "Compact report summaries and prioritized findings without the largest exhaustive matrices.", "Start here for routine review."),
         ("downloads/important_tables.zip", "Complete tables ZIP", "All curated report-facing TSV tables, including large exhaustive association tables.", "Use for downstream analysis and complete review."),
         ("downloads/important_figures.zip", "Important figures ZIP", "Publication-friendly PNG/SVG/PDF/data figure outputs.", "Use for presentations and manuscripts."),
+        ("downloads/publication_candidate_figures.zip", "Publication-candidate figures ZIP", "Curated featured and standard figures with complete companion assets where available.", "Start here when choosing figures for talks, manuscripts, or reports."),
         ("downloads/important_report_assets.zip", "Report assets ZIP", "Report HTML, figures, tables, and related assets.", "Use to move the important report as a bundle."),
         ("tables/report_highlights.tsv", "Report highlights", "Ranked cross-section findings selected by support, warning burden, and review value.", "Use as the first triage table."),
         ("tables/report_highlights_by_section.tsv", "Highlights by section", "Balanced report highlights so each major section stays visible.", "Use when the global ranking is dominated by one section."),
@@ -13361,9 +13707,10 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 {report_cap_table_html}
 <div class="downloads"><a href="tables/warnings_and_limitations_summary.tsv">Download compact warning summary</a><a href="tables/warnings_and_limitations.tsv">Download compact warnings table</a><a href="tables/warnings_by_section.tsv">Download warnings by section</a><a href="tables/module_warning_summary.tsv">Download module warning summary</a><a href="tables/report_cap_summary.tsv">Download report cap summary</a></div></section>
 <section id="downloads" class="section"><h2>Downloads / Important Files</h2><p>Use these files to navigate the report-facing outputs and complete reproducibility artifacts.</p>
-<div class="downloads"><a href="../basic/enriched_genome_dataset.csv">Download enriched dataset CSV</a><a href="../basic/enriched_genome_dataset.tsv">Download enriched dataset TSV</a><a href="downloads/important_summary_tables.zip">Download summary tables ZIP</a><a href="downloads/important_tables.zip">Download complete tables ZIP</a><a href="downloads/important_figures.zip">Download important figures ZIP</a><a href="downloads/important_report_assets.zip">Download report assets ZIP</a><a href="../panr2_inputs/report/panr2_handoff_index.html">Open complete output bundle</a><a href="../panr2_inputs/manifest/reproducibility_manifest.json">Download reproducibility manifest</a><a href="../panr2_inputs/manifest/feature_contract.json">Download feature contract</a></div>
+<div class="downloads"><a href="../basic/enriched_genome_dataset.csv">Download enriched dataset CSV</a><a href="../basic/enriched_genome_dataset.tsv">Download enriched dataset TSV</a><a href="downloads/important_summary_tables.zip">Download summary tables ZIP</a><a href="downloads/important_tables.zip">Download complete tables ZIP</a><a href="downloads/important_figures.zip">Download important figures ZIP</a><a href="downloads/publication_candidate_figures.zip">Download publication candidates ZIP</a><a href="downloads/important_report_assets.zip">Download report assets ZIP</a><a href="../panr2_inputs/report/panr2_handoff_index.html">Open complete output bundle</a><a href="../panr2_inputs/manifest/reproducibility_manifest.json">Download reproducibility manifest</a><a href="../panr2_inputs/manifest/feature_contract.json">Download feature contract</a></div>
 {download_cards_html}
 <h3>Visual index</h3>
+<p>More supporting and technical figures are preserved in the visual index and complete figure downloads even when they are collapsed in the main report.</p>
 {visual_index_table_html}
 <h3>Visual quality</h3>
 {visual_quality_table_html}

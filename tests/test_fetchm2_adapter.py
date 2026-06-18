@@ -13,7 +13,9 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from normalize_fetchm2_output import normalize_fetchm2_output
 from export_panr2_inputs import parse_version_line
 from panr2_contract import (
+    REPORT_FIGURE_REGISTRY,
     export_contract,
+    _figure_visibility_metadata,
     _human_figure_title,
     _is_same_feature_pair,
     _kruskal_wallis,
@@ -28,6 +30,12 @@ from check_container_readiness import as_list as container_as_list
 from check_container_readiness import image_exec_command
 from check_container_readiness import parse_args as parse_container_args
 from check_comprehensive_validation_outputs import check_sample_dir
+from check_important_report_outputs import (
+    _check_highlight_quality,
+    _check_prevalence_consistency,
+    _check_temporal_placeholders,
+    _check_visual_quality,
+)
 
 
 class FetchM2AdapterTests(unittest.TestCase):
@@ -169,6 +177,79 @@ class FetchM2AdapterTests(unittest.TestCase):
         self.assertEqual(_human_figure_title("diversity_richness_by_metadata_isolation_source"), "Feature richness by Isolation Source")
         self.assertEqual(_human_figure_title("feature_profile_pcoa_by_bioproject"), "Feature-profile PCoA by BioProject")
         self.assertTrue(_is_same_feature_pair("aph(3'')-Ib", "aph(3'')-Ib"))
+
+    def test_figure_visibility_metadata_classifies_public_and_technical_figures(self):
+        self.assertIn("notable_genomes_ranked", REPORT_FIGURE_REGISTRY)
+        featured = _figure_visibility_metadata(
+            "diversity_core_common_accessory_rare_by_database",
+            "Diversity / Pan-feature Summary",
+            "descriptive",
+            "none",
+            "asset_ready",
+            "interpretation_ready",
+            "human_readable_title",
+            "specific_caption",
+        )
+        self.assertEqual(featured["default_visibility"], "featured")
+        self.assertEqual(featured["publication_candidate"], "true")
+        technical = _figure_visibility_metadata(
+            "cooccurrence_network_amr_vs_vfdb",
+            "Co-occurrence / Genomic Context",
+            "exploratory",
+            "none",
+            "asset_ready",
+            "exploratory_interpretation",
+            "human_readable_title",
+            "specific_caption",
+        )
+        self.assertEqual(technical["default_visibility"], "technical")
+        self.assertEqual(technical["recommended_audience"], "technical users")
+
+    def test_important_report_qa_catches_release_blockers(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            important_dir = Path(tmpdir) / "important"
+            tables = important_dir / "tables"
+            key_tables = important_dir / "key_tables"
+            tables.mkdir(parents=True)
+            key_tables.mkdir(parents=True)
+            (tables / "prevalence_summary_by_database.tsv").write_text(
+                "database\tpositive_genomes\tgenomes_positive_percent\ttop_feature_positive_genomes\ttop_feature_prevalence_percent\n"
+                "amr\t1\t0.9\t50\t45.0\n",
+                encoding="utf-8",
+            )
+            (tables / "report_highlights.tsv").write_text(
+                "highlight_type\tprimary_feature\tsecondary_feature\n"
+                "informative_cooccurrence\taph(3'')-Ib\taph(3'')-Ib\n",
+                encoding="utf-8",
+            )
+            (tables / "report_highlights_by_section.tsv").write_text(
+                "section\thighlight_type\n"
+                + "".join(f"Co-occurrence / Genomic Context\trow{i}\n" for i in range(30)),
+                encoding="utf-8",
+            )
+            (key_tables / "temporal_trend_summary.tsv").write_text(
+                "database\tfeature_id\tfirst_year\tlast_year\n"
+                "amr\tblaA\t1900\t2025\n",
+                encoding="utf-8",
+            )
+            (tables / "report_visual_quality.tsv").write_text(
+                "figure_stem\tsection\tasset_quality_label\tinterpretation_quality_label\ttitle_quality_label\tcaption_quality_label\tfinal_publication_label\tdefault_visibility\tpublication_candidate\n"
+                "geographic_map_amr_burden\tGeographic Distribution\tasset_ready\tinterpretation_ready\thuman_readable_title\tspecific_caption\tpublication_ready\tstandard\ttrue\n",
+                encoding="utf-8",
+            )
+
+            errors: list[str] = []
+            _check_prevalence_consistency(important_dir, errors)
+            _check_highlight_quality(important_dir, errors)
+            _check_temporal_placeholders(important_dir, errors)
+            _check_visual_quality(important_dir, errors)
+
+            combined = "\n".join(errors)
+            self.assertIn("Database prevalence inconsistency", combined)
+            self.assertIn("identical normalized features", combined)
+            self.assertIn("only 1 distinct sections", combined)
+            self.assertIn("placeholder first_year", combined)
+            self.assertIn("Interpretation-sensitive figure marked publication_ready", combined)
 
     def test_important_lineage_report_counts_and_warnings(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -595,6 +676,7 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertTrue((sample_dir / "important" / "downloads" / "important_summary_tables.zip").exists())
             self.assertTrue((sample_dir / "important" / "downloads" / "important_tables.zip").exists())
             self.assertTrue((sample_dir / "important" / "downloads" / "important_figures.zip").exists())
+            self.assertTrue((sample_dir / "important" / "downloads" / "publication_candidate_figures.zip").exists())
             self.assertTrue((sample_dir / "important" / "downloads" / "important_report_assets.zip").exists())
             for figure_name in [
                 "notable_genomes_ranked.svg",
@@ -727,7 +809,25 @@ class FetchM2AdapterTests(unittest.TestCase):
             warning_priorities = pd.read_csv(sample_dir / "important" / "tables" / "warning_priority_summary.tsv", sep="\t")
             self.assertTrue({"rank", "section", "severity", "warning_type", "priority_score", "why_it_matters"}.issubset(warning_priorities.columns))
             visual_index = pd.read_csv(sample_dir / "important" / "tables" / "report_visual_index.tsv", sep="\t")
-            self.assertTrue({"figure_stem", "section", "interpretation_type", "svg_path", "recommended_use", "title"}.issubset(visual_index.columns))
+            self.assertTrue({
+                "figure_stem",
+                "section",
+                "interpretation_type",
+                "svg_path",
+                "recommended_use",
+                "title",
+                "default_visibility",
+                "display_reason",
+                "recommended_audience",
+                "main_report_priority",
+                "publication_candidate",
+            }.issubset(visual_index.columns))
+            self.assertTrue(set(visual_index["default_visibility"].dropna().astype(str)).issubset({"featured", "standard", "supporting", "technical"}))
+            self.assertIn("featured", set(visual_index["default_visibility"].fillna("").astype(str)))
+            self.assertIn("true", {value.lower() for value in visual_index["publication_candidate"].fillna("").astype(str)})
+            network_rows = visual_index[visual_index["figure_stem"].fillna("").astype(str).str.startswith("cooccurrence_network_")]
+            if not network_rows.empty:
+                self.assertTrue(set(network_rows["default_visibility"].fillna("").astype(str)).issubset({"technical"}))
             pcoa_rows = visual_index[visual_index["figure_stem"] == "feature_profile_pcoa_by_bioproject"]
             if not pcoa_rows.empty:
                 self.assertEqual(pcoa_rows.iloc[0]["title"], "Feature-profile PCoA by BioProject")
@@ -742,6 +842,11 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "title_quality_label",
                 "caption_quality_label",
                 "final_publication_label",
+                "default_visibility",
+                "display_reason",
+                "recommended_audience",
+                "main_report_priority",
+                "publication_candidate",
             }.issubset(visual_quality.columns))
             exploratory_quality = visual_quality[visual_quality["section"].isin(["Geographic Distribution", "Co-occurrence / Genomic Context", "Lineage / Clonal Structure"])]
             if not exploratory_quality.empty:
@@ -846,7 +951,9 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("Download summary tables ZIP", report_html)
             self.assertIn("Download complete tables ZIP", report_html)
             self.assertIn("Download important figures ZIP", report_html)
+            self.assertIn("Download publication candidates ZIP", report_html)
             self.assertIn("Download report assets ZIP", report_html)
+            self.assertIn("More supporting", report_html)
             self.assertIn("Interpret these patterns as dataset-specific sampling summaries", report_html)
             self.assertIn("Warning flags average", report_html)
             self.assertIn("PNG</a>", report_html)
@@ -855,7 +962,7 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("alt='", report_html)
             self.assertIn("Showing ", report_html)
             self.assertIn("download the full TSV", report_html)
-            for zip_name in ["important_summary_tables.zip", "important_tables.zip", "important_figures.zip", "important_report_assets.zip"]:
+            for zip_name in ["important_summary_tables.zip", "important_tables.zip", "important_figures.zip", "publication_candidate_figures.zip", "important_report_assets.zip"]:
                 self.assertGreater((sample_dir / "important" / "downloads" / zip_name).stat().st_size, 0)
             qa = subprocess.run(
                 [sys.executable, str(REPO_ROOT / "scripts" / "check_important_report_outputs.py"), str(sample_dir)],

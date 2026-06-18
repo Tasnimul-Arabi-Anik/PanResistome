@@ -54,6 +54,89 @@ class RuntimeSummaryTests(unittest.TestCase):
             self.assertEqual(set(tasks_df["process"]), {"AMRFINDERPLUS_ANALYSIS", "CHECKM2_QC"})
 
 
+class CleanupAfterRunTests(unittest.TestCase):
+    def test_removes_work_dir_session_cache_and_transient_caches(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            launch = tmp / "launch"
+            outdir = tmp / "results"
+            work_dir = tmp / "work"
+            summary = outdir / "pipeline_cleanup_summary.tsv"
+            session_cache = launch / ".nextflow" / "cache" / "session-123"
+            scripts_cache = launch / "scripts" / "__pycache__"
+            tests_cache = launch / "tests" / "__pycache__"
+            pytest_cache = launch / ".pytest_cache"
+
+            for directory in [outdir, work_dir, session_cache, scripts_cache, tests_cache, pytest_cache]:
+                directory.mkdir(parents=True)
+                (directory / "marker.txt").write_text("temporary\n", encoding="utf-8")
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "scripts" / "cleanup_after_run.py"),
+                    "--work-dir",
+                    str(work_dir),
+                    "--launch-dir",
+                    str(launch),
+                    "--outdir",
+                    str(outdir),
+                    "--summary",
+                    str(summary),
+                    "--nextflow-session-id",
+                    "session-123",
+                ],
+                check=True,
+            )
+
+            self.assertFalse(work_dir.exists())
+            self.assertFalse(session_cache.exists())
+            self.assertFalse(scripts_cache.exists())
+            self.assertFalse(tests_cache.exists())
+            self.assertFalse(pytest_cache.exists())
+            self.assertTrue(outdir.exists())
+
+            rows = pd.read_csv(summary, sep="\t", dtype=str)
+            self.assertIn("nextflow_work_dir", set(rows["target"]))
+            self.assertIn("nextflow_session_cache", set(rows["target"]))
+            self.assertEqual(set(rows["status"]), {"PASS"})
+            self.assertGreater(int(rows.loc[rows["target"] == "nextflow_work_dir", "bytes_removed"].iloc[0]), 0)
+
+    def test_refuses_to_remove_launch_or_output_directory(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            launch = tmp / "launch"
+            outdir = tmp / "results"
+            summary = outdir / "pipeline_cleanup_summary.tsv"
+            launch.mkdir()
+            outdir.mkdir()
+            (launch / "keep.txt").write_text("do not delete\n", encoding="utf-8")
+            (outdir / "keep.txt").write_text("published output\n", encoding="utf-8")
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "scripts" / "cleanup_after_run.py"),
+                    "--work-dir",
+                    str(launch),
+                    "--launch-dir",
+                    str(launch),
+                    "--outdir",
+                    str(outdir),
+                    "--summary",
+                    str(summary),
+                ],
+                check=True,
+            )
+
+            self.assertTrue((launch / "keep.txt").exists())
+            self.assertTrue((outdir / "keep.txt").exists())
+            rows = pd.read_csv(summary, sep="\t", dtype=str)
+            work_row = rows.loc[rows["target"] == "nextflow_work_dir"].iloc[0]
+            self.assertEqual(work_row["status"], "SKIPPED_UNSAFE")
+            self.assertIn("protected path", work_row["message"])
+
+
 class AniSummaryTests(unittest.TestCase):
     def test_empty_pairs_with_genome_list_keeps_samples(self):
         with tempfile.TemporaryDirectory() as tmpdir:
