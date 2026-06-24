@@ -94,6 +94,7 @@ class FetchM2AdapterTests(unittest.TestCase):
                 self.assertIn(control, html)
             self.assertIn("Gene map", html)
             self.assertIn("modeSelect.value = 'individual_feature'", html)
+            self.assertIn("blaA", html)
             self.assertIn("Feature / gene", html)
             self.assertIn("polygon points", html)
             self.assertIn("overflow-x: hidden", html)
@@ -984,6 +985,8 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "--green: #16a34a",
                 "overflow-x: hidden",
                 "@media (max-width: 920px)",
+                "@media (max-width: 520px)",
+                "overflow-wrap: anywhere",
             ]:
                 self.assertIn(css_token, report_html)
             self.assertIn("Featured figure gallery", report_html)

@@ -4745,7 +4745,21 @@ def write_important_geographic_outputs(sample_dir: Path, out_dir: Path, importan
             lineage_by_sample.setdefault(sample, lineage)
 
     feature_rank = sorted(presence.items(), key=lambda item: (-len(item[1]), item[0][0], item[0][1]))
-    selected_features = feature_rank[:max(top_n * 2, top_n, 20)]
+    selected_features = []
+    selected_seen: set[tuple[str, str]] = set()
+
+    def add_selected_feature(item: tuple[tuple[str, str], set[str]]) -> None:
+        key = item[0]
+        if key not in selected_seen:
+            selected_features.append(item)
+            selected_seen.add(key)
+
+    per_database_feature_cap = max(5, min(top_n, 20))
+    for database in sorted({key[0] for key in presence}):
+        for item in [ranked for ranked in feature_rank if ranked[0][0] == database][:per_database_feature_cap]:
+            add_selected_feature(item)
+    for item in feature_rank[:max(top_n * 2, top_n, 20)]:
+        add_selected_feature(item)
     selected_feature_keys = {key for key, _ in selected_features}
 
     def enriched_meta(sample: str) -> dict[str, str]:
@@ -5122,6 +5136,10 @@ for (const value of [...new Set(databaseRows.map(r => r.database).concat(feature
 }
 if ([...databaseSelect.options].some(o => o.value === 'amr')) databaseSelect.value = 'amr';
 if (featureRows.length) modeSelect.value = 'individual_feature';
+const featureDatabases = [...new Set(featureRows.map(r => r.database))].sort();
+if (featureRows.length && !featureDatabases.includes(databaseSelect.value)) {
+  databaseSelect.value = featureDatabases.includes('amr') ? 'amr' : featureDatabases[0];
+}
 function topFeatureForDatabase(db) {
   const candidates = featureRows
     .filter(r => r.database === db && (r.geo_level === 'country' || r.geo_level === 'country_year'))
@@ -13719,15 +13737,15 @@ a:focus, button:focus, input:focus {{ outline: 3px solid var(--primary-soft); ou
 .sidebar-links {{ display: block; }}
 .sidebar a {{ display: block; color: #e0f2fe; text-decoration: none; margin: 0.35rem 0; padding: 0.42rem 0.55rem; border-radius: 6px; }}
 .sidebar a:hover, .sidebar a:focus {{ background: rgba(255,255,255,0.12); color: white; }}
-main {{ margin-left: 290px; padding: 1.2rem 1.4rem 2rem; min-width: 0; }}
-.report-header {{ background: linear-gradient(135deg, #0f766e 0%, #14532d 100%); color: white; border-radius: 10px; padding: 1.2rem; margin-bottom: 1rem; box-shadow: 0 14px 32px rgba(15, 23, 42, 0.14); }}
-.report-header h1 {{ margin: 0; font-size: clamp(1.7rem, 3vw, 2.4rem); }}
+main {{ margin-left: 290px; padding: 1.2rem 1.4rem 2rem; min-width: 0; max-width: 100%; }}
+.report-header {{ background: linear-gradient(135deg, #0f766e 0%, #14532d 100%); color: white; border-radius: 10px; padding: 1.2rem; margin-bottom: 1rem; box-shadow: 0 14px 32px rgba(15, 23, 42, 0.14); overflow: hidden; }}
+.report-header h1 {{ margin: 0; font-size: clamp(1.7rem, 3vw, 2.4rem); overflow-wrap: anywhere; }}
 .report-header p {{ margin: 0.35rem 0 0; color: #d1fae5; }}
 .report-header .download-button {{ background: white; color: var(--primary); }}
-.section {{ background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05); scroll-margin-top: 1rem; }}
+.section {{ background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05); scroll-margin-top: 1rem; max-width: 100%; }}
 .section-header {{ display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.7rem; }}
 .section-header h2, section h2 {{ margin-top: 0; }}
-.analysis-card {{ border: 1px solid var(--border); border-radius: 10px; background: #fbfdff; padding: 0.9rem; margin: 0.9rem 0; }}
+.analysis-card {{ border: 1px solid var(--border); border-radius: 10px; background: #fbfdff; padding: 0.9rem; margin: 0.9rem 0; max-width: 100%; }}
 .analysis-card h3 {{ margin-top: 0; margin-bottom: 0.35rem; }}
 .analysis-card > p:first-of-type {{ color: var(--muted); margin-top: 0; }}
 .diagnostic-list {{ columns: 2; column-gap: 2rem; margin: 0.5rem 0 0; padding-left: 1.1rem; }}
@@ -13735,7 +13753,7 @@ main {{ margin-left: 290px; padding: 1.2rem 1.4rem 2rem; min-width: 0; }}
 .cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 0.75rem; }}
 .summary-card, .card {{ border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem; background: #fbfdff; }}
 .summary-card span, .card span {{ display: block; font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }}
-.summary-card strong, .card strong {{ display: block; font-size: 1.45rem; margin-top: 0.25rem; color: var(--text); }}
+.summary-card strong, .card strong {{ display: block; font-size: 1.45rem; margin-top: 0.25rem; color: var(--text); overflow-wrap: anywhere; }}
 .summary-card small, .card small {{ display: block; color: var(--muted); margin-top: 0.2rem; }}
 .badge {{ display: inline-block; background: #e0f2fe; border: 1px solid #7dd3fc; color: var(--text); padding: 0.22rem 0.5rem; border-radius: 999px; margin: 0.1rem; font-size: 0.78rem; font-weight: 700; }}
 .badge-pass {{ background: #dcfce7; border-color: var(--pass); color: #14532d; }}
@@ -13751,7 +13769,7 @@ main {{ margin-left: 290px; padding: 1.2rem 1.4rem 2rem; min-width: 0; }}
 .badge-db-integronfinder {{ background: #ffedd5; border-color: var(--orange); }}
 .badge-db-mlst {{ background: #dbeafe; border-color: var(--blue); }}
 .download-bar, .downloads {{ display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0.75rem 0; }}
-.download-button, .downloads a {{ display: inline-block; padding: 0.5rem 0.75rem; background: var(--primary); color: white; text-decoration: none; border-radius: 7px; font-weight: 700; border: 1px solid rgba(15,118,110,0.2); }}
+.download-button, .downloads a {{ display: inline-block; padding: 0.5rem 0.75rem; background: var(--primary); color: white; text-decoration: none; border-radius: 7px; font-weight: 700; border: 1px solid rgba(15,118,110,0.2); overflow-wrap: anywhere; }}
 .download-button:hover, .downloads a:hover {{ filter: brightness(0.95); }}
 .warning-box, .warning {{ background: #fff7ed; border: 1px solid #fed7aa; border-left: 5px solid var(--warning); padding: 0.8rem; border-radius: 8px; margin: 0.75rem 0; }}
 .figure-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 1rem; }}
@@ -13772,7 +13790,7 @@ th, td {{ border-bottom: 1px solid var(--border); padding: 0.48rem; text-align: 
 th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 .finding-grid, .download-card-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.8rem; }}
 .finding-card, .download-card {{ border: 1px solid var(--border); border-radius: 8px; background: #fbfdff; padding: 0.85rem; display: flex; flex-direction: column; justify-content: space-between; gap: 0.6rem; }}
-.finding-card h3, .download-card h3 {{ margin: 0 0 0.35rem; }}
+.finding-card h3, .download-card h3 {{ margin: 0 0 0.35rem; overflow-wrap: anywhere; }}
 .finding-card-footer {{ display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }}
 .details-block {{ border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; background: #f8fafc; margin: 0.75rem 0; }}
 .back-to-top {{ position: fixed; right: 1rem; bottom: 1rem; background: var(--primary); color: white; padding: 0.55rem 0.7rem; border-radius: 999px; text-decoration: none; box-shadow: 0 8px 20px rgba(15,23,42,0.22); z-index: 20; }}
@@ -13792,6 +13810,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
   .download-button, .downloads a {{ width: 100%; text-align: center; }}
   .figure-row, .finding-grid, .download-card-grid, .cards {{ grid-template-columns: 1fr; }}
   .summary-card strong, .card strong {{ font-size: 1.25rem; }}
+  .back-to-top {{ right: 0.45rem; bottom: 0.45rem; padding: 0.42rem 0.52rem; font-size: 0.78rem; }}
 }}
 </style></head>
 <body id="top">
