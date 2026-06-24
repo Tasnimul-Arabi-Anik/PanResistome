@@ -13853,7 +13853,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 <main>
 <header class="report-header">
 <h1>PanResistome Important Report</h1>
-<p class="header-meta"><span>Taxon: {html.escape(report_taxon)}</span><span>Genomes analyzed: {len(dataset_rows)}</span><span>QC PASS: {qc_pass}/{len(dataset_rows)}</span><span>Total features: {total_features}</span><span>Databases detected: {html.escape(", ".join(databases) or "none")}</span><span>Warning categories: {warning_category_count}</span><span>Schema validation: {html.escape(schema_status)}</span></p>
+<p class="header-meta"><span>Taxon: {html.escape(report_taxon)}</span><span>Genomes analyzed: {len(dataset_rows)}</span><span>QC PASS: {qc_pass}/{len(dataset_rows)}</span><span>Total features: {total_features}</span><span>Databases detected: {len(databases)}</span><span>Warning categories: {warning_category_count}</span><span>Schema validation: {html.escape(schema_status)}</span></p>
 {top_download_links}
 </header>
 <section id="featured" class="section"><h1>Featured Results</h1>{card_html}<p>{db_badges}</p>
