@@ -901,6 +901,12 @@ class FetchM2AdapterTests(unittest.TestCase):
             exploratory_quality = visual_quality[visual_quality["section"].isin(["Geographic Distribution", "Co-occurrence / Genomic Context", "Lineage / Clonal Structure"])]
             if not exploratory_quality.empty:
                 self.assertNotIn("publication_ready", set(exploratory_quality["final_publication_label"].fillna("").astype(str)))
+            variation_quality = visual_quality[visual_quality["figure_stem"].fillna("").astype(str).str.startswith("variation_")]
+            if not variation_quality.empty:
+                self.assertNotIn("generic_caption", set(variation_quality["caption_quality_label"].fillna("").astype(str)))
+            qc_quality = visual_quality[visual_quality["figure_stem"].fillna("").astype(str).str.startswith("qc_")]
+            if not qc_quality.empty:
+                self.assertNotIn("generic_caption", set(qc_quality["caption_quality_label"].fillna("").astype(str)))
             warnings = pd.read_csv(sample_dir / "important" / "tables" / "warnings_and_limitations.tsv", sep="\t")
             self.assertTrue({"warning_id", "section", "severity", "warning_type", "recommended_action"}.issubset(warnings.columns))
             warning_summary = pd.read_csv(sample_dir / "important" / "tables" / "warnings_and_limitations_summary.tsv", sep="\t")

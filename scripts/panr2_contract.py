@@ -3643,10 +3643,14 @@ def _figure_caption_for(section: str, stem: str) -> str:
         return "Confidence labels combine support, warning burden, and evidence level to guide interpretation."
     if section == "Warnings & Limitations" or stem.startswith("warnings_"):
         return "Warnings are grouped by severity and section so limitations are visible before interpretation."
+    if section == "QC Summary" or stem.startswith("qc_"):
+        return "QC figures summarize genome retention and module status before downstream feature interpretation."
     if section == "Geographic Distribution" or stem.startswith("geographic_"):
         return "Geographic summaries are dataset-specific and should not be interpreted as regional or global prevalence."
-    if section == "Co-occurrence / Genomic Context" or stem.startswith("cooccurrence_"):
+    if section == "Co-occurrence / Genomic Context" or stem.startswith(("cooccurrence_", "top_context_features_", "genomic_context_evidence_ladder_", "contig_neighborhood_")):
         return "Sample-level co-occurrence is separate from same-contig and proximity context evidence."
+    if section == "Variations" or stem.startswith("variation_"):
+        return "Variation figures summarize hit identity, coverage, and feature variability; these metrics do not by themselves prove functional change."
     if section == "Metadata Associations" or stem.startswith("metadata_"):
         return "Metadata associations are exploratory and may reflect sampling, BioProject, lineage, geography, or year bias."
     if section == "Temporal Trends" or stem.startswith("temporal_"):
