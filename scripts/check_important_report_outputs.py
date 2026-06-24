@@ -241,6 +241,8 @@ def _check_visual_quality(important_dir: Path, errors: list[str]) -> None:
     rows = _read_tsv(important_dir / "tables" / "report_visual_quality.tsv")
     required_columns = {
         "asset_quality_label",
+        "render_quality_label",
+        "axis_label_status",
         "interpretation_quality_label",
         "title_quality_label",
         "caption_quality_label",
@@ -257,6 +259,39 @@ def _check_visual_quality(important_dir: Path, errors: list[str]) -> None:
         label = row.get("final_publication_label", "")
         if section in INTERPRETATION_SENSITIVE_SECTIONS and label == "publication_ready":
             errors.append(f"Interpretation-sensitive figure marked publication_ready: {row.get('figure_stem', '')}")
+        render_quality = row.get("render_quality_label", "rendered")
+        axis_status = row.get("axis_label_status", "not_applicable")
+        default_visibility = row.get("default_visibility", "")
+        if render_quality != "rendered" and default_visibility in {"featured", "standard"}:
+            errors.append(
+                f"Figure with render_quality_label={render_quality} promoted to {default_visibility}: {row.get('figure_stem', '')}"
+            )
+        if render_quality != "rendered" and row.get("publication_candidate", "").lower() == "true":
+            errors.append(
+                f"Figure with render_quality_label={render_quality} marked publication_candidate: {row.get('figure_stem', '')}"
+            )
+        if axis_status == "missing_axis_labels" and default_visibility in {"featured", "standard"}:
+            errors.append(f"Figure missing axis labels promoted to {default_visibility}: {row.get('figure_stem', '')}")
+
+    for row in rows:
+        stem = row.get("figure_stem", "")
+        render_quality = row.get("render_quality_label", "rendered")
+        if stem.startswith("variation_identity_coverage_") and render_quality == "rendered":
+            data_rows = _read_tsv(important_dir / "figures" / f"{stem}.data.tsv")
+            if data_rows and not any(
+                _to_float(item.get("identity", "")) is not None and _to_float(item.get("coverage", "")) is not None
+                for item in data_rows
+            ):
+                errors.append(f"Variation scatter marked rendered without numeric identity/coverage pairs: {stem}")
+        if stem.startswith("cooccurrence_network_") and render_quality == "rendered":
+            data_rows = _read_tsv(important_dir / "figures" / f"{stem}.data.tsv")
+            if len(data_rows) == 0:
+                errors.append(f"Co-occurrence network marked rendered with no edges: {stem}")
+
+    for svg_path in sorted((important_dir / "figures").glob("feature_profile_pcoa_*.svg")):
+        svg_text = svg_path.read_text(encoding="utf-8", errors="ignore")
+        if "PCoA1" not in svg_text or "PCoA2" not in svg_text:
+            errors.append(f"PCoA SVG lacks explicit axis labels: figures/{svg_path.name}")
 
 
 def validate(sample_dir: Path) -> list[str]:

@@ -16,9 +16,12 @@ from panr2_contract import (
     REPORT_FIGURE_REGISTRY,
     export_contract,
     _figure_visibility_metadata,
+    _figure_render_quality,
     _human_figure_title,
     _is_same_feature_pair,
     _kruskal_wallis,
+    _write_cooccurrence_network_svg,
+    _write_variation_scatter_svg,
     write_important_diversity_outputs,
     write_important_geographic_outputs,
     write_important_lineage_outputs,
@@ -89,6 +92,9 @@ class FetchM2AdapterTests(unittest.TestCase):
             html = (sample_dir / "important" / "figures" / "geographic_distribution.html").read_text(encoding="utf-8")
             for control in ["Database", "Mode", "Feature", "Geographic level", "Minimum group size", "Warning filter"]:
                 self.assertIn(control, html)
+            self.assertIn("Gene map", html)
+            self.assertIn("overflow-x: hidden", html)
+            self.assertIn("window.addEventListener('resize', render)", html)
             svg = (sample_dir / "important" / "figures" / "geographic_distribution_map.svg").read_text(encoding="utf-8")
             self.assertIn("Color shows dataset prevalence/burden", svg)
             self.assertIn("not a regional or global prevalence estimate", svg)
@@ -178,6 +184,37 @@ class FetchM2AdapterTests(unittest.TestCase):
         self.assertEqual(_human_figure_title("feature_profile_pcoa_by_bioproject"), "Feature-profile PCoA by BioProject")
         self.assertTrue(_is_same_feature_pair("aph(3'')-Ib", "aph(3'')-Ib"))
 
+    def test_empty_report_figures_render_explicit_unavailable_state(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            important_dir = Path(tmpdir) / "important"
+            figures = important_dir / "figures"
+            figures.mkdir(parents=True)
+
+            scatter_stem = "variation_identity_coverage_amrfinderplus_top20"
+            (figures / f"{scatter_stem}.data.tsv").write_text(
+                "database\tfeature_id\tidentity\tcoverage\n"
+                "amrfinderplus\tblaA\t\t\n",
+                encoding="utf-8",
+            )
+            _write_variation_scatter_svg(figures / f"{scatter_stem}.svg", [{"database": "amrfinderplus", "feature_id": "blaA", "identity": "", "coverage": ""}], "AMRFinderPlus Identity vs Coverage")
+            scatter_svg = (figures / f"{scatter_stem}.svg").read_text(encoding="utf-8")
+            self.assertIn("No plottable data", scatter_svg)
+            render_quality, axis_status, _action = _figure_render_quality(important_dir, scatter_stem)
+            self.assertEqual(render_quality, "missing_required_numeric_metrics")
+            self.assertEqual(axis_status, "axis_labels_present")
+
+            network_stem = "cooccurrence_network_amr_vs_plasmidfinder"
+            (figures / f"{network_stem}.data.tsv").write_text(
+                "source_feature\ttarget_feature\tphi_correlation\n",
+                encoding="utf-8",
+            )
+            _write_cooccurrence_network_svg(figures / f"{network_stem}.svg", [], [], "AMR vs PlasmidFinder Co-occurrence Network")
+            network_svg = (figures / f"{network_stem}.svg").read_text(encoding="utf-8")
+            self.assertIn("No plottable data", network_svg)
+            render_quality, axis_status, _action = _figure_render_quality(important_dir, network_stem)
+            self.assertEqual(render_quality, "empty_network")
+            self.assertEqual(axis_status, "not_applicable")
+
     def test_figure_visibility_metadata_classifies_public_and_technical_figures(self):
         self.assertIn("notable_genomes_ranked", REPORT_FIGURE_REGISTRY)
         featured = _figure_visibility_metadata(
@@ -233,8 +270,9 @@ class FetchM2AdapterTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (tables / "report_visual_quality.tsv").write_text(
-                "figure_stem\tsection\tasset_quality_label\tinterpretation_quality_label\ttitle_quality_label\tcaption_quality_label\tfinal_publication_label\tdefault_visibility\tpublication_candidate\n"
-                "geographic_map_amr_burden\tGeographic Distribution\tasset_ready\tinterpretation_ready\thuman_readable_title\tspecific_caption\tpublication_ready\tstandard\ttrue\n",
+                "figure_stem\tsection\tasset_quality_label\trender_quality_label\taxis_label_status\tinterpretation_quality_label\ttitle_quality_label\tcaption_quality_label\tfinal_publication_label\tdefault_visibility\tpublication_candidate\n"
+                "geographic_map_amr_burden\tGeographic Distribution\tasset_ready\trendered\tnot_applicable\tinterpretation_ready\thuman_readable_title\tspecific_caption\tpublication_ready\tstandard\ttrue\n"
+                "variation_identity_coverage_amrfinderplus_top20\tVariations\tasset_ready\tmissing_required_numeric_metrics\tmissing_axis_labels\tinterpretation_ready\thuman_readable_title\tspecific_caption\tsupporting_only\tstandard\ttrue\n",
                 encoding="utf-8",
             )
 
@@ -250,6 +288,8 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("only 1 distinct sections", combined)
             self.assertIn("placeholder first_year", combined)
             self.assertIn("Interpretation-sensitive figure marked publication_ready", combined)
+            self.assertIn("render_quality_label=missing_required_numeric_metrics", combined)
+            self.assertIn("missing axis labels", combined)
 
     def test_important_lineage_report_counts_and_warnings(self):
         with tempfile.TemporaryDirectory() as tmpdir:

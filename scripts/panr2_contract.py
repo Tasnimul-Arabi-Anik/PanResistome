@@ -3567,6 +3567,55 @@ def _figure_caption_for(section: str, stem: str) -> str:
     return "Supporting report figure; review the linked source table, warning status, and companion plotted-data TSV before interpretation."
 
 
+def _figure_render_quality(important_dir: Path, stem: str) -> tuple[str, str, str]:
+    """Return render, axis, and recommended-action labels for a report figure."""
+    data_path = important_dir / "figures" / f"{stem}.data.tsv"
+    svg_path = important_dir / "figures" / f"{stem}.svg"
+    rows = read_table(data_path) if data_path.exists() else []
+    row_count = len(rows)
+    render_status = "rendered"
+    recommended_action = "Use as a report-facing figure after reviewing the caption and warning status."
+
+    if data_path.exists() and row_count == 0:
+        render_status = "empty_data"
+        recommended_action = "Keep the table for audit, but do not use this as a public-facing figure."
+    if stem.startswith("variation_identity_coverage_") and not _has_numeric_pair(rows, "identity", "coverage"):
+        render_status = "missing_required_numeric_metrics"
+        recommended_action = "Identity/coverage metrics were unavailable; review the feature-variation TSV instead."
+    elif stem.startswith(("variation_identity_", "variation_coverage_")) and not _has_numeric_values(rows, ["min", "q1", "median", "q3", "max"]):
+        render_status = "missing_required_numeric_metrics"
+        recommended_action = "Variation summary statistics were unavailable; review the source hit table."
+    elif stem.startswith("cooccurrence_network_") and row_count == 0:
+        render_status = "empty_network"
+        recommended_action = "No network edges passed report filters; use the full pair table or context table."
+    elif stem.startswith(("top_context_features_unknown_unknown", "genomic_context_evidence_ladder_unknown_unknown", "contig_neighborhood_unavailable")):
+        render_status = "unavailable_placeholder"
+        recommended_action = "No selected context feature was available for a detailed plot."
+
+    svg_text = svg_path.read_text(encoding="utf-8", errors="ignore") if svg_path.exists() else ""
+    axis_status = "not_applicable"
+    required_axis_text: list[str] = []
+    if stem.startswith("feature_profile_pcoa_"):
+        required_axis_text = ["PCoA1", "PCoA2"]
+    elif stem.startswith("variation_identity_coverage_"):
+        required_axis_text = ["Identity", "Coverage"]
+    elif stem.startswith("metadata_volcano_"):
+        required_axis_text = ["Prevalence", "q-value"]
+    elif stem.startswith("lineage_feature_enrichment_"):
+        required_axis_text = ["Prevalence", "q-value"]
+    elif stem.startswith("temporal_"):
+        required_axis_text = ["Prevalence"]
+    if required_axis_text:
+        axis_status = "axis_labels_present" if all(text in svg_text for text in required_axis_text) else "missing_axis_labels"
+        if axis_status == "missing_axis_labels" and render_status == "rendered":
+            render_status = "missing_axis_labels"
+            recommended_action = "Regenerate with explicit axis labels before using this as a public-facing figure."
+    if "No plottable data" in svg_text and render_status == "rendered":
+        render_status = "unavailable_placeholder"
+        recommended_action = "No plottable data were available; use the source table instead."
+    return render_status, axis_status, recommended_action
+
+
 REPORT_FIGURE_REGISTRY = {
     "prevalence_genomes_positive_by_database": {
         "default_visibility": "featured",
@@ -3662,6 +3711,8 @@ def _figure_visibility_metadata(
     interpretation_quality_label: str,
     title_quality_label: str,
     caption_quality_label: str,
+    render_quality_label: str = "rendered",
+    axis_label_status: str = "not_applicable",
 ) -> dict[str, str]:
     """Classify report figures for default display without dropping any assets."""
     stem = str(stem or "")
@@ -3670,7 +3721,9 @@ def _figure_visibility_metadata(
     warning_status = str(warning_status or "none")
 
     registry_entry = REPORT_FIGURE_REGISTRY.get(stem, {})
-    if registry_entry and asset_quality_label == "asset_ready":
+    render_ready = render_quality_label == "rendered" and axis_label_status != "missing_axis_labels"
+
+    if registry_entry and asset_quality_label == "asset_ready" and render_ready:
         visibility = registry_entry.get("default_visibility", "featured")
         reason = registry_entry.get("display_reason", "Curated high-level figure with complete companion assets.")
     elif stem.startswith(REPORT_TECHNICAL_FIGURE_PREFIXES):
@@ -3689,6 +3742,9 @@ def _figure_visibility_metadata(
     if asset_quality_label != "asset_ready" and visibility == "featured":
         visibility = "standard"
         reason = "Curated figure, but one or more companion formats are missing."
+    if not render_ready:
+        visibility = "technical"
+        reason = "Figure asset exists, but the plotted data are empty or required visual labels/metrics are missing."
 
     if visibility == "featured":
         audience = "all users"
@@ -3710,6 +3766,7 @@ def _figure_visibility_metadata(
     publication_candidate = (
         visibility in {"featured", "standard"}
         and asset_quality_label == "asset_ready"
+        and render_ready
         and interpretation_quality_label == "interpretation_ready"
         and title_quality_label == "human_readable_title"
         and caption_quality_label == "specific_caption"
@@ -3762,8 +3819,19 @@ def _report_figure_card_html(
     preview_path = svg_path if svg_path.exists() else png_path
     if not preview_path.exists():
         return ""
-    badge_html = " ".join(_report_badge_html(label, kind) for label, kind in (badges or []))
+    render_quality_label, axis_label_status, recommended_action = _figure_render_quality(important_dir, stem)
+    display_badges = list(badges or [])
+    if render_quality_label != "rendered":
+        display_badges.append(("No plottable data", "warning"))
+    elif axis_label_status == "missing_axis_labels":
+        display_badges.append(("Missing axis labels", "warning"))
+    badge_html = " ".join(_report_badge_html(label, kind) for label, kind in display_badges)
     links_html = _report_download_links_html(_figure_asset_links(important_dir, stem))
+    render_note = (
+        f"<p class='figure-note warning-box'>{html.escape(recommended_action)}</p>"
+        if render_quality_label != "rendered" or axis_label_status == "missing_axis_labels"
+        else ""
+    )
     return (
         "<div class='figure-card'>"
         "<div class='figure-card-header'>"
@@ -3771,6 +3839,7 @@ def _report_figure_card_html(
         + (f"<div class='badge-row'>{badge_html}</div>" if badge_html else "")
         + "</div>"
         f"<p class='figure-caption'>{html.escape(caption)}</p>"
+        f"{render_note}"
         "<div class='figure-box'>"
         f"<img src='figures/{html.escape(preview_path.name)}' alt='{html.escape(title)}'>"
         "</div>"
@@ -4365,6 +4434,52 @@ def _write_png(path: Path, width: int, height: int, pixels: list[bytearray]) -> 
     path.write_bytes(payload)
 
 
+def _has_numeric_values(rows: list[dict[str, str]], fields: list[str]) -> bool:
+    for row in rows:
+        for field in fields:
+            if _float_or_none(row.get(field, "")) is not None:
+                return True
+    return False
+
+
+def _has_numeric_pair(rows: list[dict[str, str]], x_field: str, y_field: str) -> bool:
+    for row in rows:
+        if _float_or_none(row.get(x_field, "")) is not None and _float_or_none(row.get(y_field, "")) is not None:
+            return True
+    return False
+
+
+def _write_unavailable_svg(path: Path, title: str, message: str, width: int = 960, height: int = 260) -> None:
+    parts = _svg_base(width, height, title, message)
+    parts.extend([
+        f"<rect x='32' y='86' width='{width - 64}' height='{height - 126}' rx='8' fill='#fff7ed' stroke='#fed7aa'/>",
+        f"<text x='58' y='128' font-family='{REPORT_SVG_FONT}' font-size='18' font-weight='700' fill='#9a3412'>No plottable data</text>",
+        f"<text x='58' y='158' font-family='{REPORT_SVG_FONT}' font-size='13' fill='#7c2d12'>{html.escape(message)}</text>",
+        f"<text x='58' y='188' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('muted')}'>The companion TSV is preserved so the missing plot can be audited.</text>",
+        "</svg>\n",
+    ])
+    path.write_text("".join(parts), encoding="utf-8")
+
+
+def _write_unavailable_png(path: Path, width: int = 960, height: int = 260) -> None:
+    pixels = [bytearray([248, 250, 252] * width) for _ in range(height)]
+
+    def rect(x0: int, y0: int, x1: int, y1: int, color: tuple[int, int, int]) -> None:
+        for y in range(max(0, y0), min(height, y1)):
+            row = pixels[y]
+            for x in range(max(0, x0), min(width, x1)):
+                idx = x * 3
+                row[idx:idx + 3] = bytes(color)
+
+    rect(32, 76, width - 32, height - 38, (255, 247, 237))
+    rect(32, 76, width - 32, 82, (249, 115, 22))
+    for idx in range(0, width - 96, 28):
+        rect(58 + idx, 120, 76 + idx, 138, (251, 146, 60))
+    rect(58, 162, width - 82, 176, (253, 186, 116))
+    rect(58, 188, width - 180, 200, (254, 215, 170))
+    _write_png(path, width, height, pixels)
+
+
 def _pdf_escape(value: str) -> str:
     return str(value or "").replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
@@ -4927,12 +5042,17 @@ def write_important_geographic_outputs(sample_dir: Path, out_dir: Path, importan
     geographic_html = """<!doctype html>
 <html><head><meta charset="utf-8"><title>Geographic Distribution</title>
 <style>
-body { font-family: Arial, sans-serif; color: #1f2933; margin: 1.5rem; }
-.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; align-items: end; }
+* { box-sizing: border-box; }
+html, body { max-width: 100%; overflow-x: hidden; }
+body { font-family: Arial, sans-serif; color: #1f2933; margin: 1.25rem; background: #f8fafc; }
+.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; align-items: end; }
 label { font-weight: 700; display: block; margin-bottom: 0.25rem; }
 select { width: 100%; padding: 0.35rem; box-sizing: border-box; }
-#map svg { max-width: 100%; height: auto; border: 1px solid #d9e2ec; background: white; }
+#map { width: 100%; overflow-x: auto; }
+#map svg { width: 100%; max-width: 960px; height: auto; border: 1px solid #d9e2ec; background: white; display: block; }
 .warning { background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; margin: 1rem 0; }
+.gene-map-hint { background: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 6px; padding: 0.8rem; margin: 1rem 0; }
+.gene-map-hint strong { color: #991b1b; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 0.65rem; margin: 1rem 0; }
 .card { border: 1px solid #d9e2ec; border-radius: 6px; padding: 0.7rem; background: #f8fafc; }
 .card span { display: block; color: #52606d; font-size: 0.8rem; }
@@ -4949,6 +5069,7 @@ a.button { display: inline-block; padding: 0.45rem 0.65rem; margin: 0.2rem 0.35r
 <h1>Geographic Distribution</h1>
 <p>This section summarizes where selected databases or features were detected in the analyzed dataset. Percentages always use genome-count denominators.</p>
 <div class="warning">Geographic distribution reflects the analyzed dataset and may not represent true regional or global prevalence.</div>
+<div class="gene-map-hint"><strong>Gene map:</strong> choose <em>Individual feature / gene</em>, select an AMR or VFDB feature, and keep Geographic level as <em>Country</em> to map gene prevalence. Redder bubbles indicate higher dataset prevalence; larger bubbles indicate more genomes.</div>
 <div class="controls">
 <div><label for="database">Database</label><select id="database"></select></div>
 <div><label for="mode">Mode</label><select id="mode"><option value="database_burden">Database burden / any feature</option><option value="individual_feature">Individual feature / gene</option></select></div>
@@ -4970,12 +5091,17 @@ a.button { display: inline-block; padding: 0.45rem 0.65rem; margin: 0.2rem 0.35r
 const databaseRows = __DATABASE_ROWS__;
 const featureRows = __FEATURE_ROWS__;
 const coords = __COUNTRY_COORDS__;
-const width = 960, height = 480;
+const height = 480;
+function mapWidth() {
+  const container = document.getElementById('map');
+  return Math.max(640, Math.min(960, container ? container.clientWidth || 960 : 960));
+}
 function cleanCountry(value) { return (value || '').split(':')[0].trim(); }
 function xy(country) {
   const item = coords[cleanCountry(country).toLowerCase()];
   if (!item) return null;
   const lat = item[0], lon = item[1];
+  const width = mapWidth();
   return [((lon + 180) / 360) * width, ((90 - lat) / 180) * height];
 }
 const databaseSelect = document.getElementById('database');
@@ -5018,6 +5144,7 @@ function activeRows() {
 }
 function renderMap(active) {
   const geo = geoSelect.value;
+  const width = mapWidth();
   if (geo !== 'country' && geo !== 'country_year') {
     document.getElementById('map').innerHTML = '<p>Map view is available for country-level rows. Use the bar plots for continent and region summaries.</p>';
     return;
@@ -5071,6 +5198,7 @@ function render() {
   renderTable(active);
 }
 for (const control of [databaseSelect, modeSelect, featureSelect, geoSelect, metricSelect, minSelect, displaySelect, warningSelect]) control.addEventListener('change', render);
+window.addEventListener('resize', render);
 updateFeatures(); render();
 </script></body></html>
 """
@@ -5631,6 +5759,15 @@ def _write_cooccurrence_heatmap_png(path: Path, rows: list[dict[str, str]]) -> N
 
 
 def _write_cooccurrence_network_svg(path: Path, nodes: list[dict[str, str]], edges: list[dict[str, str]], title: str) -> None:
+    if not nodes or not edges:
+        _write_unavailable_svg(
+            path,
+            title,
+            "No report-facing network edges passed the current support/significance filters. Full pair tables are preserved.",
+            width=920,
+            height=300,
+        )
+        return
     width, height = 920, 620
     cx, cy = width / 2, height / 2 + 20
     radius = 230
@@ -5669,6 +5806,9 @@ def _write_cooccurrence_network_svg(path: Path, nodes: list[dict[str, str]], edg
 
 
 def _write_cooccurrence_network_png(path: Path, nodes: list[dict[str, str]], edges: list[dict[str, str]]) -> None:
+    if not nodes or not edges:
+        _write_unavailable_png(path, width=920, height=300)
+        return
     width, height = 920, 620
     cx, cy = width / 2, height / 2 + 20
     radius = 230
@@ -6196,6 +6336,15 @@ def _write_diverging_heatmap_png(path: Path, rows: list[dict[str, str]], row_fie
 
 
 def _write_burden_boxplot_svg(path: Path, rows: list[dict[str, str]], title: str) -> None:
+    if not rows or not _has_numeric_values(rows, ["min", "q1", "median", "q3", "max", "mean"]):
+        _write_unavailable_svg(
+            path,
+            title,
+            "No numeric summary statistics were available for this boxplot.",
+            width=1000,
+            height=280,
+        )
+        return
     width = 1000
     row_h = 44
     left, top, plot_w = 270, 86, 620
@@ -6227,6 +6376,9 @@ def _write_burden_boxplot_svg(path: Path, rows: list[dict[str, str]], title: str
 
 
 def _write_burden_boxplot_png(path: Path, rows: list[dict[str, str]]) -> None:
+    if not rows or not _has_numeric_values(rows, ["median"]):
+        _write_unavailable_png(path, width=900, height=280)
+        return
     # Dependency-free raster companion. The SVG carries labels and tooltips.
     _write_bar_png(path, [{"metadata_group": row.get("metadata_group", ""), "median": row.get("median", "")} for row in rows], "median")
 
@@ -7029,6 +7181,15 @@ def _write_variation_scatter_svg(path: Path, rows: list[dict[str, str]], title: 
         for row in rows
     ]
     points = [(x, y, row) for x, y, row in points if x is not None and y is not None]
+    if not points:
+        _write_unavailable_svg(
+            path,
+            title,
+            "No hits had both numeric identity and coverage values, so the scatterplot could not be drawn.",
+            width=1000,
+            height=300,
+        )
+        return
     parts = _svg_base(width, height, title, "Each point is a detected feature hit; dashed guides mark 90% identity and 80% coverage review thresholds.")
     parts.append(f"<rect x='{left}' y='{top}' width='{plot_w}' height='{plot_h}' fill='{_plot_color('panel')}' stroke='{_plot_color('border')}'/>")
     for tick in range(0, 101, 20):
@@ -7062,6 +7223,9 @@ def _write_variation_scatter_svg(path: Path, rows: list[dict[str, str]], title: 
 
 
 def _write_variation_scatter_png(path: Path, rows: list[dict[str, str]]) -> None:
+    if not _has_numeric_pair(rows, "identity", "coverage"):
+        _write_unavailable_png(path, width=900, height=300)
+        return
     width, height = 900, 560
     left, top, plot_w, plot_h = 78, 62, 720, 410
     pixels = [bytearray([248, 250, 252] * width) for _ in range(height)]
@@ -12128,6 +12292,7 @@ def write_important_final_interpretation_outputs(
         data_available = (figures / f"{stem}.data.tsv").exists()
         human_title = _human_figure_title(stem)
         caption = _figure_caption_for(section, stem)
+        render_quality_label, axis_label_status, render_recommended_action = _figure_render_quality(important_dir, stem)
         asset_quality_label = "asset_ready" if png_available and pdf_available and data_available else "asset_incomplete"
         interpretation_quality_label = (
             "interpretation_ready"
@@ -12157,6 +12322,8 @@ def write_important_final_interpretation_outputs(
             interpretation_quality_label,
             title_quality_label,
             caption_quality_label,
+            render_quality_label,
+            axis_label_status,
         )
         final_publication_label = "publication_ready" if visibility["publication_candidate"] == "true" else "supporting_only"
         visual_rows.append({
@@ -12165,6 +12332,8 @@ def write_important_final_interpretation_outputs(
             "title": human_title,
             "interpretation_type": interpretation,
             "warning_status": warning_status,
+            "render_quality_label": render_quality_label,
+            "axis_label_status": axis_label_status,
             "description": caption if caption else description,
             **visibility,
             "png_path": f"figures/{stem}.png" if png_available else "",
@@ -12183,17 +12352,20 @@ def write_important_final_interpretation_outputs(
             "caption_status": caption_quality_label,
             "warning_status": warning_status,
             "asset_quality_label": asset_quality_label,
+            "render_quality_label": render_quality_label,
+            "axis_label_status": axis_label_status,
             "interpretation_quality_label": interpretation_quality_label,
             "title_quality_label": title_quality_label,
             "caption_quality_label": caption_quality_label,
             "final_publication_label": final_publication_label,
             "quality_label": final_publication_label,
             **visibility,
-            "recommended_action": "Use as a featured/public figure." if final_publication_label == "publication_ready" else "Use as supporting context and review warnings/caption.",
+            "recommended_action": "Use as a featured/public figure." if final_publication_label == "publication_ready" else render_recommended_action,
         })
     visual_index_path = tables / "report_visual_index.tsv"
     visual_index_fields = [
         "figure_stem", "section", "title", "interpretation_type", "warning_status", "description",
+        "render_quality_label", "axis_label_status",
         "default_visibility", "display_reason", "recommended_audience", "main_report_priority", "publication_candidate",
         "png_path", "svg_path", "pdf_path", "data_tsv_path", "recommended_use",
     ]
@@ -12202,6 +12374,7 @@ def write_important_final_interpretation_outputs(
     visual_quality_fields = [
         "figure_stem", "section", "png_available", "svg_available", "pdf_available", "data_tsv_available",
         "caption_status", "warning_status", "asset_quality_label", "interpretation_quality_label",
+        "render_quality_label", "axis_label_status",
         "title_quality_label", "caption_quality_label", "final_publication_label", "quality_label",
         "default_visibility", "display_reason", "recommended_audience", "main_report_priority", "publication_candidate",
         "recommended_action",
