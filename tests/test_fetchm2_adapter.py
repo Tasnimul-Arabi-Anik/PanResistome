@@ -967,6 +967,7 @@ class FetchM2AdapterTests(unittest.TestCase):
                 self.assertIn(anchor, report_html)
             for ui_class in [
                 "report-header",
+                "header-meta",
                 "sidebar",
                 "section-header",
                 "summary-card",
@@ -988,7 +989,7 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "@media (max-width: 520px)",
                 "overflow-wrap: anywhere",
                 "main > .report-header, main > .section",
-                "calc(100vw - 1.1rem) !important",
+                "width: 92vw !important",
             ]:
                 self.assertIn(css_token, report_html)
             self.assertIn("Featured figure gallery", report_html)

@@ -13741,6 +13741,8 @@ main {{ margin-left: 290px; padding: 1.2rem 1.4rem 2rem; min-width: 0; max-width
 .report-header {{ background: linear-gradient(135deg, #0f766e 0%, #14532d 100%); color: white; border-radius: 10px; padding: 1.2rem; margin-bottom: 1rem; box-shadow: 0 14px 32px rgba(15, 23, 42, 0.14); overflow: hidden; }}
 .report-header h1 {{ margin: 0; font-size: clamp(1.7rem, 3vw, 2.4rem); overflow-wrap: anywhere; }}
 .report-header p {{ margin: 0.35rem 0 0; color: #d1fae5; overflow-wrap: anywhere; }}
+.header-meta {{ display: flex; flex-wrap: wrap; gap: 0.25rem 0.7rem; align-items: center; }}
+.header-meta span {{ display: inline-block; overflow-wrap: anywhere; }}
 .report-header .download-button {{ background: white; color: var(--primary); }}
 .section {{ background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05); scroll-margin-top: 1rem; max-width: 100%; }}
 .section-header {{ display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.7rem; }}
@@ -13809,12 +13811,13 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
   .sidebar {{ max-width: 100vw; }}
   .sidebar-links {{ grid-template-columns: 1fr; }}
   main {{ padding: 0.55rem; width: 100%; max-width: 100%; overflow-x: hidden; }}
-  main > .report-header, main > .section {{ width: calc(100vw - 1.1rem) !important; max-width: calc(100vw - 1.1rem) !important; min-width: 0; margin-left: 0; margin-right: 0; }}
+  main > .report-header, main > .section {{ width: 92vw !important; max-width: 92vw !important; min-width: 0; margin-left: 0; margin-right: 0; }}
   .analysis-card {{ width: 100%; max-width: 100%; min-width: 0; margin-left: 0; margin-right: 0; }}
   .report-header * {{ max-width: 100%; min-width: 0; }}
   .report-header {{ border-radius: 8px; padding: 0.9rem; }}
   .report-header h1 {{ font-size: 1.35rem; line-height: 1.15; max-width: 100%; white-space: normal; word-break: break-word; }}
   .report-header p {{ font-size: 0.92rem; line-height: 1.35; word-break: break-word; }}
+  .header-meta {{ display: grid; grid-template-columns: 1fr; gap: 0.15rem; }}
   .download-bar, .downloads {{ display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; }}
   .download-button, .downloads a {{ display: block; width: 100%; max-width: 100%; min-width: 0; text-align: center; white-space: normal; word-break: break-word; }}
   .figure-row, .finding-grid, .download-card-grid, .cards {{ grid-template-columns: 1fr; }}
@@ -13849,7 +13852,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 <main>
 <header class="report-header">
 <h1>PanResistome Important Report</h1>
-<p>Taxon: {html.escape(report_taxon)} | Genomes analyzed: {len(dataset_rows)} | QC PASS: {qc_pass}/{len(dataset_rows)} | Total features: {total_features} | Databases detected: {html.escape(", ".join(databases) or "none")} | Warning categories: {warning_category_count} | Schema validation: {html.escape(schema_status)}</p>
+<p class="header-meta"><span>Taxon: {html.escape(report_taxon)}</span><span>Genomes analyzed: {len(dataset_rows)}</span><span>QC PASS: {qc_pass}/{len(dataset_rows)}</span><span>Total features: {total_features}</span><span>Databases detected: {html.escape(", ".join(databases) or "none")}</span><span>Warning categories: {warning_category_count}</span><span>Schema validation: {html.escape(schema_status)}</span></p>
 {top_download_links}
 </header>
 <section id="featured" class="section"><h1>Featured Results</h1>{card_html}<p>{db_badges}</p>
