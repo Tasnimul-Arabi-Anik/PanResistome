@@ -13818,6 +13818,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
   .report-header h1 {{ font-size: 1.35rem; line-height: 1.15; max-width: 100%; white-space: normal; word-break: break-word; }}
   .report-header p {{ font-size: 0.92rem; line-height: 1.35; word-break: break-word; }}
   .header-meta {{ display: grid; grid-template-columns: 1fr; gap: 0.15rem; }}
+  .header-meta span {{ white-space: normal; word-break: break-word; overflow-wrap: anywhere; }}
   .download-bar, .downloads {{ display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; }}
   .download-button, .downloads a {{ display: block; width: 100%; max-width: 100%; min-width: 0; text-align: center; white-space: normal; word-break: break-word; }}
   .figure-row, .finding-grid, .download-card-grid, .cards {{ grid-template-columns: 1fr; }}
