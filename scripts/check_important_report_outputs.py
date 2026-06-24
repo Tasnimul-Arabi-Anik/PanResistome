@@ -328,14 +328,18 @@ def validate(sample_dir: Path) -> list[str]:
     for class_name in [
         "report-header",
         "sidebar",
+        "sidebar-links",
         "figure-card",
         "table-card",
+        "analysis-card",
         "warning-box",
         "download-card",
         "back-to-top",
     ]:
         if class_name not in html_text:
             errors.append(f"Missing report UI class: {class_name}")
+    if "@media (max-width: 920px)" not in html_text or "grid-template-columns: repeat(auto-fit, minmax(150px, 1fr))" not in html_text:
+        errors.append("results.html is missing responsive sidebar grid CSS")
 
     for link in sorted(_linked_files(html_text)):
         target = (important_dir / link).resolve()

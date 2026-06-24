@@ -93,6 +93,9 @@ class FetchM2AdapterTests(unittest.TestCase):
             for control in ["Database", "Mode", "Feature", "Geographic level", "Minimum group size", "Warning filter"]:
                 self.assertIn(control, html)
             self.assertIn("Gene map", html)
+            self.assertIn("modeSelect.value = 'individual_feature'", html)
+            self.assertIn("Feature / gene", html)
+            self.assertIn("polygon points", html)
             self.assertIn("overflow-x: hidden", html)
             self.assertIn("window.addEventListener('resize', render)", html)
             svg = (sample_dir / "important" / "figures" / "geographic_distribution_map.svg").read_text(encoding="utf-8")
@@ -907,6 +910,10 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertNotIn("Report-facing figure with PNG", report_html)
             self.assertNotIn("Warning rows represent", report_html)
             self.assertIn("Warning flags average", report_html)
+            self.assertIn("sidebar-links", report_html)
+            self.assertIn("analysis-card", report_html)
+            self.assertIn("grid-template-columns: repeat(auto-fit, minmax(150px, 1fr))", report_html)
+            self.assertIn("Diagnostics and unavailable plots", report_html)
             if by_section["section"].nunique() >= 5:
                 balanced_preview = report_html.split("<h2>Balanced highlights by section</h2>", 1)[1].split('<div class="downloads"', 1)[0]
                 preview_sections = [

@@ -4356,9 +4356,9 @@ def _svg_geographic_map(rows: list[dict[str, str]], title: str) -> str:
     points = []
     for row, xy, prevalence, total, positive in mappable_rows:
         radius = max(5, min(28, 4 + math.sqrt(max(total, 1)) * 4))
-        red = int(55 + 185 * prevalence)
-        green = int(115 - 45 * prevalence)
-        blue = int(210 - 170 * prevalence)
+        red = int(254 - 64 * (1 - prevalence))
+        green = int(226 - 175 * prevalence)
+        blue = int(226 - 175 * prevalence)
         fill = "#cbd5e1" if "small_group_warning" in row.get("warning_flags", "") else f"rgb({red},{green},{blue})"
         label = (
             f"{row.get('country', '')}: {positive}/{row.get('total_genomes', '0')} "
@@ -4392,11 +4392,11 @@ def _svg_geographic_map(rows: list[dict[str, str]], title: str) -> str:
     )
     legend = (
         f"<g transform='translate(20,{legend_y})' font-family='Arial' font-size='12' fill='#52606d'>"
-        "<circle cx='8' cy='0' r='6' fill='rgb(55,115,210)' fill-opacity='0.75' stroke='#1f2933'/>"
+        "<circle cx='8' cy='0' r='6' fill='rgb(190,226,226)' fill-opacity='0.75' stroke='#1f2933'/>"
         "<text x='22' y='4'>lower prevalence</text>"
-        "<circle cx='158' cy='0' r='10' fill='rgb(148,92,125)' fill-opacity='0.75' stroke='#1f2933'/>"
+        "<circle cx='158' cy='0' r='10' fill='rgb(222,138,138)' fill-opacity='0.75' stroke='#1f2933'/>"
         "<text x='176' y='4'>mid</text>"
-        "<circle cx='244' cy='0' r='14' fill='rgb(240,70,40)' fill-opacity='0.75' stroke='#1f2933'/>"
+        "<circle cx='244' cy='0' r='14' fill='rgb(254,51,51)' fill-opacity='0.75' stroke='#1f2933'/>"
         "<text x='266' y='4'>higher prevalence</text>"
         "<circle cx='444' cy='0' r='9' fill='#cbd5e1' fill-opacity='0.75' stroke='#1f2933'/>"
         "<text x='462' y='4'>small group</text>"
@@ -4577,12 +4577,12 @@ def _geographic_map_png(rows: list[dict[str, str]], path: Path) -> None:
         color = (
             (203, 213, 225)
             if "small_group_warning" in row.get("warning_flags", "")
-            else (int(55 + 185 * prevalence), int(115 - 45 * prevalence), int(210 - 170 * prevalence))
+            else (int(254 - 64 * (1 - prevalence)), int(226 - 175 * prevalence), int(226 - 175 * prevalence))
         )
         draw_circle(xy[0], xy[1] + header, radius, color)
     legend_y = header + map_height + 18
     for idx, prevalence in enumerate([0.0, 0.5, 1.0]):
-        color = (int(55 + 185 * prevalence), int(115 - 45 * prevalence), int(210 - 170 * prevalence))
+        color = (int(254 - 64 * (1 - prevalence)), int(226 - 175 * prevalence), int(226 - 175 * prevalence))
         draw_rect(20 + idx * 38, legend_y, 50 + idx * 38, legend_y + 18, color)
     draw_rect(150, legend_y, 180, legend_y + 18, (203, 213, 225))
     _write_png(path, width, height, pixels)
@@ -5045,7 +5045,7 @@ def write_important_geographic_outputs(sample_dir: Path, out_dir: Path, importan
 * { box-sizing: border-box; }
 html, body { max-width: 100%; overflow-x: hidden; }
 body { font-family: Arial, sans-serif; color: #1f2933; margin: 1.25rem; background: #f8fafc; }
-.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; align-items: end; }
+.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.75rem; align-items: end; }
 label { font-weight: 700; display: block; margin-bottom: 0.25rem; }
 select { width: 100%; padding: 0.35rem; box-sizing: border-box; }
 #map { width: 100%; overflow-x: auto; }
@@ -5053,6 +5053,7 @@ select { width: 100%; padding: 0.35rem; box-sizing: border-box; }
 .warning { background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; margin: 1rem 0; }
 .gene-map-hint { background: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 6px; padding: 0.8rem; margin: 1rem 0; }
 .gene-map-hint strong { color: #991b1b; }
+.control-feature { grid-column: span 2; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 0.65rem; margin: 1rem 0; }
 .card { border: 1px solid #d9e2ec; border-radius: 6px; padding: 0.7rem; background: #f8fafc; }
 .card span { display: block; color: #52606d; font-size: 0.8rem; }
@@ -5065,15 +5066,16 @@ table { border-collapse: collapse; width: 100%; margin-top: 1rem; font-size: 0.9
 th, td { border: 1px solid #d9e2ec; padding: 0.35rem; text-align: left; }
 th { background: #f0f4f8; }
 a.button { display: inline-block; padding: 0.45rem 0.65rem; margin: 0.2rem 0.35rem 0.2rem 0; background: #0f766e; color: white; text-decoration: none; border-radius: 4px; }
+@media (max-width: 760px) { .control-feature { grid-column: auto; } }
 </style></head><body>
 <h1>Geographic Distribution</h1>
 <p>This section summarizes where selected databases or features were detected in the analyzed dataset. Percentages always use genome-count denominators.</p>
 <div class="warning">Geographic distribution reflects the analyzed dataset and may not represent true regional or global prevalence.</div>
 <div class="gene-map-hint"><strong>Gene map:</strong> choose <em>Individual feature / gene</em>, select an AMR or VFDB feature, and keep Geographic level as <em>Country</em> to map gene prevalence. Redder bubbles indicate higher dataset prevalence; larger bubbles indicate more genomes.</div>
 <div class="controls">
-<div><label for="database">Database</label><select id="database"></select></div>
 <div><label for="mode">Mode</label><select id="mode"><option value="database_burden">Database burden / any feature</option><option value="individual_feature">Individual feature / gene</option></select></div>
-<div><label for="feature">Feature</label><select id="feature"></select></div>
+<div><label for="database">Database</label><select id="database"></select></div>
+<div class="control-feature"><label for="feature">Feature / gene</label><select id="feature"></select></div>
 <div><label for="geo">Geographic level</label><select id="geo"><option value="country">Country</option><option value="continent">Continent</option><option value="subcontinent">Subcontinent / region</option><option value="country_year">Country + collection year</option></select></div>
 <div><label for="metric">Metric</label><select id="metric"><option value="prevalence_percent">Prevalence %</option><option value="positive_genomes">Positive genome count</option><option value="total_genomes">Total genome count</option><option value="mean_feature_burden_per_genome">Mean feature burden per genome</option><option value="median_feature_burden_per_genome">Median feature burden per genome</option><option value="feature_rows">Feature row count</option></select></div>
 <div><label for="minn">Minimum group size</label><select id="minn"><option value="5">n&gt;=5</option><option value="0">All</option><option value="3">n&gt;=3</option><option value="10">n&gt;=10</option></select></div>
@@ -5096,13 +5098,16 @@ function mapWidth() {
   const container = document.getElementById('map');
   return Math.max(640, Math.min(960, container ? container.clientWidth || 960 : 960));
 }
+function projectLonLat(lon, lat) {
+  const width = mapWidth();
+  return [((lon + 180) / 360) * width, ((90 - lat) / 180) * height];
+}
 function cleanCountry(value) { return (value || '').split(':')[0].trim(); }
 function xy(country) {
   const item = coords[cleanCountry(country).toLowerCase()];
   if (!item) return null;
   const lat = item[0], lon = item[1];
-  const width = mapWidth();
-  return [((lon + 180) / 360) * width, ((90 - lat) / 180) * height];
+  return projectLonLat(lon, lat);
 }
 const databaseSelect = document.getElementById('database');
 const modeSelect = document.getElementById('mode');
@@ -5116,6 +5121,15 @@ for (const value of [...new Set(databaseRows.map(r => r.database).concat(feature
   const opt = document.createElement('option'); opt.value = value; opt.textContent = value; databaseSelect.appendChild(opt);
 }
 if ([...databaseSelect.options].some(o => o.value === 'amr')) databaseSelect.value = 'amr';
+if (featureRows.length) modeSelect.value = 'individual_feature';
+function topFeatureForDatabase(db) {
+  const candidates = featureRows
+    .filter(r => r.database === db && (r.geo_level === 'country' || r.geo_level === 'country_year'))
+    .sort((a, b) => Number(b.positive_genomes || 0) - Number(a.positive_genomes || 0)
+      || Number(b.prevalence_percent || 0) - Number(a.prevalence_percent || 0)
+      || String(a.feature_id || '').localeCompare(String(b.feature_id || '')));
+  return candidates.length ? candidates[0].feature_id : '';
+}
 function updateFeatures() {
   const db = databaseSelect.value;
   const current = featureSelect.value;
@@ -5123,6 +5137,10 @@ function updateFeatures() {
   const features = [...new Set(featureRows.filter(r => r.database === db).map(r => r.feature_id))].sort();
   for (const value of features) { const opt = document.createElement('option'); opt.value = value; opt.textContent = value; featureSelect.appendChild(opt); }
   if (features.includes(current)) featureSelect.value = current;
+  else {
+    const topFeature = topFeatureForDatabase(db);
+    if (features.includes(topFeature)) featureSelect.value = topFeature;
+  }
   featureSelect.disabled = modeSelect.value !== 'individual_feature' || features.length === 0;
 }
 function rowValue(row, metric) {
@@ -5154,12 +5172,25 @@ function renderMap(active) {
   svg += `<g transform="translate(0,45)"><rect x="0" y="0" width="${width}" height="${height}" fill="#eff6ff" stroke="#bcccdc"/>`;
   for (let lon = -120; lon <= 180; lon += 60) { const x = ((lon + 180) / 360) * width; svg += `<line x1="${x}" y1="0" x2="${x}" y2="${height}" stroke="#d9e2ec"/>`; }
   for (let lat = -60; lat <= 90; lat += 30) { const y = ((90 - lat) / 180) * height; svg += `<line x1="0" y1="${y}" x2="${width}" y2="${y}" stroke="#d9e2ec"/>`; }
+  function poly(points) {
+    return points.map(p => projectLonLat(p[0], p[1]).map(v => v.toFixed(1)).join(',')).join(' ');
+  }
+  const land = [
+    [[-168,72],[-130,58],[-105,50],[-92,25],[-106,8],[-83,7],[-63,45],[-90,70]],
+    [[-82,12],[-60,8],[-43,-8],[-48,-28],[-63,-55],[-74,-38]],
+    [[-18,35],[8,70],[60,63],[105,50],[150,55],[150,8],[100,5],[80,24],[42,12],[12,30]],
+    [[-18,33],[15,32],[35,5],[28,-34],[5,-35],[-12,-5]],
+    [[68,8],[92,22],[112,10],[105,-8],[78,-6]],
+    [[112,-10],[154,-12],[151,-39],[116,-34]],
+    [[-11,58],[2,55],[0,50],[-8,50]],
+  ];
+  for (const shape of land) svg += `<polygon points="${poly(shape)}" fill="#dbeafe" stroke="#bfdbfe" stroke-width="1.2" opacity="0.82"/>`;
   for (const row of active) {
     const point = xy(row.country); if (!point) continue;
     const total = Number(row.total_genomes || 0);
     const radius = Math.max(5, Math.min(28, 4 + Math.sqrt(Math.max(total, 1)) * 4));
     const p = Number(row.prevalence_percent || 0) / 100;
-    const fill = (row.warning_flags || '').includes('small_group_warning') ? '#cbd5e1' : `rgb(${Math.round(230 * p)},80,${Math.round(200 * (1 - p))})`;
+    const fill = (row.warning_flags || '').includes('small_group_warning') ? '#cbd5e1' : `rgb(${Math.round(254 - 64 * (1 - p))},${Math.round(226 - 175 * p)},${Math.round(226 - 175 * p)})`;
     const label = `${row.group_name}: ${row.prevalence_display}; warnings=${row.warning_flags || ''}`;
     svg += `<circle cx="${point[0].toFixed(1)}" cy="${point[1].toFixed(1)}" r="${radius.toFixed(1)}" fill="${fill}" fill-opacity="0.75" stroke="#1f2933"><title>${label}</title></circle>`;
     svg += `<text x="${(point[0] + radius + 3).toFixed(1)}" y="${(point[1] + 4).toFixed(1)}" font-size="11" fill="#1f2933">${row.country}</text>`;
@@ -5192,7 +5223,8 @@ function render() {
   const positives = active.reduce((a, r) => a + Number(r.positive_genomes || 0), 0);
   const total = active.reduce((a, r) => a + Number(r.total_genomes || 0), 0);
   const top = active[0] || {};
-  document.getElementById('summary').innerHTML = `<div class="cards"><div class="card"><span>Mode</span><strong>${mode === 'database_burden' ? 'Database burden' : 'Feature'}</strong></div><div class="card"><span>Database</span><strong>${db}</strong></div><div class="card"><span>Groups shown</span><strong>${active.length}</strong></div><div class="card"><span>Top group</span><strong>${top.group_name || '-'}</strong></div><div class="card"><span>Top prevalence</span><strong>${top.prevalence_display || '-'}</strong></div></div><p>Displayed totals across shown groups: ${positives}/${total}. Interpret these summaries as dataset-specific, not global prevalence.</p>`;
+  const selectedFeature = mode === 'individual_feature' ? (featureSelect.value || '-') : 'any feature';
+  document.getElementById('summary').innerHTML = `<div class="cards"><div class="card"><span>Mode</span><strong>${mode === 'database_burden' ? 'Database burden' : 'Gene map'}</strong></div><div class="card"><span>Database</span><strong>${db}</strong></div><div class="card"><span>Feature</span><strong>${selectedFeature}</strong></div><div class="card"><span>Groups shown</span><strong>${active.length}</strong></div><div class="card"><span>Top group</span><strong>${top.group_name || '-'}</strong></div><div class="card"><span>Top prevalence</span><strong>${top.prevalence_display || '-'}</strong></div></div><p>Displayed totals across shown groups: ${positives}/${total}. Interpret these summaries as dataset-specific, not global prevalence.</p>`;
   renderMap(active);
   renderBars(active);
   renderTable(active);
@@ -12824,6 +12856,42 @@ def write_important_results_report(
     def figure_priority(stem: str) -> float:
         return _float_or_none(visual_by_stem.get(stem, {}).get("main_report_priority", "0")) or 0.0
 
+    def figure_render_ready(stem: str) -> bool:
+        row = visual_by_stem.get(stem, {})
+        return (
+            row.get("render_quality_label", "rendered") == "rendered"
+            and row.get("axis_label_status", "not_applicable") != "missing_axis_labels"
+        )
+
+    def diagnostic_figure_links(items: list[tuple[str, str]]) -> str:
+        links = []
+        for stem, _card in items:
+            title = visual_by_stem.get(stem, {}).get("title") or _human_figure_title(stem)
+            render_label = visual_by_stem.get(stem, {}).get("render_quality_label", "review")
+            svg_path = important_dir / "figures" / f"{stem}.svg"
+            data_path = important_dir / "figures" / f"{stem}.data.tsv"
+            link_bits = []
+            if svg_path.exists():
+                link_bits.append(f"<a href='figures/{html.escape(svg_path.name)}'>SVG</a>")
+            if data_path.exists():
+                link_bits.append(f"<a href='figures/{html.escape(data_path.name)}'>data</a>")
+            links.append(
+                "<li>"
+                f"<strong>{html.escape(title)}</strong> "
+                f"<span class='badge badge-warning'>{html.escape(render_label.replace('_', ' '))}</span> "
+                + (" | ".join(link_bits) if link_bits else "asset preserved in figures directory")
+                + "</li>"
+            )
+        if not links:
+            return ""
+        return (
+            "<details class='details-block diagnostic-block'>"
+            f"<summary>Diagnostics and unavailable plots ({len(links)})</summary>"
+            "<p>These plots are preserved for audit, but they are hidden from the main visual flow because the plotted data were empty, key metrics were unavailable, or axis labels need review.</p>"
+            f"<ul class='diagnostic-list'>{''.join(links)}</ul>"
+            "</details>"
+        )
+
     def curated_figure_html(
         items: list[tuple[str, str]],
         empty_message: str,
@@ -12833,6 +12901,10 @@ def write_important_results_report(
         present = [(stem, card) for stem, card in items if card]
         if not present:
             return f"<p>{html.escape(empty_message)}</p>"
+        diagnostics = [(stem, card) for stem, card in present if not figure_render_ready(stem)]
+        present = [(stem, card) for stem, card in present if figure_render_ready(stem)]
+        if not present:
+            return f"<p>{html.escape(empty_message)}</p>" + diagnostic_figure_links(diagnostics)
         primary = [
             (stem, card)
             for stem, card in present
@@ -12856,6 +12928,7 @@ def write_important_results_report(
                 f"{_report_figure_grid_html([card for _stem, card in hidden])}"
                 "</details>"
             )
+        output += diagnostic_figure_links(diagnostics)
         return output
 
     top_files = sorted(
@@ -13643,6 +13716,7 @@ a {{ color: var(--primary); }}
 a:focus, button:focus, input:focus {{ outline: 3px solid var(--primary-soft); outline-offset: 2px; }}
 .sidebar {{ position: fixed; left: 0; top: 0; bottom: 0; width: 270px; background: #102a43; color: white; padding: 1rem; overflow-y: auto; z-index: 10; }}
 .sidebar h2 {{ margin: 0 0 1rem; font-size: 1.05rem; }}
+.sidebar-links {{ display: block; }}
 .sidebar a {{ display: block; color: #e0f2fe; text-decoration: none; margin: 0.35rem 0; padding: 0.42rem 0.55rem; border-radius: 6px; }}
 .sidebar a:hover, .sidebar a:focus {{ background: rgba(255,255,255,0.12); color: white; }}
 main {{ margin-left: 290px; padding: 1.2rem 1.4rem 2rem; min-width: 0; }}
@@ -13653,6 +13727,11 @@ main {{ margin-left: 290px; padding: 1.2rem 1.4rem 2rem; min-width: 0; }}
 .section {{ background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05); scroll-margin-top: 1rem; }}
 .section-header {{ display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.7rem; }}
 .section-header h2, section h2 {{ margin-top: 0; }}
+.analysis-card {{ border: 1px solid var(--border); border-radius: 10px; background: #fbfdff; padding: 0.9rem; margin: 0.9rem 0; }}
+.analysis-card h3 {{ margin-top: 0; margin-bottom: 0.35rem; }}
+.analysis-card > p:first-of-type {{ color: var(--muted); margin-top: 0; }}
+.diagnostic-list {{ columns: 2; column-gap: 2rem; margin: 0.5rem 0 0; padding-left: 1.1rem; }}
+.diagnostic-list li {{ break-inside: avoid; margin-bottom: 0.25rem; }}
 .cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 0.75rem; }}
 .summary-card, .card {{ border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem; background: #fbfdff; }}
 .summary-card span, .card span {{ display: block; font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }}
@@ -13698,16 +13777,27 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 .details-block {{ border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; background: #f8fafc; margin: 0.75rem 0; }}
 .back-to-top {{ position: fixed; right: 1rem; bottom: 1rem; background: var(--primary); color: white; padding: 0.55rem 0.7rem; border-radius: 999px; text-decoration: none; box-shadow: 0 8px 20px rgba(15,23,42,0.22); z-index: 20; }}
 @media (max-width: 920px) {{
-  .sidebar {{ position: static; width: auto; max-height: none; }}
-  .sidebar a {{ display: inline-block; margin: 0.2rem; }}
+  .sidebar {{ position: sticky; top: 0; width: 100%; max-height: 42vh; overflow-y: auto; border-bottom: 1px solid rgba(255,255,255,0.18); }}
+  .sidebar h2 {{ margin: 0 0 0.5rem; }}
+  .sidebar-links {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.25rem; }}
+  .sidebar a {{ display: block; margin: 0; padding: 0.35rem 0.45rem; white-space: normal; overflow-wrap: anywhere; font-size: 0.92rem; }}
   main {{ margin-left: 0; padding: 0.8rem; }}
   .section-header, .figure-card-header, .table-card-header {{ flex-direction: column; align-items: stretch; }}
+  .diagnostic-list {{ columns: 1; }}
   iframe {{ min-height: 520px; }}
+}}
+@media (max-width: 520px) {{
+  .report-header {{ border-radius: 8px; padding: 1rem; }}
+  .report-header h1 {{ font-size: 1.55rem; }}
+  .download-button, .downloads a {{ width: 100%; text-align: center; }}
+  .figure-row, .finding-grid, .download-card-grid, .cards {{ grid-template-columns: 1fr; }}
+  .summary-card strong, .card strong {{ font-size: 1.25rem; }}
 }}
 </style></head>
 <body id="top">
 <nav class="sidebar" aria-label="Report navigation">
 <h2>Results</h2>
+<div class="sidebar-links">
 <a href="#featured">Featured Results</a>
 <a href="#overview">Run Overview</a>
 <a href="#qc">QC Summary</a>
@@ -13726,6 +13816,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 <a href="#evidence">Evidence & Confidence</a>
 <a href="#warnings">Warnings & Limitations</a>
 <a href="#downloads">Downloads / Important Files</a>
+</div>
 </nav>
 <main>
 <header class="report-header">
@@ -13762,133 +13853,105 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 <div class="warning-box warning">Prevalence reflects the analyzed dataset, not global prevalence. This section is descriptive and does not test association or causality.</div>
 {prevalence_cards_html}
 {prevalence_written_html}
-<iframe src="figures/prevalence_analysis.html" title="Feature prevalence interactive report"></iframe>
-{prevalence_figures_html}
-<h3>Database summary</h3>
-{prevalence_database_table_html}
-<h3>Top feature prevalence</h3>
-{prevalence_table_html}
+<div class="analysis-card"><h3>Interactive prevalence explorer</h3><p>Filter by database, prevalence threshold, and display size. Use this for quick feature lookup with denominator-aware percentages.</p><iframe src="figures/prevalence_analysis.html" title="Feature prevalence interactive report"></iframe></div>
+<div class="analysis-card"><h3>Report-facing prevalence figures</h3>{prevalence_figures_html}</div>
+<div class="analysis-card"><h3>Database summary</h3>{prevalence_database_table_html}</div>
+<div class="analysis-card"><h3>Top feature prevalence</h3>{prevalence_table_html}</div>
 <div class="downloads"><a href="figures/prevalence_analysis.html">Open interactive prevalence report</a><a href="prevalence_tables.zip">Download prevalence tables ZIP</a><a href="prevalence_figures.zip">Download prevalence figures ZIP</a><a href="tables/feature_prevalence.tsv">Download full feature prevalence</a><a href="tables/feature_prevalence_top.tsv">Download top feature prevalence</a><a href="tables/prevalence_summary_by_database.tsv">Download database summary</a><a href="tables/prevalence_core_accessory_rare_summary.tsv">Download core/common/accessory/rare summary</a><a href="tables/prevalence_database_burden_by_sample.tsv">Download database burden by sample</a></div></section>
 <section id="geography" class="section"><h2>Geographic Distribution</h2><div class="warning-box warning">Geographic patterns reflect the analyzed dataset only. They are not global prevalence estimates and can be affected by BioProject, lineage, country, and year sampling bias.</div>
 {geographic_cards_html}
 {geographic_summary_html}
-<iframe src="figures/geographic_distribution.html" title="Geographic distribution interactive report"></iframe>
-{geographic_figures_html}
-<h3>Top database burden by country</h3>
-{geographic_burden_table_html}
-<h3>Top feature distributions by country</h3>
-{geographic_feature_table_html}
+<div class="analysis-card"><h3>Interactive gene map</h3><p>Select an individual feature or database burden, then review the map and ranked country bars together. Redder bubbles indicate higher dataset prevalence; larger bubbles indicate more genomes.</p><iframe src="figures/geographic_distribution.html" title="Geographic distribution interactive report"></iframe></div>
+<div class="analysis-card"><h3>Geographic figures</h3>{geographic_figures_html}</div>
+<div class="analysis-card"><h3>Top database burden by country</h3>{geographic_burden_table_html}</div>
+<div class="analysis-card"><h3>Top feature distributions by country</h3>{geographic_feature_table_html}</div>
 <div class="downloads"><a href="figures/geographic_distribution.html">Open interactive geographic report</a><a href="figures/geographic_distribution_map.html">Open compatibility map</a><a href="geographic_tables.zip">Download geographic tables ZIP</a><a href="geographic_figures.zip">Download geographic figures ZIP</a><a href="tables/geographic_distribution_summary.tsv">Download geographic summary</a><a href="tables/geographic_database_burden.tsv">Download database burden table</a><a href="tables/geographic_feature_distribution.tsv">Download feature distribution table</a><a href="tables/geographic_warning_summary.tsv">Download warning summary</a></div></section>
 <section id="variations" class="section"><h2>Variations</h2><p>Variation summaries use identity, coverage, alignment length, and hit-count values when available. Low identity, low coverage, high variation, and few-hit flags are review cues, not automatic failures.</p>
 <div class="warning-box warning">A feature can be common but conserved, common and variable, or rare with unstable estimates. Use the complete hit-level table when reviewing low-confidence or partial hits.</div>
 {variation_cards_html}
-<iframe src="figures/variation_analysis.html" title="Feature variation interactive report"></iframe>
-{variation_figures_html}
-<h3>Variation by database</h3>
-{variation_database_table_html}
-<h3>Most variable features</h3>
-{variation_table_html}
+<div class="analysis-card"><h3>Interactive variation explorer</h3><p>Use this to inspect identity, coverage, alignment length, and hit-count variation where those metrics are available.</p><iframe src="figures/variation_analysis.html" title="Feature variation interactive report"></iframe></div>
+<div class="analysis-card"><h3>Variation figures</h3>{variation_figures_html}</div>
+<div class="analysis-card"><h3>Variation by database</h3>{variation_database_table_html}</div>
+<div class="analysis-card"><h3>Most variable features</h3>{variation_table_html}</div>
 <div class="downloads"><a href="figures/variation_analysis.html">Open interactive variation report</a><a href="variation_figures.zip">Download variation figures ZIP</a><a href="key_tables/feature_variation_database_summary.tsv">Download variation database summary</a><a href="key_tables/feature_variation_summary.tsv">Download variation summary</a><a href="key_tables/feature_variation_hits.tsv">Download hit-level variation table</a></div></section>
 <section id="temporal" class="section"><h2>Temporal Trends</h2><div class="warning-box warning">Temporal trends reflect the analyzed dataset only. They can be affected by sampling year, BioProject, country, lineage, and missing collection-year metadata.</div>
 <p>Prevalence trends use yearly percentages with genome-count denominators. Database burden is summarized as mean detected features per genome by collection year.</p>
-<iframe src="figures/temporal_trends.html" title="Temporal trends interactive report"></iframe>
-{temporal_figures_html}
-{temporal_table_html}
+<div class="analysis-card"><h3>Interactive temporal explorer</h3><p>Review yearly prevalence and burden with positive/total denominators. Treat low-support trends as descriptive only.</p><iframe src="figures/temporal_trends.html" title="Temporal trends interactive report"></iframe></div>
+<div class="analysis-card"><h3>Temporal figures</h3>{temporal_figures_html}</div>
+<div class="analysis-card"><h3>Temporal trend table</h3>{temporal_table_html}</div>
 <div class="downloads"><a href="figures/temporal_trends.html">Open interactive temporal report</a><a href="key_tables/temporal_database_burden.tsv">Download database burden by year</a><a href="key_tables/temporal_feature_prevalence.tsv">Download yearly feature prevalence</a><a href="key_tables/temporal_trend_summary.tsv">Download temporal trend summary</a><a href="key_tables/temporal_increasing_features.tsv">Download increasing features</a><a href="key_tables/temporal_decreasing_features.tsv">Download decreasing features</a></div></section>
 <section id="cooccurrence" class="section"><h2>Co-occurrence / Genomic Context</h2><div class="warning-box warning">Sample-level co-occurrence does not prove physical linkage. Same-contig and proximity evidence are stronger context signals, but do not prove transfer, expression, phenotype, or plasmid localization.</div>
 {cooccurrence_summary_html}
-<iframe src="figures/cooccurrence_context.html" title="Co-occurrence and genomic context interactive report"></iframe>
-{cooccurrence_figures_html}
-<h3>Top co-occurrence pairs</h3>
-{cooccurrence_table_html}
-<h3>Genomic context evidence</h3>
-{context_table_html}
+<div class="analysis-card"><h3>Interactive co-occurrence and context explorer</h3><p>Use the heatmap/network for feature-profile screening, then use same-contig and proximity evidence for stronger context review.</p><iframe src="figures/cooccurrence_context.html" title="Co-occurrence and genomic context interactive report"></iframe></div>
+<div class="analysis-card"><h3>Co-occurrence and context figures</h3>{cooccurrence_figures_html}</div>
+<div class="analysis-card"><h3>Top co-occurrence pairs</h3>{cooccurrence_table_html}</div>
+<div class="analysis-card"><h3>Genomic context evidence</h3>{context_table_html}</div>
 <div class="downloads"><a href="figures/cooccurrence_context.html">Open interactive co-occurrence report</a><a href="cooccurrence_tables.zip">Download all co-occurrence tables ZIP</a><a href="cooccurrence_figures.zip">Download all co-occurrence figures ZIP</a><a href="tables/cooccurrence_pair_summary.tsv">Download pair summary</a><a href="tables/cooccurrence_heatmap_matrix.tsv">Download heatmap matrix</a><a href="tables/cooccurrence_network_edges.tsv">Download network edges</a><a href="tables/cooccurrence_network_nodes.tsv">Download network nodes</a><a href="tables/genomic_context_evidence.tsv">Download genomic context evidence</a><a href="tables/contig_neighborhoods.tsv">Download contig neighborhoods</a></div></section>
 <section id="metadata-associations" class="section"><h2>Metadata Associations</h2><div class="warning-box warning">Metadata associations are exploratory enrichment-style screens. They may reflect sampling, BioProject structure, lineage composition, geography, collection year, or missing metadata and should not be interpreted as causal.</div>
 {metadata_summary_html}
-<h3>Metadata usability</h3>
-{metadata_usability_cards}
-{metadata_usability_table_html}
-<iframe src="figures/metadata_associations.html" title="Metadata associations interactive report"></iframe>
-{metadata_figures_html}
-<h3>Top feature associations</h3>
-{metadata_feature_table_html}
-<h3>Top database-burden associations</h3>
-{metadata_burden_table_html}
-<h3>Top multi-group burden tests</h3>
-{metadata_omnibus_table_html}
+<div class="analysis-card"><h3>Metadata usability</h3>{metadata_usability_cards}{metadata_usability_table_html}</div>
+<div class="analysis-card"><h3>Interactive metadata association explorer</h3><p>Use this for exploratory enrichment and burden screens. Review warnings before treating any metadata pattern as broad.</p><iframe src="figures/metadata_associations.html" title="Metadata associations interactive report"></iframe></div>
+<div class="analysis-card"><h3>Metadata association figures</h3>{metadata_figures_html}</div>
+<div class="analysis-card"><h3>Top feature associations</h3>{metadata_feature_table_html}</div>
+<div class="analysis-card"><h3>Top database-burden associations</h3>{metadata_burden_table_html}</div>
+<div class="analysis-card"><h3>Top multi-group burden tests</h3>{metadata_omnibus_table_html}</div>
 <div class="downloads"><a href="figures/metadata_associations.html">Open interactive metadata association report</a><a href="metadata_association_tables.zip">Download all metadata association tables ZIP</a><a href="metadata_association_figures.zip">Download all metadata association figures ZIP</a><a href="tables/metadata_usability_summary.tsv">Download metadata usability summary</a><a href="tables/metadata_feature_enrichment.tsv">Download feature enrichment</a><a href="tables/metadata_burden_associations.tsv">Download burden associations</a><a href="tables/metadata_category_enrichment.tsv">Download category enrichment</a><a href="tables/metadata_burden_omnibus.tsv">Download burden omnibus tests</a><a href="tables/metadata_category_omnibus.tsv">Download category omnibus tests</a><a href="tables/metadata_association_summary.tsv">Download metadata association summary</a></div></section>
 <section id="lineage" class="section"><h2>Lineage / Clonal Structure</h2><div class="warning-box warning">Lineage summaries are exploratory and do not replace phylogenetic analysis. Apparent metadata associations may reflect clonal structure, BioProject sampling, geography, or temporal sampling.</div>
 {lineage_cards_html}
 {lineage_summary_html}
 {lineage_written_html}
-<iframe src="figures/lineage_clonal_structure.html" title="Lineage and clonal structure interactive report"></iframe>
-{lineage_figures_html}
-<h3>Lineage distribution</h3>
-{lineage_distribution_table_html}
-<h3>Metadata-lineage overlap</h3>
-{lineage_overlap_table_html}
-<h3>Feature burden by lineage</h3>
-{lineage_burden_table_html}
-<h3>Feature enrichment by lineage</h3>
-{lineage_enrichment_table_html}
-<h3>Selected feature lineage report</h3>
-{lineage_presence_table_html}
+<div class="analysis-card"><h3>Interactive lineage explorer</h3><p>Use this after metadata associations to check whether patterns are broad or concentrated in a clone, ST, ANI cluster, or BioProject.</p><iframe src="figures/lineage_clonal_structure.html" title="Lineage and clonal structure interactive report"></iframe></div>
+<div class="analysis-card"><h3>Lineage figures</h3>{lineage_figures_html}</div>
+<div class="analysis-card"><h3>Lineage distribution</h3>{lineage_distribution_table_html}</div>
+<div class="analysis-card"><h3>Metadata-lineage overlap</h3>{lineage_overlap_table_html}</div>
+<div class="analysis-card"><h3>Feature burden by lineage</h3>{lineage_burden_table_html}</div>
+<div class="analysis-card"><h3>Feature enrichment by lineage</h3>{lineage_enrichment_table_html}</div>
+<div class="analysis-card"><h3>Selected feature lineage report</h3>{lineage_presence_table_html}</div>
 <div class="downloads"><a href="figures/lineage_clonal_structure.html">Open interactive lineage report</a><a href="lineage_tables.zip">Download lineage tables ZIP</a><a href="lineage_figures.zip">Download lineage figures ZIP</a><a href="tables/lineage_summary.tsv">Download sample lineage summary</a><a href="tables/lineage_distribution.tsv">Download lineage distribution</a><a href="tables/lineage_metadata_overlap.tsv">Download metadata-lineage overlap</a><a href="tables/lineage_feature_burden.tsv">Download lineage feature burden</a><a href="tables/lineage_feature_enrichment.tsv">Download lineage feature enrichment</a><a href="tables/lineage_adjusted_top_findings.tsv">Download lineage-adjusted top findings</a><a href="tables/lineage_feature_presence.tsv">Download selected feature lineage table</a><a href="tables/lineage_written_summaries.tsv">Download written summaries</a></div></section>
 <section id="diversity" class="section"><h2>Diversity / Pan-feature Summary</h2><div class="warning-box warning">Diversity summaries reflect detected annotation features, not complete biological diversity. Results depend on selected databases, genome quality, sample composition, and feature-calling tools.</div>
 {diversity_cards_html}
 {diversity_written_html}
-<iframe src="figures/diversity_analysis.html" title="Diversity and pan-feature summary interactive report"></iframe>
-{diversity_figures_html}
-<h3>Feature richness by genome</h3>
-{diversity_richness_table_html}
-<h3>Core/common/accessory/rare features</h3>
-{diversity_class_table_html}
-<h3>Metadata-stratified diversity</h3>
-{diversity_metadata_table_html}
+<div class="analysis-card"><h3>Interactive diversity explorer</h3><p>Compare feature richness, database burden, pan-feature classes, accumulation, Jaccard distance, and metadata-stratified diversity.</p><iframe src="figures/diversity_analysis.html" title="Diversity and pan-feature summary interactive report"></iframe></div>
+<div class="analysis-card"><h3>Diversity figures</h3>{diversity_figures_html}</div>
+<div class="analysis-card"><h3>Feature richness by genome</h3>{diversity_richness_table_html}</div>
+<div class="analysis-card"><h3>Core/common/accessory/rare features</h3>{diversity_class_table_html}</div>
+<div class="analysis-card"><h3>Metadata-stratified diversity</h3>{diversity_metadata_table_html}</div>
 <div class="downloads"><a href="figures/diversity_analysis.html">Open interactive diversity report</a><a href="diversity_tables.zip">Download diversity tables ZIP</a><a href="diversity_figures.zip">Download diversity figures ZIP</a><a href="tables/diversity_feature_richness_by_sample.tsv">Download feature richness by sample</a><a href="tables/diversity_database_by_sample.tsv">Download database diversity by sample</a><a href="tables/diversity_database_by_sample_wide.tsv">Download wide database diversity</a><a href="tables/diversity_core_common_accessory_rare_features.tsv">Download feature class table</a><a href="tables/diversity_core_accessory_summary_by_database.tsv">Download core/accessory summary</a><a href="tables/diversity_pan_feature_accumulation.tsv">Download pan-feature accumulation</a><a href="tables/diversity_jaccard_distance_matrix.tsv">Download Jaccard matrix</a><a href="tables/diversity_jaccard_pairs.tsv">Download Jaccard pairs</a><a href="tables/diversity_by_metadata_group.tsv">Download metadata-stratified diversity</a><a href="tables/diversity_written_summaries.tsv">Download written summaries</a></div></section>
 <section id="notable-genomes" class="section"><h2>Notable Genomes / Genome Prioritization</h2><div class="warning-box warning">This prioritization is for research review only. It is not a clinical risk score.</div>
 <p>Genomes are ranked by transparent annotation-burden, genomic-context, rare-feature, temporal-trend, and variation components with warning penalties.</p>
-{notable_figures_html}
-{notable_table_html}
+<div class="analysis-card"><h3>Notable genome visuals</h3>{notable_figures_html}</div>
+<div class="analysis-card"><h3>Prioritized genome table</h3>{notable_table_html}</div>
 <div class="downloads"><a href="tables/notable_genomes.tsv">Download notable genomes</a><a href="tables/notable_genome_score_components.tsv">Download score components</a><a href="figures/notable_genomes_ranked.data.tsv">Download plotted data</a></div></section>
 <section id="ordination" class="section"><h2>Feature-profile Ordination</h2><div class="warning-box warning">Feature-profile ordination reflects annotation similarity, not whole-genome phylogeny.</div>
 <p>PCoA coordinates are computed from Jaccard feature-profile distances when available and colored by lineage, country, source, or BioProject in companion figures.</p>
-{ordination_figures_html}
-{ordination_table_html}
+<div class="analysis-card"><h3>Ordination figures</h3>{ordination_figures_html}</div>
+<div class="analysis-card"><h3>Ordination coordinates</h3>{ordination_table_html}</div>
 <div class="downloads"><a href="tables/feature_profile_ordination.tsv">Download ordination table</a><a href="figures/feature_profile_pcoa_by_lineage.data.tsv">Download PCoA plotted data</a></div></section>
 <section id="concordance" class="section"><h2>Concordance / Database Agreement</h2><div class="warning-box warning">Tool-specific calls are retained for review. Differences may reflect database scope, thresholds, naming, or partial hits.</div>
-{concordance_figures_html}
-<h3>Concordance summary</h3>
-{concordance_summary_table_html}
-<h3>Feature-level AMR concordance</h3>
-{concordance_feature_table_html}
+<div class="analysis-card"><h3>Concordance figures</h3>{concordance_figures_html}</div>
+<div class="analysis-card"><h3>Concordance summary</h3>{concordance_summary_table_html}</div>
+<div class="analysis-card"><h3>Feature-level AMR concordance</h3>{concordance_feature_table_html}</div>
 <div class="downloads"><a href="tables/database_concordance_summary.tsv">Download concordance summary</a><a href="tables/amr_concordance_feature_level.tsv">Download feature-level concordance</a><a href="tables/amr_concordance_by_sample.tsv">Download sample-level concordance</a></div></section>
 <section id="evidence" class="section"><h2>Evidence & Confidence</h2><p>This synthesis classifies report findings by sample support, statistical evidence, genomic-context level, and warning flags. Most findings should be treated as exploratory unless support and warning labels indicate otherwise.</p>
-{evidence_figures_html}
-{confidence_table_html}
+<div class="analysis-card"><h3>Evidence summary figures</h3>{evidence_figures_html}</div>
+<div class="analysis-card"><h3>Finding confidence table</h3>{confidence_table_html}</div>
 <div class="downloads"><a href="tables/evidence_summary.tsv">Download evidence summary</a><a href="tables/finding_confidence_summary.tsv">Download finding confidence summary</a><a href="tables/evidence_by_section.tsv">Download evidence by section</a></div></section>
 <section id="warnings" class="section"><h2>Warnings & Limitations</h2><div class="warning-box warning">Warnings do not necessarily invalidate the run, but they affect interpretation. Complete TSV outputs are preserved even when report-facing figures are capped.</div>
-{warnings_figures_html}
-<h3>Top warnings</h3>
-{warnings_table_html}
-<h3>Warnings by section</h3>
-{warnings_by_section_table_html}
-<h3>Module warning summary</h3>
-{module_warning_table_html}
-<h3>Report caps</h3>
-{report_cap_table_html}
+<div class="analysis-card"><h3>Warning summary figures</h3>{warnings_figures_html}</div>
+<div class="analysis-card"><h3>Top warnings</h3>{warnings_table_html}</div>
+<div class="analysis-card"><h3>Warnings by section</h3>{warnings_by_section_table_html}</div>
+<div class="analysis-card"><h3>Module warning summary</h3>{module_warning_table_html}</div>
+<div class="analysis-card"><h3>Report caps</h3>{report_cap_table_html}</div>
 <div class="downloads"><a href="tables/warnings_and_limitations_summary.tsv">Download compact warning summary</a><a href="tables/warnings_and_limitations.tsv">Download compact warnings table</a><a href="tables/warnings_by_section.tsv">Download warnings by section</a><a href="tables/module_warning_summary.tsv">Download module warning summary</a><a href="tables/report_cap_summary.tsv">Download report cap summary</a></div></section>
 <section id="downloads" class="section"><h2>Downloads / Important Files</h2><p>Use these files to navigate the report-facing outputs and complete reproducibility artifacts.</p>
 <div class="downloads"><a href="../basic/enriched_genome_dataset.csv">Download enriched dataset CSV</a><a href="../basic/enriched_genome_dataset.tsv">Download enriched dataset TSV</a><a href="downloads/important_summary_tables.zip">Download summary tables ZIP</a><a href="downloads/important_tables.zip">Download complete tables ZIP</a><a href="downloads/important_figures.zip">Download important figures ZIP</a><a href="downloads/publication_candidate_figures.zip">Download publication candidates ZIP</a><a href="downloads/important_report_assets.zip">Download report assets ZIP</a><a href="../panr2_inputs/report/panr2_handoff_index.html">Open complete output bundle</a><a href="../panr2_inputs/manifest/reproducibility_manifest.json">Download reproducibility manifest</a><a href="../panr2_inputs/manifest/feature_contract.json">Download feature contract</a></div>
 {download_cards_html}
-<h3>Visual index</h3>
+<div class="analysis-card"><h3>Visual index</h3>
 <p>More supporting and technical figures are preserved in the visual index and complete figure downloads even when they are collapsed in the main report.</p>
-{visual_index_table_html}
-<h3>Visual quality</h3>
-{visual_quality_table_html}
+{visual_index_table_html}</div>
+<div class="analysis-card"><h3>Visual quality</h3>{visual_quality_table_html}</div>
 <div class="downloads"><a href="tables/report_visual_index.tsv">Download visual index</a><a href="tables/report_visual_quality.tsv">Download visual quality</a><a href="tables/report_highlights.tsv">Download report highlights</a><a href="tables/report_highlights_by_section.tsv">Download highlights by section</a><a href="tables/warning_priority_summary.tsv">Download warning priorities</a></div>
-{file_index_table_html}
+<div class="analysis-card"><h3>Important file index</h3>{file_index_table_html}</div>
 <div class="downloads"><a href="tables/important_file_index.tsv">Download important file index</a><a href="tables/download_manifest.tsv">Download download manifest</a><a href="../panr2_inputs/features/all_features.tsv">Download complete feature table</a><a href="../panr2_inputs/manifest/schema_validation_summary.txt">Download schema validation summary</a></div></section>
 <a class="back-to-top" href="#top">Back to top</a>
 </main>
