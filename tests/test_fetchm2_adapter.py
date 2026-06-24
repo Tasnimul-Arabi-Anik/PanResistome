@@ -987,6 +987,7 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "@media (max-width: 920px)",
                 "@media (max-width: 520px)",
                 "overflow-wrap: anywhere",
+                "max-width: calc(100vw - 1.1rem)",
             ]:
                 self.assertIn(css_token, report_html)
             self.assertIn("Featured figure gallery", report_html)

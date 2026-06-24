@@ -13740,7 +13740,7 @@ a:focus, button:focus, input:focus {{ outline: 3px solid var(--primary-soft); ou
 main {{ margin-left: 290px; padding: 1.2rem 1.4rem 2rem; min-width: 0; max-width: 100%; }}
 .report-header {{ background: linear-gradient(135deg, #0f766e 0%, #14532d 100%); color: white; border-radius: 10px; padding: 1.2rem; margin-bottom: 1rem; box-shadow: 0 14px 32px rgba(15, 23, 42, 0.14); overflow: hidden; }}
 .report-header h1 {{ margin: 0; font-size: clamp(1.7rem, 3vw, 2.4rem); overflow-wrap: anywhere; }}
-.report-header p {{ margin: 0.35rem 0 0; color: #d1fae5; }}
+.report-header p {{ margin: 0.35rem 0 0; color: #d1fae5; overflow-wrap: anywhere; }}
 .report-header .download-button {{ background: white; color: var(--primary); }}
 .section {{ background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05); scroll-margin-top: 1rem; max-width: 100%; }}
 .section-header {{ display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.7rem; }}
@@ -13768,7 +13768,7 @@ main {{ margin-left: 290px; padding: 1.2rem 1.4rem 2rem; min-width: 0; max-width
 .badge-db-plasmidfinder {{ background: #ede9fe; border-color: var(--purple); }}
 .badge-db-integronfinder {{ background: #ffedd5; border-color: var(--orange); }}
 .badge-db-mlst {{ background: #dbeafe; border-color: var(--blue); }}
-.download-bar, .downloads {{ display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0.75rem 0; }}
+.download-bar, .downloads {{ display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0.75rem 0; min-width: 0; }}
 .download-button, .downloads a {{ display: inline-block; padding: 0.5rem 0.75rem; background: var(--primary); color: white; text-decoration: none; border-radius: 7px; font-weight: 700; border: 1px solid rgba(15,118,110,0.2); overflow-wrap: anywhere; }}
 .download-button:hover, .downloads a:hover {{ filter: brightness(0.95); }}
 .warning-box, .warning {{ background: #fff7ed; border: 1px solid #fed7aa; border-left: 5px solid var(--warning); padding: 0.8rem; border-radius: 8px; margin: 0.75rem 0; }}
@@ -13799,15 +13799,21 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
   .sidebar h2 {{ margin: 0 0 0.5rem; }}
   .sidebar-links {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.25rem; }}
   .sidebar a {{ display: block; margin: 0; padding: 0.35rem 0.45rem; white-space: normal; overflow-wrap: anywhere; font-size: 0.92rem; }}
-  main {{ margin-left: 0; padding: 0.8rem; }}
+  main {{ margin-left: 0; padding: 0.8rem; width: 100%; max-width: 100vw; overflow-x: hidden; }}
   .section-header, .figure-card-header, .table-card-header {{ flex-direction: column; align-items: stretch; }}
   .diagnostic-list {{ columns: 1; }}
   iframe {{ min-height: 520px; }}
 }}
 @media (max-width: 520px) {{
-  .report-header {{ border-radius: 8px; padding: 1rem; }}
-  .report-header h1 {{ font-size: 1.55rem; }}
-  .download-button, .downloads a {{ width: 100%; text-align: center; }}
+  .sidebar {{ max-width: 100vw; }}
+  .sidebar-links {{ grid-template-columns: 1fr; }}
+  main {{ padding: 0.55rem; }}
+  .report-header, .section, .analysis-card {{ max-width: calc(100vw - 1.1rem); }}
+  .report-header {{ border-radius: 8px; padding: 0.9rem; }}
+  .report-header h1 {{ font-size: 1.35rem; line-height: 1.15; max-width: 100%; white-space: normal; word-break: break-word; }}
+  .report-header p {{ font-size: 0.92rem; line-height: 1.35; word-break: break-word; }}
+  .download-bar, .downloads {{ display: grid; grid-template-columns: 1fr; }}
+  .download-button, .downloads a {{ width: 100%; max-width: 100%; text-align: center; white-space: normal; word-break: break-word; }}
   .figure-row, .finding-grid, .download-card-grid, .cards {{ grid-template-columns: 1fr; }}
   .summary-card strong, .card strong {{ font-size: 1.25rem; }}
   .back-to-top {{ right: 0.45rem; bottom: 0.45rem; padding: 0.42rem 0.52rem; font-size: 0.78rem; }}
