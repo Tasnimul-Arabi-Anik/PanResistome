@@ -13805,15 +13805,17 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
   iframe {{ min-height: 520px; }}
 }}
 @media (max-width: 520px) {{
+  html, body {{ width: 100%; max-width: 100vw; overflow-x: hidden; }}
   .sidebar {{ max-width: 100vw; }}
   .sidebar-links {{ grid-template-columns: 1fr; }}
-  main {{ padding: 0.55rem; }}
-  .report-header, .section, .analysis-card {{ max-width: calc(100vw - 1.1rem); }}
+  main {{ padding: 0.55rem; width: 100vw; max-width: 100vw; overflow-x: hidden; }}
+  .report-header, .section, .analysis-card {{ width: calc(100vw - 1.1rem); max-width: calc(100vw - 1.1rem); min-width: 0; margin-left: 0; margin-right: 0; }}
+  .report-header * {{ max-width: 100%; min-width: 0; }}
   .report-header {{ border-radius: 8px; padding: 0.9rem; }}
   .report-header h1 {{ font-size: 1.35rem; line-height: 1.15; max-width: 100%; white-space: normal; word-break: break-word; }}
   .report-header p {{ font-size: 0.92rem; line-height: 1.35; word-break: break-word; }}
-  .download-bar, .downloads {{ display: grid; grid-template-columns: 1fr; }}
-  .download-button, .downloads a {{ width: 100%; max-width: 100%; text-align: center; white-space: normal; word-break: break-word; }}
+  .download-bar, .downloads {{ display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; }}
+  .download-button, .downloads a {{ display: block; width: 100%; max-width: 100%; min-width: 0; text-align: center; white-space: normal; word-break: break-word; }}
   .figure-row, .finding-grid, .download-card-grid, .cards {{ grid-template-columns: 1fr; }}
   .summary-card strong, .card strong {{ font-size: 1.25rem; }}
   .back-to-top {{ right: 0.45rem; bottom: 0.45rem; padding: 0.42rem 0.52rem; font-size: 0.78rem; }}
