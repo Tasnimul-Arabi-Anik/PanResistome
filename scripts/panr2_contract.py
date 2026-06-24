@@ -13808,8 +13808,8 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
   html, body {{ width: 100%; max-width: 100vw; overflow-x: hidden; }}
   .sidebar {{ max-width: 100vw; }}
   .sidebar-links {{ grid-template-columns: 1fr; }}
-  main {{ padding: 0.55rem; width: 100vw; max-width: 100vw; overflow-x: hidden; }}
-  .report-header, .section, .analysis-card {{ width: calc(100vw - 1.1rem); max-width: calc(100vw - 1.1rem); min-width: 0; margin-left: 0; margin-right: 0; }}
+  main {{ padding: 0.55rem; width: 100%; max-width: 100%; overflow-x: hidden; }}
+  .report-header, .section, .analysis-card {{ width: 100%; max-width: 100%; min-width: 0; margin-left: 0; margin-right: 0; }}
   .report-header * {{ max-width: 100%; min-width: 0; }}
   .report-header {{ border-radius: 8px; padding: 0.9rem; }}
   .report-header h1 {{ font-size: 1.35rem; line-height: 1.15; max-width: 100%; white-space: normal; word-break: break-word; }}
