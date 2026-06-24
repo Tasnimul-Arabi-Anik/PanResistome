@@ -3491,26 +3491,98 @@ def _humanize_label(value: str) -> str:
     return " ".join(replacements.get(word.lower(), word[:1].upper() + word[1:] if word.islower() else word) for word in text.split())
 
 
+REPORT_EXPLICIT_FIGURE_TITLES = {
+    "amr_concordance_summary": "AMR tool concordance summary",
+    "amr_concordance_by_feature": "AMR concordance by feature calls",
+    "diversity_feature_richness_by_sample": "Feature richness by genome",
+    "diversity_database_by_sample_heatmap": "Database diversity by sample",
+    "diversity_core_common_accessory_rare_by_database": "Core/common/accessory/rare features by database",
+    "diversity_pan_feature_accumulation": "Pan-feature accumulation curve",
+    "diversity_jaccard_heatmap": "Jaccard feature-profile distance heatmap",
+    "evidence_by_section": "Evidence confidence by report section",
+    "evidence_confidence_summary": "Evidence confidence overview",
+    "geographic_distribution_map": "Geographic distribution map",
+    "qc_funnel": "QC sample-flow funnel",
+    "qc_status_overview": "QC status overview",
+    "warnings_summary": "Warnings by severity",
+    "warnings_by_section": "Warnings by section",
+    "notable_genomes_ranked": "Ranked notable genomes",
+    "notable_genome_score_heatmap": "Notable genome score components",
+    "temporal_database_burden_top20": "Database burden over time",
+    "temporal_feature_heatmap_top40": "Temporal feature prevalence heatmap",
+    "temporal_selected_feature_prevalence": "Selected feature prevalence over time",
+    "temporal_slope_top40": "Top temporal prevalence changes",
+}
+
+
+def _feature_label_from_stem(value: str) -> str:
+    return str(value or "").replace("_", " ").strip()
+
+
 def _human_figure_title(stem: str) -> str:
     text = str(stem or "")
-    explicit = {
-        "amr_concordance_summary": "AMR concordance summary",
-        "amr_concordance_by_feature": "AMR concordance by feature",
-        "diversity_feature_richness_by_sample": "Feature richness by genome",
-        "diversity_database_by_sample_heatmap": "Database diversity by sample",
-        "diversity_core_common_accessory_rare_by_database": "Core/common/accessory/rare features by database",
-        "diversity_pan_feature_accumulation": "Pan-feature accumulation curve",
-        "diversity_jaccard_heatmap": "Jaccard feature-profile distance heatmap",
-        "evidence_by_section": "Evidence by section",
-        "evidence_confidence_summary": "Evidence confidence summary",
-        "warnings_summary": "Warnings by severity",
-        "warnings_by_section": "Warnings by section",
-        "notable_genomes_ranked": "Ranked notable genomes",
-        "notable_genome_score_heatmap": "Notable genome score components",
-    }
-    if text in explicit:
-        return explicit[text]
+    if text in REPORT_EXPLICIT_FIGURE_TITLES:
+        return REPORT_EXPLICIT_FIGURE_TITLES[text]
     parts = text.split("_")
+    match = re.fullmatch(r"cooccurrence_(heatmap|network)_(.+)_vs_(.+)", text)
+    if match:
+        visual = match.group(1)
+        left = _display_database_name(match.group(2))
+        right = _display_database_name(match.group(3))
+        return f"{left} vs {right} co-occurrence {visual}"
+    match = re.fullmatch(r"variation_(identity|coverage)_(.+)_top\d+", text)
+    if match:
+        metric = match.group(1)
+        db = _display_database_name(match.group(2))
+        return f"{db} {metric} variation"
+    match = re.fullmatch(r"variation_identity_coverage_(.+)_top\d+", text)
+    if match:
+        return f"{_display_database_name(match.group(1))} identity vs coverage"
+    match = re.fullmatch(r"variation_top_variable_(.+)_top\d+", text)
+    if match:
+        return f"{_display_database_name(match.group(1))} most variable features"
+    match = re.fullmatch(r"temporal_top_(increasing|decreasing)_features", text)
+    if match:
+        return f"Top {match.group(1)} temporal features"
+    if text.startswith("metadata_burden_boxplot_"):
+        _, _, _, db, metadata = text.split("_", 4)
+        return f"{_display_database_name(db)} burden by {_humanize_label(metadata)}"
+    if text.startswith("metadata_category_enrichment_"):
+        remainder = text.replace("metadata_category_enrichment_", "")
+        db, metadata = remainder.split("_", 1)
+        return f"{_display_database_name(db)} category enrichment by {_humanize_label(metadata)}"
+    if text.startswith("metadata_enrichment_heatmap_"):
+        remainder = text.replace("metadata_enrichment_heatmap_", "")
+        db, metadata = remainder.split("_", 1)
+        return f"{_display_database_name(db)} metadata enrichment heatmap by {_humanize_label(metadata)}"
+    if text.startswith("metadata_volcano_"):
+        remainder = text.replace("metadata_volcano_", "")
+        pieces = remainder.split("_")
+        db = pieces[0]
+        metadata = "_".join(pieces[1:-1]) if len(pieces) > 2 else "_".join(pieces[1:])
+        return f"{_display_database_name(db)} metadata association volcano for {_humanize_label(metadata)}"
+    match = re.fullmatch(r"lineage_database_burden_(.+)_(.+)", text)
+    if match:
+        return f"{_display_database_name(match.group(1))} burden by {_humanize_label(match.group(2))}"
+    match = re.fullmatch(r"lineage_feature_(heatmap|enrichment)_(.+)_(.+)", text)
+    if match:
+        return f"{_display_database_name(match.group(2))} lineage feature {match.group(1)} by {_humanize_label(match.group(3))}"
+    match = re.fullmatch(r"lineage_feature_presence_(.+)_(.+)_(.+)", text)
+    if match:
+        return f"{_display_database_name(match.group(1))} {_feature_label_from_stem(match.group(2))} prevalence by {_humanize_label(match.group(3))}"
+    match = re.fullmatch(r"lineage_metadata_overlap_(.+)_(.+)", text)
+    if match:
+        return f"{_humanize_label(match.group(2))} overlap by {_humanize_label(match.group(1))}"
+    if text == "lineage_confounding_top_findings":
+        return "Lineage confounding among top findings"
+    if text.startswith("top_context_features_"):
+        feature = text.replace("top_context_features_", "")
+        return f"Top genomic-context features for {_feature_label_from_stem(feature)}"
+    if text.startswith("genomic_context_evidence_ladder_"):
+        feature = text.replace("genomic_context_evidence_ladder_", "")
+        return f"Genomic-context evidence ladder for {_feature_label_from_stem(feature)}"
+    if text.startswith("contig_neighborhood_"):
+        return f"Contig neighborhood for {_feature_label_from_stem(text.replace('contig_neighborhood_', ''))}"
     if text.startswith("geographic_map_") and len(parts) >= 3:
         db = _display_database_name(parts[2])
         feature = "_".join(parts[3:])
@@ -3535,6 +3607,27 @@ def _human_figure_title(stem: str) -> str:
     if text.startswith("lineage_distribution_"):
         return f"Lineage distribution by {_humanize_label(text.replace('lineage_distribution_', ''))}"
     return _humanize_label(text)
+
+
+def _figure_title_quality_label(stem: str, title: str) -> str:
+    text = str(stem or "")
+    known_prefixes = (
+        "cooccurrence_heatmap_",
+        "cooccurrence_network_",
+        "contig_neighborhood_",
+        "geographic_",
+        "genomic_context_evidence_ladder_",
+        "lineage_",
+        "metadata_",
+        "prevalence_",
+        "qc_",
+        "temporal_",
+        "top_context_features_",
+        "variation_",
+    )
+    if text in REPORT_EXPLICIT_FIGURE_TITLES or text.startswith(known_prefixes):
+        return "human_readable_title"
+    return "human_readable_title" if title and title.lower() != text.replace("_", " ").lower() else "generic_title"
 
 
 def _figure_caption_for(section: str, stem: str) -> str:
@@ -12349,7 +12442,7 @@ def write_important_final_interpretation_outputs(
             if interpretation in {"descriptive", "confidence", "research-review", "review"} and warning_status == "none"
             else "exploratory_interpretation"
         )
-        title_quality_label = "human_readable_title" if human_title and human_title.lower() != stem.replace("_", " ").lower() else "generic_title"
+        title_quality_label = _figure_title_quality_label(stem, human_title)
         caption_quality_label = (
             "generic_caption"
             if caption.startswith("Figure preview") or caption.startswith("Supporting report figure")

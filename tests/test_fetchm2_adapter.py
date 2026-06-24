@@ -875,6 +875,12 @@ class FetchM2AdapterTests(unittest.TestCase):
             pcoa_rows = visual_index[visual_index["figure_stem"] == "feature_profile_pcoa_by_bioproject"]
             if not pcoa_rows.empty:
                 self.assertEqual(pcoa_rows.iloc[0]["title"], "Feature-profile PCoA by BioProject")
+            concordance_rows = visual_index[visual_index["figure_stem"] == "amr_concordance_summary"]
+            if not concordance_rows.empty:
+                self.assertEqual(concordance_rows.iloc[0]["title"], "AMR tool concordance summary")
+            geographic_rows = visual_index[visual_index["figure_stem"] == "geographic_distribution_map"]
+            if not geographic_rows.empty:
+                self.assertEqual(geographic_rows.iloc[0]["title"], "Geographic distribution map")
             visual_quality = pd.read_csv(sample_dir / "important" / "tables" / "report_visual_quality.tsv", sep="\t")
             self.assertTrue({
                 "figure_stem",
