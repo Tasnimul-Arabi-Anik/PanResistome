@@ -3783,6 +3783,82 @@ def _figure_caption_for(section: str, stem: str) -> str:
     return "Supporting report figure; review the linked source table, warning status, and companion plotted-data TSV before interpretation."
 
 
+def _figure_guidance_for(section: str, stem: str) -> str:
+    section = section or ""
+    stem = stem or ""
+    if section == "Geographic Distribution" or stem.startswith("geographic_"):
+        if stem.startswith("geographic_map_") or stem == "geographic_distribution_map":
+            return "How to read: compare color for prevalence and bubble size for denominator. Do not treat red countries as global hotspots without checking sampling. Next table: geographic_feature_distribution.tsv or geographic_database_burden.tsv."
+        return "How to read: compare percentages only with their positive/total denominators. Do not compare tiny groups as if they were equally supported. Next table: geographic_database_burden.tsv."
+    if section == "Co-occurrence / Genomic Context" or stem.startswith(("cooccurrence_", "top_context_features_", "genomic_context_evidence_ladder_", "contig_neighborhood_")):
+        if stem.startswith("cooccurrence_heatmap_"):
+            return "How to read: red/blue cells are screening signals for feature-pair association. Do not infer physical linkage from this plot alone. Next table: cooccurrence_pair_summary.tsv, then genomic_context_evidence.tsv."
+        if stem.startswith("cooccurrence_network_"):
+            return "How to read: scan hubs and cross-database edges as review targets. Do not treat network edges as transfer or expression evidence. Next tables: cooccurrence_network_edges.tsv and cooccurrence_network_nodes.tsv."
+        if stem.startswith("genomic_context_evidence_ladder_"):
+            return "How to read: overlap, adjacent, nearby, and same-contig evidence are stronger than same-genome evidence. Next table: genomic_context_evidence.tsv."
+        if stem.startswith("top_context_features_"):
+            return "How to read: prioritize features with same-contig or nearby support, then inspect the underlying contig rows. Next table: genomic_context_evidence.tsv."
+        if stem.startswith("contig_neighborhood_"):
+            return "How to read: inspect local order and distance around the selected feature while considering assembly fragmentation. Next table: contig_neighborhoods.tsv."
+        return "How to read: separate sample-level co-occurrence from physical context evidence. Next table: genomic_context_evidence.tsv."
+    if section == "Metadata Associations" or stem.startswith("metadata_"):
+        if stem.startswith("metadata_volcano_"):
+            return "How to read: points far from zero and high on the plot are stronger association candidates. Do not call them independent metadata effects until lineage and BioProject warnings are checked. Next table: metadata_feature_enrichment.tsv."
+        if stem.startswith("metadata_enrichment_heatmap_"):
+            return "How to read: look for coherent blocks across groups and features rather than isolated cells. Do not overread sparse groups. Next table: metadata_feature_enrichment.tsv."
+        if stem.startswith("metadata_burden_boxplot_"):
+            return "How to read: compare medians and spread, not just outliers. Do not treat burden shifts as causal. Next table: metadata_burden_associations.tsv."
+        if stem.startswith("metadata_category_enrichment_"):
+            return "How to read: use category bars to find broad classes worth reviewing at feature level. Next table: metadata_category_enrichment.tsv."
+        return "How to read: treat metadata patterns as exploratory until support, metadata usability, lineage, and BioProject warnings are checked."
+    if section == "Lineage / Clonal Structure" or stem.startswith("lineage_"):
+        if stem.startswith("lineage_distribution_"):
+            return "How to read: first check whether one lineage dominates the run. Dominance can explain downstream metadata or feature patterns. Next table: lineage_distribution.tsv."
+        if stem.startswith("lineage_metadata_overlap_"):
+            return "How to read: metadata groups dominated by one lineage are confounded. Next table: lineage_metadata_overlap.tsv."
+        if stem.startswith("lineage_feature_heatmap_"):
+            return "How to read: broad horizontal signal suggests cross-lineage prevalence; narrow columns suggest clone concentration. Next table: lineage_feature_presence.tsv."
+        if stem == "lineage_confounding_top_findings":
+            return "How to read: high-severity bars indicate top findings whose supporting genomes are lineage dominated. Next table: lineage_adjusted_top_findings.tsv."
+        if stem.startswith("lineage_database_burden_"):
+            return "How to read: compare burden across lineages only after checking lineage size. Next table: lineage_feature_burden.tsv."
+        if stem.startswith("lineage_feature_enrichment_"):
+            return "How to read: enriched features may be lineage-specific or just small-group artifacts. Next table: lineage_feature_enrichment.tsv."
+        if stem.startswith("lineage_feature_presence_"):
+            return "How to read: denominator labels show how many genomes in each lineage carry the selected feature. Next table: lineage_feature_presence.tsv."
+        return "How to read: use lineage figures to decide whether associations are broad or clone driven."
+    if section == "Diversity / Pan-feature Summary" or stem.startswith(("diversity_", "feature_profile_pcoa_")):
+        if stem.startswith("feature_profile_pcoa_"):
+            return "How to read: nearby points have similar detected feature profiles, not necessarily close phylogeny. Next table: feature_profile_ordination.tsv."
+        if stem == "diversity_database_by_sample_heatmap":
+            return "How to read: scan rows for genomes with high burden across several databases. Next table: diversity_database_by_sample_wide.tsv."
+        if stem == "diversity_pan_feature_accumulation":
+            return "How to read: a still-rising curve suggests more genomes may reveal more features. Next table: diversity_pan_feature_accumulation.tsv."
+        if stem == "diversity_jaccard_heatmap":
+            return "How to read: clustered blocks show similar annotation profiles, not whole-genome phylogeny. Next table: diversity_jaccard_pairs.tsv."
+        if stem == "diversity_core_common_accessory_rare_by_database":
+            return "How to read: compare the fraction of core/common versus accessory/rare features by database. Next table: diversity_core_accessory_summary_by_database.tsv."
+        return "How to read: use diversity plots as descriptive structure summaries, then open the matching diversity TSV for denominators."
+    if section == "Temporal Trends" or stem.startswith("temporal_"):
+        return "How to read: use yearly positive/total denominators and support labels before interpreting direction. Do not treat sparse-year changes as trends. Next table: temporal_trend_summary.tsv."
+    if section == "Variations" or stem.startswith("variation_"):
+        return "How to read: low identity or low coverage flags annotations for review, not automatic functional change. Next table: feature_variation_summary.tsv."
+    if section == "Prevalence" or stem.startswith("prevalence_"):
+        return "How to read: prevalence uses unique positive genomes, while feature rows count repeated hits. Next table: feature_prevalence.tsv."
+    if section == "Notable Genomes" or stem.startswith("notable_"):
+        return "How to read: high scores prioritize genomes for research review only, not clinical risk. Next table: notable_genomes.tsv."
+    if section == "Evidence & Confidence" or stem.startswith("evidence_"):
+        return "How to read: use confidence labels to separate stronger findings from exploratory or warning-heavy rows. Next table: finding_confidence_summary.tsv."
+    if section == "Concordance / Database Agreement" or stem.startswith("amr_concordance"):
+        return "How to read: overlapping calls are easier to trust, but tool-specific calls are retained for review. Next table: amr_concordance_feature_level.tsv."
+    if section == "Warnings & Limitations" or stem.startswith("warnings_"):
+        return "How to read: prioritize high and critical warnings before interpreting the affected section. Next table: warnings_and_limitations.tsv."
+    if section == "QC Summary" or stem.startswith("qc_"):
+        return "How to read: check retained genomes and failed/skipped modules before interpreting downstream feature summaries. Next table: qc_by_genome.tsv."
+    return "How to read: use the figure as a preview, then verify denominators, warnings, and source rows in the linked plotted-data TSV."
+
+
 def _figure_render_quality(important_dir: Path, stem: str) -> tuple[str, str, str]:
     """Return render, axis, and recommended-action labels for a report figure."""
     data_path = important_dir / "figures" / f"{stem}.data.tsv"
@@ -4045,6 +4121,12 @@ def _report_figure_card_html(
         display_badges.append(("Missing axis labels", "warning"))
     badge_html = " ".join(_report_badge_html(label, kind) for label, kind in display_badges)
     links_html = _report_download_links_html(_figure_asset_links(important_dir, stem))
+    guidance = _figure_guidance_for("", stem)
+    guidance_html = (
+        "<details class='figure-guidance'><summary>How to read this figure</summary>"
+        f"<p>{html.escape(guidance)}</p></details>"
+        if guidance else ""
+    )
     render_note = (
         f"<p class='figure-note warning-box'>{html.escape(recommended_action)}</p>"
         if render_quality_label != "rendered" or axis_label_status == "missing_axis_labels"
@@ -4057,6 +4139,7 @@ def _report_figure_card_html(
         + (f"<div class='badge-row'>{badge_html}</div>" if badge_html else "")
         + "</div>"
         f"<p class='figure-caption'>{html.escape(caption)}</p>"
+        f"{guidance_html}"
         f"{render_note}"
         "<div class='figure-box'>"
         f"<img src='figures/{html.escape(preview_path.name)}' alt='{html.escape(title)}'>"
@@ -13807,7 +13890,7 @@ def write_important_results_report(
                     important_dir,
                     stem,
                     title,
-                    "Sample-level co-occurrence is separate from same-contig and proximity context evidence.",
+                    _figure_caption_for("Co-occurrence / Genomic Context", stem),
                     [("Context", "exploratory")],
                 ),
             )
@@ -14346,6 +14429,9 @@ main {{ margin-left: 290px; padding: 1.2rem 1.4rem 2rem; min-width: 0; max-width
 .figure-card-header {{ display: flex; justify-content: space-between; gap: 0.7rem; align-items: flex-start; }}
 .figure-card h3 {{ margin: 0 0 0.35rem; font-size: 1rem; }}
 .figure-caption {{ color: var(--muted); font-size: 0.9rem; min-height: 2.2rem; }}
+.figure-guidance {{ border: 1px solid var(--border); border-radius: 8px; background: #f8fafc; margin: 0.55rem 0 0.7rem; padding: 0.45rem 0.55rem; }}
+.figure-guidance summary {{ cursor: pointer; font-weight: 700; color: var(--text); }}
+.figure-guidance p {{ margin: 0.45rem 0 0; color: var(--muted); font-size: 0.88rem; }}
 .figure-box {{ background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; max-height: 720px; overflow: auto; }}
 .figure-box img {{ width: 100%; max-width: 100%; height: auto; display: block; background: white; }}
 .heatmap-scroll {{ max-height: 720px; overflow: auto; }}

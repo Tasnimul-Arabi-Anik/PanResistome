@@ -1039,6 +1039,7 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "section-header",
                 "summary-card",
                 "figure-card",
+                "figure-guidance",
                 "table-card",
                 "table-actions",
                 "table-download-link",
@@ -1059,9 +1060,16 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "overflow-wrap: anywhere",
                 "main > .report-header, main > .section",
                 "width: 92vw !important",
+                ".figure-guidance",
             ]:
                 self.assertIn(css_token, report_html)
             self.assertIn("Featured figure gallery", report_html)
+            self.assertIn("How to read this figure", report_html)
+            self.assertIn("Next table:", report_html)
+            self.assertIn("metadata_feature_enrichment.tsv", report_html)
+            self.assertIn("lineage_adjusted_top_findings.tsv", report_html)
+            self.assertIn("genomic_context_evidence.tsv", report_html)
+            self.assertIn("feature_profile_ordination.tsv", report_html)
             self.assertIn("Featured Results reading guide", report_html)
             self.assertIn("Executive finding cards", report_html)
             self.assertIn("Trust, caution, and review queues", report_html)
