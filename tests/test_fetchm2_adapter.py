@@ -197,6 +197,8 @@ class FetchM2AdapterTests(unittest.TestCase):
         self.assertEqual(_human_figure_title("geographic_map_vfdb_adeH"), "VFDB adeH geographic distribution")
         self.assertEqual(_human_figure_title("diversity_richness_by_metadata_isolation_source"), "Feature richness by Isolation Source")
         self.assertEqual(_human_figure_title("feature_profile_pcoa_by_bioproject"), "Feature-profile PCoA by BioProject")
+        self.assertEqual(_human_figure_title("geographic_map_amr_ant_3_-IIa"), "AMR ant(3)-IIa geographic distribution")
+        self.assertEqual(_human_figure_title("geographic_country_bar_amr_ant_3_-IIa"), "AMR ant(3)-IIa prevalence by country")
         self.assertEqual(_human_figure_title("variation_top_variable_amr_top20"), "AMR most variable features")
         self.assertEqual(_human_figure_title("variation_identity_coverage_vfdb_top20"), "VFDB identity vs coverage")
 

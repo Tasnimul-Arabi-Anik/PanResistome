@@ -3547,7 +3547,17 @@ REPORT_EXPLICIT_FIGURE_TITLES = {
 
 
 def _feature_label_from_stem(value: str) -> str:
-    return str(value or "").replace("_", " ").strip()
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    for prefix in ["amrfinderplus_", "plasmidfinder_", "integronfinder_", "mobileelementfinder_", "vfdb_", "amr_"]:
+        if text.lower().startswith(prefix):
+            text = text[len(prefix):]
+            break
+    text = text.replace("_prime", "'")
+    text = re.sub(r"^([A-Za-z]{2,6})_(\d+)_-(.+)$", r"\1(\2)-\3", text)
+    text = re.sub(r"^([A-Za-z]{2,6})_(\d+)_([A-Za-z].+)$", r"\1(\2)-\3", text)
+    return text.replace("_", " ").strip()
 
 
 def _human_figure_title(stem: str) -> str:
@@ -3616,7 +3626,7 @@ def _human_figure_title(stem: str) -> str:
         return f"Contig neighborhood for {_feature_label_from_stem(text.replace('contig_neighborhood_', ''))}"
     if text.startswith("geographic_map_") and len(parts) >= 3:
         db = _display_database_name(parts[2])
-        feature = "_".join(parts[3:])
+        feature = _feature_label_from_stem("_".join(parts[3:]))
         return f"{db} {feature} geographic distribution" if feature else f"{db} geographic distribution"
     match = re.fullmatch(r"geographic_(country|continent|subcontinent|region)_bar_(.+)", text)
     if match:
@@ -3627,7 +3637,7 @@ def _human_figure_title(stem: str) -> str:
             return f"{db} burden by {geo_level}"
         pieces = remainder.split("_", 1)
         db = _display_database_name(pieces[0])
-        feature = pieces[1] if len(pieces) > 1 else ""
+        feature = _feature_label_from_stem(pieces[1]) if len(pieces) > 1 else ""
         return f"{db} {feature} prevalence by {geo_level}" if feature else f"{db} prevalence by {geo_level}"
     if text.startswith("diversity_richness_by_metadata_"):
         return f"Feature richness by {_humanize_label(text.replace('diversity_richness_by_metadata_', ''))}"
