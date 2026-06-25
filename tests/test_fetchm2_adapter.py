@@ -21,6 +21,7 @@ from panr2_contract import (
     _human_figure_title,
     _is_same_feature_pair,
     _kruskal_wallis,
+    _svg_geographic_map,
     _write_cooccurrence_network_svg,
     _write_variation_scatter_svg,
     write_important_diversity_outputs,
@@ -220,6 +221,26 @@ class FetchM2AdapterTests(unittest.TestCase):
             with self.subTest(stem=stem):
                 self.assertIn(expected_phrase, _figure_caption_for("", stem))
         self.assertTrue(_is_same_feature_pair("aph(3'')-Ib", "aph(3'')-Ib"))
+
+    def test_geographic_map_preview_has_basemap_and_gene_map_guidance(self):
+        svg = _svg_geographic_map(
+            [
+                {
+                    "country": "Bangladesh",
+                    "total_genomes": "10",
+                    "positive_genomes": "7",
+                    "prevalence_percent": "70.0",
+                    "prevalence_display": "70.0% (7/10)",
+                    "warning_flags": "",
+                }
+            ],
+            "Geographic gene map",
+        )
+
+        self.assertIn("<polygon", svg)
+        self.assertIn("Geographic gene map", svg)
+        self.assertIn("higher selected-gene prevalence", svg)
+        self.assertIn("Positive / total genomes: 7/10", svg)
 
     def test_empty_report_figures_render_explicit_unavailable_state(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -933,7 +954,7 @@ class FetchM2AdapterTests(unittest.TestCase):
                 self.assertEqual(concordance_rows.iloc[0]["title"], "AMR tool concordance summary")
             geographic_rows = visual_index[visual_index["figure_stem"] == "geographic_distribution_map"]
             if not geographic_rows.empty:
-                self.assertEqual(geographic_rows.iloc[0]["title"], "Geographic distribution map")
+                self.assertEqual(geographic_rows.iloc[0]["title"], "Geographic gene map")
             visual_quality = pd.read_csv(sample_dir / "important" / "tables" / "report_visual_quality.tsv", sep="\t")
             self.assertTrue({
                 "figure_stem",
@@ -1005,7 +1026,7 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("interactive-explorer-card", report_html)
             self.assertIn("explorer-frame", report_html)
             self.assertIn("Load embedded explorer", report_html)
-            self.assertIn("Embedded explorer", report_html)
+            self.assertIn("Open full interactive gene map", report_html)
             self.assertGreaterEqual(report_html.count("loading='lazy'"), 8)
             if by_section["section"].nunique() >= 5:
                 balanced_preview = report_html.split("<h3>Balanced highlights by section</h3>", 1)[1].split('<div class="downloads"', 1)[0]

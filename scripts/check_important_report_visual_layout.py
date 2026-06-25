@@ -186,6 +186,28 @@ SCROLL_TO_ANCHOR_JS = """
 """
 
 
+def _scroll_to_section_script(section_id: str) -> str:
+    return f"""
+(() => {{
+  const sectionId = {json.dumps(section_id)};
+  const scrollToSection = () => {{
+    const target = document.getElementById(sectionId);
+    if (!target) return;
+    target.scrollIntoView({{block: 'start', inline: 'nearest'}});
+    window.scrollBy(0, -12);
+  }};
+  if (document.readyState === 'complete') {{
+    scrollToSection();
+  }} else {{
+    window.addEventListener('load', scrollToSection);
+  }}
+  setTimeout(scrollToSection, 250);
+  setTimeout(scrollToSection, 1000);
+  setTimeout(scrollToSection, 2200);
+}})();
+"""
+
+
 def _attrs_to_dict(attrs: list[tuple[str, str | None]]) -> dict[str, str]:
     return {key: value or "" for key, value in attrs}
 
@@ -608,9 +630,14 @@ def _run_chrome_browser_checks(
 
         if screenshots_dir and section_screenshots:
             for section_id in SECTION_SCREENSHOT_IDS:
+                section_html = tmp / f"section_{section_id}.html"
+                section_html.write_text(
+                    _html_with_base_and_script(html_text, base_uri, _scroll_to_section_script(section_id)),
+                    encoding="utf-8",
+                )
                 command = _chrome_screenshot_command(
                     executable,
-                    screenshot_html.resolve().as_uri() + f"#{section_id}",
+                    section_html.resolve().as_uri(),
                     screenshots_dir / f"section_{section_id}.png",
                     1440,
                     1000,

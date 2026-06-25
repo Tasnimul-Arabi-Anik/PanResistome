@@ -3504,6 +3504,7 @@ def _interactive_explorer_card_html(
     href: str,
     iframe_title: str,
     expanded: bool = False,
+    button_label: str = "Open interactive report",
 ) -> str:
     details_attr = " open" if expanded else ""
     summary = "Embedded explorer" if expanded else "Load embedded explorer"
@@ -3512,7 +3513,7 @@ def _interactive_explorer_card_html(
         f"<h3>{html.escape(title)}</h3>"
         f"<p>{html.escape(purpose)}</p>"
         "<div class='downloads'>"
-        f"<a href='{html.escape(href)}'>Open interactive report</a>"
+        f"<a href='{html.escape(href)}'>{html.escape(button_label)}</a>"
         "</div>"
         f"<details class='details-block explorer-frame'{details_attr}>"
         f"<summary>{html.escape(summary)}</summary>"
@@ -3590,7 +3591,7 @@ REPORT_EXPLICIT_FIGURE_TITLES = {
     "diversity_jaccard_heatmap": "Jaccard feature-profile distance heatmap",
     "evidence_by_section": "Evidence confidence by report section",
     "evidence_confidence_summary": "Evidence confidence overview",
-    "geographic_distribution_map": "Geographic distribution map",
+    "geographic_distribution_map": "Geographic gene map",
     "qc_funnel": "QC sample-flow funnel",
     "qc_status_overview": "QC status overview",
     "warnings_summary": "Warnings by severity",
@@ -3746,7 +3747,7 @@ def _figure_caption_for(section: str, stem: str) -> str:
         return "QC figures summarize genome retention and module status before downstream feature interpretation."
     if section == "Geographic Distribution" or stem.startswith("geographic_"):
         if stem.startswith("geographic_map_") or stem == "geographic_distribution_map":
-            return "Map color shows dataset prevalence or burden and marker size shows genome count; small or missing geography groups need caution."
+            return "Country bubbles map selected-gene or database prevalence; redder bubbles show higher prevalence, marker size shows genome count, and small or missing geography groups need caution."
         if "_country_bar_" in stem or stem.startswith("geographic_country_bar_"):
             return "Country bars rank dataset-specific prevalence or burden with plotted denominators; they are not regional prevalence estimates."
         if "_continent_bar_" in stem or stem.startswith("geographic_continent_bar_"):
@@ -4371,6 +4372,16 @@ COUNTRY_REGIONS = {
     "vietnam": ("Asia", "Southeast Asia"),
 }
 
+WORLD_LAND_POLYGONS = [
+    [(-168, 72), (-130, 58), (-105, 50), (-92, 25), (-106, 8), (-83, 7), (-63, 45), (-90, 70)],
+    [(-82, 12), (-60, 8), (-43, -8), (-48, -28), (-63, -55), (-74, -38)],
+    [(-18, 35), (8, 70), (60, 63), (105, 50), (150, 55), (150, 8), (100, 5), (80, 24), (42, 12), (12, 30)],
+    [(-18, 33), (15, 32), (35, 5), (28, -34), (5, -35), (-12, -5)],
+    [(68, 8), (92, 22), (112, 10), (105, -8), (78, -6)],
+    [(112, -10), (154, -12), (151, -39), (116, -34)],
+    [(-11, 58), (2, 55), (0, 50), (-8, 50)],
+]
+
 
 BASIC_DATASET_FIELDS = [
     "assembly_accession",
@@ -4671,6 +4682,23 @@ def _country_xy(country: str, width: int, height: int) -> tuple[float, float] | 
     return x, y
 
 
+def _project_lon_lat(lon: float, lat: float, width: int | float, height: int | float) -> tuple[float, float]:
+    return ((lon + 180.0) / 360.0 * width, (90.0 - lat) / 180.0 * height)
+
+
+def _world_land_polygons_svg(width: int | float, height: int | float) -> str:
+    polygons = []
+    for polygon in WORLD_LAND_POLYGONS:
+        points = " ".join(
+            f"{_project_lon_lat(lon, lat, width, height)[0]:.1f},{_project_lon_lat(lon, lat, width, height)[1]:.1f}"
+            for lon, lat in polygon
+        )
+        polygons.append(
+            f"<polygon points='{points}' fill='#dbeafe' stroke='#bfdbfe' stroke-width='1.2' opacity='0.82'/>"
+        )
+    return "".join(polygons)
+
+
 def _country_region(country: str) -> tuple[str, str]:
     return COUNTRY_REGIONS.get(_clean_country(country).lower(), ("", ""))
 
@@ -4788,6 +4816,7 @@ def _svg_geographic_map(rows: list[dict[str, str]], title: str) -> str:
         f"<text x='20' y='28' font-size='20' font-family='Arial' font-weight='700' fill='#102a43'>{html.escape(title)}</text>"
         f"<g transform='translate(0,48)'><rect x='0' y='0' width='{width}' height='{height}' fill='#eff6ff' stroke='#bcccdc'/>"
         + "".join(grid)
+        + _world_land_polygons_svg(width, height)
         + "".join(points)
         + f"</g>{legend}</svg>\n"
     )
@@ -4942,6 +4971,33 @@ def _geographic_map_png(rows: list[dict[str, str]], path: Path) -> None:
         y = header + int((90 - lat) / 180 * map_height)
         for x in range(width):
             set_pixel(x, y, (217, 226, 236))
+
+    def draw_polygon(points: list[tuple[int, int]], color: tuple[int, int, int]) -> None:
+        if len(points) < 3:
+            return
+        min_y = max(0, min(y for _x, y in points))
+        max_y = min(height - 1, max(y for _x, y in points))
+        for y in range(min_y, max_y + 1):
+            intersections = []
+            for idx, (x1, y1) in enumerate(points):
+                x2, y2 = points[(idx + 1) % len(points)]
+                if y1 == y2:
+                    continue
+                if (y >= min(y1, y2)) and (y < max(y1, y2)):
+                    intersections.append(x1 + (y - y1) * (x2 - x1) / (y2 - y1))
+            intersections.sort()
+            for start, end in zip(intersections[0::2], intersections[1::2]):
+                x0 = max(0, int(math.floor(start)))
+                x1 = min(width - 1, int(math.ceil(end)))
+                for x in range(x0, x1 + 1):
+                    set_pixel(x, y, color)
+
+    for polygon in WORLD_LAND_POLYGONS:
+        projected = [
+            (int(_project_lon_lat(lon, lat, width, map_height)[0]), header + int(_project_lon_lat(lon, lat, width, map_height)[1]))
+            for lon, lat in polygon
+        ]
+        draw_polygon(projected, (219, 234, 254))
 
     for row in rows:
         xy = _country_xy(row.get("country", ""), width, map_height)
@@ -5428,13 +5484,13 @@ def write_important_geographic_outputs(sample_dir: Path, out_dir: Path, importan
     map_data_path = figures / "geographic_distribution_map.data.tsv"
     write_rows(map_data_path, initial_rows, GEOGRAPHIC_DATABASE_FIELDS)
     svg_path = figures / "geographic_distribution_map.svg"
-    svg_path.write_text(_svg_geographic_map(initial_rows, "Geographic Distribution"), encoding="utf-8")
+    svg_path.write_text(_svg_geographic_map(initial_rows, "Geographic gene map"), encoding="utf-8")
     png_path = figures / "geographic_distribution_map.png"
     _geographic_map_png(initial_rows, png_path)
     map_pdf_path = figures / "geographic_distribution_map.pdf"
     _write_simple_pdf(
         map_pdf_path,
-        "Geographic Distribution",
+        "Geographic gene map",
         [
             f"{row.get('country', '')}: {row.get('prevalence_display', '')}; warnings={row.get('warning_flags', '')}"
             for row in initial_rows[:30]
@@ -5482,10 +5538,10 @@ th { background: #f0f4f8; }
 a.button { display: inline-block; padding: 0.45rem 0.65rem; margin: 0.2rem 0.35rem 0.2rem 0; background: #0f766e; color: white; text-decoration: none; border-radius: 4px; }
 @media (max-width: 760px) { .control-feature { grid-column: auto; } }
 </style></head><body>
-<h1>Geographic Distribution</h1>
-<p>This section summarizes where selected databases or features were detected in the analyzed dataset. Percentages always use genome-count denominators.</p>
+<h1>Geographic Gene Map</h1>
+<p>Select a database or individual feature, then read the map and ranked bars together. Percentages always use genome-count denominators.</p>
 <div class="warning">Geographic distribution reflects the analyzed dataset and may not represent true regional or global prevalence.</div>
-<div class="gene-map-hint"><strong>Gene map:</strong> choose <em>Individual feature / gene</em>, select an AMR or VFDB feature, and keep Geographic level as <em>Country</em> to map selected-gene prevalence.</div>
+<div class="gene-map-hint"><strong>Gene map workflow:</strong> choose <em>Individual feature / gene</em>, select an AMR, VFDB, plasmid, integron, or other detected feature, and keep Geographic level as <em>Country</em>. Redder bubbles show higher selected-gene prevalence; larger bubbles show stronger country denominators.</div>
 <div class="map-guide" aria-label="Map reading guide">
 <h2>Map reading guide</h2>
 <div class="legend-grid">
@@ -5612,7 +5668,7 @@ function renderMap(active) {
   }
   const svgHeight = height + 145;
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Geographic distribution map with prevalence legend" width="${width}" height="${svgHeight}" viewBox="0 0 ${width} ${svgHeight}">`;
-  svg += `<rect width="100%" height="100%" fill="#f8fafc"/><text x="20" y="28" font-size="20" font-family="Arial" font-weight="700" fill="#102a43">Geographic Distribution</text>`;
+  svg += `<rect width="100%" height="100%" fill="#f8fafc"/><text x="20" y="28" font-size="20" font-family="Arial" font-weight="700" fill="#102a43">Geographic Gene Map</text>`;
   svg += `<g transform="translate(0,45)"><rect x="0" y="0" width="${width}" height="${height}" fill="#eff6ff" stroke="#bcccdc"/>`;
   for (let lon = -120; lon <= 180; lon += 60) { const x = ((lon + 180) / 360) * width; svg += `<line x1="${x}" y1="0" x2="${x}" y2="${height}" stroke="#d9e2ec"/>`; }
   for (let lat = -60; lat <= 90; lat += 30) { const y = ((90 - lat) / 180) * height; svg += `<line x1="0" y1="${y}" x2="${width}" y2="${y}" stroke="#d9e2ec"/>`; }
@@ -13974,13 +14030,13 @@ def write_important_results_report(
     geographic_map_preview_card = _report_figure_card_html(
         important_dir,
         "geographic_distribution_map",
-        "Geographic gene-map preview",
-        "Static preview of the interactive geography map. Redder bubbles show higher dataset prevalence or burden, larger bubbles show country-level genome denominators, and gray bubbles mark small groups.",
+        "Geographic gene map preview",
+        "Static snapshot of the map workflow. Open the interactive gene map to select a feature; redder bubbles show higher selected-feature prevalence, larger bubbles show country denominators, and gray bubbles mark small groups.",
         [("Exploratory", "exploratory")],
     )
     geographic_map_preview_html = (
         "<div class='analysis-card geographic-map-preview'><h3>Map-first geographic view</h3>"
-        "<p>Use this static snapshot to orient yourself, then open the interactive gene map below to search and switch individual features.</p>"
+        "<p>Use this static snapshot to orient yourself, then open the full interactive gene map to search AMR, VFDB, plasmid, integron, and other detected features.</p>"
         f"{geographic_map_preview_card}</div>"
         if geographic_map_preview_card else ""
     )
@@ -14751,11 +14807,12 @@ def write_important_results_report(
         "Feature prevalence interactive report",
     )
     geography_explorer_html = _interactive_explorer_card_html(
-        "Interactive gene map",
-        "Select an individual feature or database burden, then review the map and ranked country bars together. Redder bubbles indicate higher dataset prevalence; larger bubbles indicate more genomes.",
+        "Interactive geographic gene map",
+        "Open the full map to search a gene or feature, switch databases, and compare the map with ranked country bars. Redder bubbles indicate higher selected-feature prevalence; larger bubbles indicate more genomes.",
         "figures/geographic_distribution.html",
         "Geographic distribution interactive report",
-        expanded=True,
+        expanded=False,
+        button_label="Open full interactive gene map",
     )
     variation_explorer_html = _interactive_explorer_card_html(
         "Interactive variation explorer",
@@ -14794,7 +14851,7 @@ def write_important_results_report(
         "Diversity and pan-feature summary interactive report",
     )
     prevalence_best_figure_html = _best_figure_note_html("Genomes positive by database", "This is the cleanest denominator-aware entry point before inspecting individual genes.")
-    geographic_best_figure_html = _best_figure_note_html("Geographic gene-map preview", "Start with the map, then verify the same pattern in country bars and the full TSV.")
+    geographic_best_figure_html = _best_figure_note_html("Geographic gene map preview", "Start with the map, then verify the same pattern in country bars and the full TSV.")
     variation_best_figure_html = _best_figure_note_html("Most variable features", "Use it to decide which identity/coverage distributions deserve manual review.")
     temporal_best_figure_html = _best_figure_note_html("Selected feature prevalence over time", "It preserves yearly denominators and is easier to interpret than a dense heatmap.")
     cooccurrence_best_figure_html = _best_figure_note_html("Co-occurrence heatmap plus context evidence ladder", "Use the heatmap for screening and the ladder for stronger coordinate-level evidence.")
