@@ -3464,6 +3464,31 @@ def _report_section_header_html(title: str, subtitle: str = "", badges: list[tup
     )
 
 
+def _section_focus_panel_html(
+    answers: str,
+    start_with: str,
+    caution: str,
+    next_table: str,
+) -> str:
+    items = [
+        ("What this section answers", answers),
+        ("Start here", start_with),
+        ("Main caution", caution),
+        ("Open next", next_table),
+    ]
+    return (
+        "<div class='section-focus' aria-label='Section interpretation guide'>"
+        + "".join(
+            "<div class='section-focus-item'>"
+            f"<h3>{html.escape(title)}</h3>"
+            f"<p>{html.escape(text)}</p>"
+            "</div>"
+            for title, text in items
+        )
+        + "</div>"
+    )
+
+
 def _report_warning_box_html(message: str, badges: list[tuple[str, str]] | None = None) -> str:
     badge_html = " ".join(_report_badge_html(label, kind) for label, kind in (badges or []))
     return (
@@ -14351,6 +14376,96 @@ def write_important_results_report(
         ("tables/important_file_index.tsv", "Important file index", "Human-readable inventory of key report files and intended uses.", "Use when sharing a subset of outputs."),
         ("tables/download_manifest.tsv", "Download manifest", "Machine-readable file inventory used by the report download cards.", "Use for automated checks."),
     ])
+    featured_focus_html = _section_focus_panel_html(
+        "A short executive path through the report: strongest signals, caution-heavy findings, and the most useful figures.",
+        "Start with the executive finding cards and featured figure gallery, then open the trust/caution queues only if you need detail.",
+        "Featured results are triage shortcuts. They do not replace the section-level denominators, warnings, or complete TSVs.",
+        "report_highlights.tsv and report_visual_index.tsv.",
+    )
+    prevalence_focus_html = _section_focus_panel_html(
+        "Which features and databases are common, accessory, or rare in this exact genome set.",
+        "Start with database positive-genome counts, then inspect the top feature bars for the database you care about.",
+        "Prevalence is not global frequency. Repeated feature rows and positive-genome counts answer different questions.",
+        "feature_prevalence.tsv and prevalence_summary_by_database.tsv.",
+    )
+    geographic_focus_html = _section_focus_panel_html(
+        "Where selected features or database burdens appear across the submitted genomes.",
+        "Use the map first, then confirm the same pattern in country bars with positive/total denominators.",
+        "Geography can reflect sampling, BioProject composition, missing country metadata, lineage, or collection year.",
+        "geographic_feature_distribution.tsv and geographic_warning_summary.tsv.",
+    )
+    variation_focus_html = _section_focus_panel_html(
+        "Which features have divergent identity, partial coverage, or unusually variable hit patterns.",
+        "Start with top-variable features, then inspect identity and coverage distributions for the same database.",
+        "Low identity or coverage is a review flag, not direct proof of functional change or phenotype.",
+        "feature_variation_summary.tsv and feature_variation_hits.tsv.",
+    )
+    temporal_focus_html = _section_focus_panel_html(
+        "Whether feature prevalence or database burden changes across valid collection years.",
+        "Start with valid-year counts and yearly denominators before looking at increasing or decreasing features.",
+        "Sparse years, placeholder dates, lineage shifts, geography, and BioProject sampling can create apparent trends.",
+        "temporal_trend_summary.tsv and temporal_feature_prevalence.tsv.",
+    )
+    cooccurrence_focus_html = _section_focus_panel_html(
+        "Which features appear together, and which pairs have stronger contig/proximity context evidence.",
+        "Use the heatmap or network for screening, then prioritize same-contig and nearby evidence.",
+        "Sample-level co-occurrence does not prove linkage, transfer, expression, phenotype, or plasmid localization.",
+        "cooccurrence_pair_summary.tsv and genomic_context_evidence.tsv.",
+    )
+    metadata_focus_html = _section_focus_panel_html(
+        "Which feature or burden patterns differ across metadata groups such as source, host, country, or BioProject.",
+        "Start with metadata usability, then use volcano and heatmap plots to find candidate patterns.",
+        "Associations can be driven by missing metadata, small groups, lineage, geography, BioProject, or year bias.",
+        "metadata_feature_enrichment.tsv and metadata_usability_summary.tsv.",
+    )
+    lineage_focus_html = _section_focus_panel_html(
+        "Whether apparent feature or metadata patterns are broad or concentrated in one ST, ANI cluster, or BioProject.",
+        "Start with lineage distribution and metadata-lineage overlap before interpreting association sections.",
+        "Lineage summaries are exploratory and do not replace phylogenetic analysis.",
+        "lineage_distribution.tsv and lineage_adjusted_top_findings.tsv.",
+    )
+    diversity_focus_html = _section_focus_panel_html(
+        "How feature-rich the genomes are, which databases drive diversity, and whether the pan-feature space is open.",
+        "Start with core/common/accessory/rare classes, then compare richness and database burden by sample.",
+        "Feature diversity reflects detected annotations, database choice, genome quality, sampling, and lineage structure.",
+        "diversity_core_accessory_summary_by_database.tsv and diversity_feature_richness_by_sample.tsv.",
+    )
+    notable_focus_html = _section_focus_panel_html(
+        "Which genomes deserve manual research review because they combine high burden, context evidence, rare features, or warnings.",
+        "Start with the score-component heatmap so you can see why each genome ranked highly.",
+        "This is research prioritization only. It is not a clinical, public-health, or risk score.",
+        "notable_genomes.tsv and notable_genome_score_components.tsv.",
+    )
+    ordination_focus_html = _section_focus_panel_html(
+        "Whether genomes cluster by detected feature profiles and whether clusters align with lineage, source, country, or BioProject.",
+        "Start with PCoA colored by lineage, then compare country/source/BioProject views if available.",
+        "Ordination reflects annotation similarity, not whole-genome phylogeny.",
+        "feature_profile_ordination.tsv.",
+    )
+    concordance_focus_html = _section_focus_panel_html(
+        "Where AMR tools/databases agree, disagree, or produce tool-specific calls.",
+        "Start with called-by-both features, then inspect tool-specific calls that matter for your question.",
+        "Disagreement can reflect naming, scope, thresholds, partial hits, or database version differences.",
+        "amr_concordance_feature_level.tsv.",
+    )
+    evidence_focus_html = _section_focus_panel_html(
+        "Which findings are stronger, exploratory, descriptive, warning-heavy, or insufficiently supported.",
+        "Start with the confidence summary, then open the finding table filtered by section.",
+        "Confidence labels summarize evidence for interpretation; they are not biological certainty.",
+        "finding_confidence_summary.tsv.",
+    )
+    warnings_focus_html = _section_focus_panel_html(
+        "Which warnings matter most and which sections, databases, features, or modules they affect.",
+        "Start with high and critical warning categories before interpreting warning-heavy sections.",
+        "Warnings do not automatically invalidate a run, but they define what can and cannot be claimed.",
+        "warnings_and_limitations.tsv and warning_priority_summary.tsv.",
+    )
+    downloads_focus_html = _section_focus_panel_html(
+        "Which files to use for review, sharing, reproducibility, and complete downstream analysis.",
+        "Start with the enriched dataset, important tables ZIP, and warnings/confidence tables.",
+        "Some complete outputs are intentionally outside the compact important report; the manifest tells you what exists.",
+        "download_manifest.tsv and important_file_index.tsv.",
+    )
     report_path = important_dir / "results.html"
     report_path.write_text(
         f"""<!doctype html>
@@ -14400,6 +14515,10 @@ main {{ margin-left: 290px; padding: 1.2rem 1.4rem 2rem; min-width: 0; max-width
 .analysis-card {{ border: 1px solid var(--border); border-radius: 10px; background: #fbfdff; padding: 0.9rem; margin: 0.9rem 0; max-width: 100%; }}
 .analysis-card h3 {{ margin-top: 0; margin-bottom: 0.35rem; }}
 .analysis-card > p:first-of-type {{ color: var(--muted); margin-top: 0; }}
+.section-focus {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; border: 1px solid var(--border); border-radius: 10px; background: #f8fafc; padding: 0.85rem; margin: 0.85rem 0; }}
+.section-focus-item {{ border-left: 4px solid var(--primary); background: white; border-radius: 8px; padding: 0.7rem; }}
+.section-focus-item h3 {{ margin: 0 0 0.35rem; font-size: 0.88rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }}
+.section-focus-item p {{ margin: 0; color: var(--text); font-size: 0.92rem; }}
 .diagnostic-list {{ columns: 2; column-gap: 2rem; margin: 0.5rem 0 0; padding-left: 1.1rem; }}
 .diagnostic-list li {{ break-inside: avoid; margin-bottom: 0.25rem; }}
 .cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 0.75rem; }}
@@ -14518,6 +14637,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 {top_download_links}
 </header>
 <section id="featured" class="section"><h1>Featured Results</h1>{card_html}<p>{db_badges}</p>
+{featured_focus_html}
 {featured_guide_cards_html}
 <details class="details-block"><summary>How to use this report</summary><p>Start with the cards and featured figures, then use the sidebar to inspect each analysis section. Complete TSVs are preserved even when report-facing tables and figures are capped for readability.</p></details>
 <h2>Executive finding cards</h2>{featured_finding_cards_html}
@@ -14549,6 +14669,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 <div class="downloads"><a href="../basic/enriched_genome_dataset.csv">Download enriched dataset CSV</a><a href="../basic/enriched_genome_dataset.tsv">Download enriched dataset TSV</a></div></section>
 <section id="prevalence" class="section"><h2>Prevalence</h2><p>This section summarizes how frequently each detected feature appears across analyzed genomes. Prevalence uses positive genome count; feature rows can be higher when a feature appears multiple times in one genome.</p>
 <div class="warning-box warning">Prevalence reflects the analyzed dataset, not global prevalence. This section is descriptive and does not test association or causality.</div>
+{prevalence_focus_html}
 {prevalence_cards_html}
 {prevalence_written_html}
 {prevalence_reading_cards_html}
@@ -14560,6 +14681,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 </details>
 <div class="downloads"><a href="figures/prevalence_analysis.html">Open interactive prevalence report</a><a href="prevalence_tables.zip">Download prevalence tables ZIP</a><a href="prevalence_figures.zip">Download prevalence figures ZIP</a><a href="tables/feature_prevalence.tsv">Download full feature prevalence</a><a href="tables/feature_prevalence_top.tsv">Download top feature prevalence</a><a href="tables/prevalence_summary_by_database.tsv">Download database summary</a><a href="tables/prevalence_core_accessory_rare_summary.tsv">Download core/common/accessory/rare summary</a><a href="tables/prevalence_database_burden_by_sample.tsv">Download database burden by sample</a></div></section>
 <section id="geography" class="section"><h2>Geographic Distribution</h2><div class="warning-box warning">Geographic patterns reflect the analyzed dataset only. They are not global prevalence estimates and can be affected by BioProject, lineage, country, and year sampling bias.</div>
+{geographic_focus_html}
 {geographic_cards_html}
 {geographic_summary_html}
 {geographic_reading_cards_html}
@@ -14573,6 +14695,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 <div class="downloads"><a href="figures/geographic_distribution.html">Open interactive geographic report</a><a href="figures/geographic_distribution_map.html">Open compatibility map</a><a href="geographic_tables.zip">Download geographic tables ZIP</a><a href="geographic_figures.zip">Download geographic figures ZIP</a><a href="tables/geographic_distribution_summary.tsv">Download geographic summary</a><a href="tables/geographic_database_burden.tsv">Download database burden table</a><a href="tables/geographic_feature_distribution.tsv">Download feature distribution table</a><a href="tables/geographic_warning_summary.tsv">Download warning summary</a></div></section>
 <section id="variations" class="section"><h2>Variations</h2><p>Variation summaries use identity, coverage, alignment length, and hit-count values when available. Low identity, low coverage, high variation, and few-hit flags are review cues, not automatic failures.</p>
 <div class="warning-box warning">A feature can be common but conserved, common and variable, or rare with unstable estimates. Use the complete hit-level table when reviewing low-confidence or partial hits.</div>
+{variation_focus_html}
 {variation_cards_html}
 {variation_reading_cards_html}
 <div class="analysis-card"><h3>Interactive variation explorer</h3><p>Use this to inspect identity, coverage, alignment length, and hit-count variation where those metrics are available.</p><iframe src="figures/variation_analysis.html" title="Feature variation interactive report"></iframe></div>
@@ -14583,6 +14706,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 </details>
 <div class="downloads"><a href="figures/variation_analysis.html">Open interactive variation report</a><a href="variation_figures.zip">Download variation figures ZIP</a><a href="key_tables/feature_variation_database_summary.tsv">Download variation database summary</a><a href="key_tables/feature_variation_summary.tsv">Download variation summary</a><a href="key_tables/feature_variation_hits.tsv">Download hit-level variation table</a></div></section>
 <section id="temporal" class="section"><h2>Temporal Trends</h2><div class="warning-box warning">Temporal trends reflect the analyzed dataset only. They can be affected by sampling year, BioProject, country, lineage, and missing collection-year metadata.</div>
+{temporal_focus_html}
 <p>Prevalence trends use yearly percentages with genome-count denominators. Database burden is summarized as mean detected features per genome by collection year.</p>
 {temporal_reading_cards_html}
 <div class="analysis-card"><h3>Interactive temporal explorer</h3><p>Review yearly prevalence and burden with positive/total denominators. Treat low-support trends as descriptive only.</p><iframe src="figures/temporal_trends.html" title="Temporal trends interactive report"></iframe></div>
@@ -14592,6 +14716,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 </details>
 <div class="downloads"><a href="figures/temporal_trends.html">Open interactive temporal report</a><a href="key_tables/temporal_database_burden.tsv">Download database burden by year</a><a href="key_tables/temporal_feature_prevalence.tsv">Download yearly feature prevalence</a><a href="key_tables/temporal_trend_summary.tsv">Download temporal trend summary</a><a href="key_tables/temporal_increasing_features.tsv">Download increasing features</a><a href="key_tables/temporal_decreasing_features.tsv">Download decreasing features</a></div></section>
 <section id="cooccurrence" class="section"><h2>Co-occurrence / Genomic Context</h2><div class="warning-box warning">Sample-level co-occurrence does not prove physical linkage. Same-contig and proximity evidence are stronger context signals, but do not prove transfer, expression, phenotype, or plasmid localization.</div>
+{cooccurrence_focus_html}
 {cooccurrence_summary_html}
 {cooccurrence_reading_cards_html}
 <div class="analysis-card"><h3>Interactive co-occurrence and context explorer</h3><p>Use the heatmap/network for feature-profile screening, then use same-contig and proximity evidence for stronger context review.</p><iframe src="figures/cooccurrence_context.html" title="Co-occurrence and genomic context interactive report"></iframe></div>
@@ -14602,6 +14727,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 </details>
 <div class="downloads"><a href="figures/cooccurrence_context.html">Open interactive co-occurrence report</a><a href="cooccurrence_tables.zip">Download all co-occurrence tables ZIP</a><a href="cooccurrence_figures.zip">Download all co-occurrence figures ZIP</a><a href="tables/cooccurrence_pair_summary.tsv">Download pair summary</a><a href="tables/cooccurrence_heatmap_matrix.tsv">Download heatmap matrix</a><a href="tables/cooccurrence_network_edges.tsv">Download network edges</a><a href="tables/cooccurrence_network_nodes.tsv">Download network nodes</a><a href="tables/genomic_context_evidence.tsv">Download genomic context evidence</a><a href="tables/contig_neighborhoods.tsv">Download contig neighborhoods</a></div></section>
 <section id="metadata-associations" class="section"><h2>Metadata Associations</h2><div class="warning-box warning">Metadata associations are exploratory enrichment-style screens. They may reflect sampling, BioProject structure, lineage composition, geography, collection year, or missing metadata and should not be interpreted as causal.</div>
+{metadata_focus_html}
 {metadata_summary_html}
 {metadata_reading_cards_html}
 <div class="analysis-card"><h3>Metadata usability</h3>{metadata_usability_cards}{metadata_usability_table_html}</div>
@@ -14614,6 +14740,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 </details>
 <div class="downloads"><a href="figures/metadata_associations.html">Open interactive metadata association report</a><a href="metadata_association_tables.zip">Download all metadata association tables ZIP</a><a href="metadata_association_figures.zip">Download all metadata association figures ZIP</a><a href="tables/metadata_usability_summary.tsv">Download metadata usability summary</a><a href="tables/metadata_feature_enrichment.tsv">Download feature enrichment</a><a href="tables/metadata_burden_associations.tsv">Download burden associations</a><a href="tables/metadata_category_enrichment.tsv">Download category enrichment</a><a href="tables/metadata_burden_omnibus.tsv">Download burden omnibus tests</a><a href="tables/metadata_category_omnibus.tsv">Download category omnibus tests</a><a href="tables/metadata_association_summary.tsv">Download metadata association summary</a></div></section>
 <section id="lineage" class="section"><h2>Lineage / Clonal Structure</h2><div class="warning-box warning">Lineage summaries are exploratory and do not replace phylogenetic analysis. Apparent metadata associations may reflect clonal structure, BioProject sampling, geography, or temporal sampling.</div>
+{lineage_focus_html}
 {lineage_cards_html}
 {lineage_summary_html}
 {lineage_reading_cards_html}
@@ -14629,6 +14756,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 </details>
 <div class="downloads"><a href="figures/lineage_clonal_structure.html">Open interactive lineage report</a><a href="lineage_tables.zip">Download lineage tables ZIP</a><a href="lineage_figures.zip">Download lineage figures ZIP</a><a href="tables/lineage_summary.tsv">Download sample lineage summary</a><a href="tables/lineage_distribution.tsv">Download lineage distribution</a><a href="tables/lineage_metadata_overlap.tsv">Download metadata-lineage overlap</a><a href="tables/lineage_feature_burden.tsv">Download lineage feature burden</a><a href="tables/lineage_feature_enrichment.tsv">Download lineage feature enrichment</a><a href="tables/lineage_adjusted_top_findings.tsv">Download lineage-adjusted top findings</a><a href="tables/lineage_feature_presence.tsv">Download selected feature lineage table</a><a href="tables/lineage_written_summaries.tsv">Download written summaries</a></div></section>
 <section id="diversity" class="section"><h2>Diversity / Pan-feature Summary</h2><div class="warning-box warning">Diversity summaries reflect detected annotation features, not complete biological diversity. Results depend on selected databases, genome quality, sample composition, and feature-calling tools.</div>
+{diversity_focus_html}
 {diversity_cards_html}
 {diversity_written_html}
 <div class="analysis-card"><h3>Interactive diversity explorer</h3><p>Compare feature richness, database burden, pan-feature classes, accumulation, Jaccard distance, and metadata-stratified diversity.</p><iframe src="figures/diversity_analysis.html" title="Diversity and pan-feature summary interactive report"></iframe></div>
@@ -14638,25 +14766,30 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 <div class="analysis-card"><h3>Metadata-stratified diversity</h3>{diversity_metadata_table_html}</div>
 <div class="downloads"><a href="figures/diversity_analysis.html">Open interactive diversity report</a><a href="diversity_tables.zip">Download diversity tables ZIP</a><a href="diversity_figures.zip">Download diversity figures ZIP</a><a href="tables/diversity_feature_richness_by_sample.tsv">Download feature richness by sample</a><a href="tables/diversity_database_by_sample.tsv">Download database diversity by sample</a><a href="tables/diversity_database_by_sample_wide.tsv">Download wide database diversity</a><a href="tables/diversity_core_common_accessory_rare_features.tsv">Download feature class table</a><a href="tables/diversity_core_accessory_summary_by_database.tsv">Download core/accessory summary</a><a href="tables/diversity_pan_feature_accumulation.tsv">Download pan-feature accumulation</a><a href="tables/diversity_jaccard_distance_matrix.tsv">Download Jaccard matrix</a><a href="tables/diversity_jaccard_pairs.tsv">Download Jaccard pairs</a><a href="tables/diversity_by_metadata_group.tsv">Download metadata-stratified diversity</a><a href="tables/diversity_written_summaries.tsv">Download written summaries</a></div></section>
 <section id="notable-genomes" class="section"><h2>Notable Genomes / Genome Prioritization</h2><div class="warning-box warning">This prioritization is for research review only. It is not a clinical risk score.</div>
+{notable_focus_html}
 <p>Genomes are ranked by transparent annotation-burden, genomic-context, rare-feature, temporal-trend, and variation components with warning penalties.</p>
 <div class="analysis-card"><h3>Notable genome visuals</h3>{notable_figures_html}</div>
 <div class="analysis-card"><h3>Prioritized genome table</h3>{notable_table_html}</div>
 <div class="downloads"><a href="tables/notable_genomes.tsv">Download notable genomes</a><a href="tables/notable_genome_score_components.tsv">Download score components</a><a href="figures/notable_genomes_ranked.data.tsv">Download plotted data</a></div></section>
 <section id="ordination" class="section"><h2>Feature-profile Ordination</h2><div class="warning-box warning">Feature-profile ordination reflects annotation similarity, not whole-genome phylogeny.</div>
+{ordination_focus_html}
 <p>PCoA coordinates are computed from Jaccard feature-profile distances when available and colored by lineage, country, source, or BioProject in companion figures.</p>
 <div class="analysis-card"><h3>Ordination figures</h3>{ordination_figures_html}</div>
 <div class="analysis-card"><h3>Ordination coordinates</h3>{ordination_table_html}</div>
 <div class="downloads"><a href="tables/feature_profile_ordination.tsv">Download ordination table</a><a href="figures/feature_profile_pcoa_by_lineage.data.tsv">Download PCoA plotted data</a></div></section>
 <section id="concordance" class="section"><h2>Concordance / Database Agreement</h2><div class="warning-box warning">Tool-specific calls are retained for review. Differences may reflect database scope, thresholds, naming, or partial hits.</div>
+{concordance_focus_html}
 <div class="analysis-card"><h3>Concordance figures</h3>{concordance_figures_html}</div>
 <div class="analysis-card"><h3>Concordance summary</h3>{concordance_summary_table_html}</div>
 <div class="analysis-card"><h3>Feature-level AMR concordance</h3>{concordance_feature_table_html}</div>
 <div class="downloads"><a href="tables/database_concordance_summary.tsv">Download concordance summary</a><a href="tables/amr_concordance_feature_level.tsv">Download feature-level concordance</a><a href="tables/amr_concordance_by_sample.tsv">Download sample-level concordance</a></div></section>
 <section id="evidence" class="section"><h2>Evidence & Confidence</h2><p>This synthesis classifies report findings by sample support, statistical evidence, genomic-context level, and warning flags. Most findings should be treated as exploratory unless support and warning labels indicate otherwise.</p>
+{evidence_focus_html}
 <div class="analysis-card"><h3>Evidence summary figures</h3>{evidence_figures_html}</div>
 <div class="analysis-card"><h3>Finding confidence table</h3>{confidence_table_html}</div>
 <div class="downloads"><a href="tables/evidence_summary.tsv">Download evidence summary</a><a href="tables/finding_confidence_summary.tsv">Download finding confidence summary</a><a href="tables/evidence_by_section.tsv">Download evidence by section</a></div></section>
 <section id="warnings" class="section"><h2>Warnings & Limitations</h2><div class="warning-box warning">Warnings do not necessarily invalidate the run, but they affect interpretation. Complete TSV outputs are preserved even when report-facing figures are capped.</div>
+{warnings_focus_html}
 {warning_triage_cards_html}
 <div class="analysis-card"><h3>Warning summary figures</h3>{warnings_figures_html}</div>
 <details class="details-block"><summary>Detailed warning tables</summary>
@@ -14667,6 +14800,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 </details>
 <div class="downloads"><a href="tables/warnings_and_limitations_summary.tsv">Download compact warning summary</a><a href="tables/warnings_and_limitations.tsv">Download compact warnings table</a><a href="tables/warnings_by_section.tsv">Download warnings by section</a><a href="tables/module_warning_summary.tsv">Download module warning summary</a><a href="tables/report_cap_summary.tsv">Download report cap summary</a></div></section>
 <section id="downloads" class="section"><h2>Downloads / Important Files</h2><p>Use these files to navigate the report-facing outputs and complete reproducibility artifacts.</p>
+{downloads_focus_html}
 <div class="downloads"><a href="../basic/enriched_genome_dataset.csv">Download enriched dataset CSV</a><a href="../basic/enriched_genome_dataset.tsv">Download enriched dataset TSV</a><a href="downloads/important_summary_tables.zip">Download summary tables ZIP</a><a href="downloads/important_tables.zip">Download complete tables ZIP</a><a href="downloads/important_figures.zip">Download important figures ZIP</a><a href="downloads/publication_candidate_figures.zip">Download publication candidates ZIP</a><a href="downloads/important_report_assets.zip">Download report assets ZIP</a><a href="../panr2_inputs/report/panr2_handoff_index.html">Open complete output bundle</a><a href="../panr2_inputs/manifest/reproducibility_manifest.json">Download reproducibility manifest</a><a href="../panr2_inputs/manifest/feature_contract.json">Download feature contract</a></div>
 <div class="analysis-card"><h3>Main files</h3>{download_main_cards_html}</div>
 <div class="analysis-card"><h3>Review and interpretation tables</h3>{download_review_cards_html}</div>

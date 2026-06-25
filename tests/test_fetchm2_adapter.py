@@ -1040,6 +1040,7 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "summary-card",
                 "figure-card",
                 "figure-guidance",
+                "section-focus",
                 "table-card",
                 "table-actions",
                 "table-download-link",
@@ -1061,11 +1062,21 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "main > .report-header, main > .section",
                 "width: 92vw !important",
                 ".figure-guidance",
+                ".section-focus",
             ]:
                 self.assertIn(css_token, report_html)
             self.assertIn("Featured figure gallery", report_html)
             self.assertIn("How to read this figure", report_html)
             self.assertIn("Next table:", report_html)
+            self.assertIn("Section interpretation guide", report_html)
+            self.assertIn("What this section answers", report_html)
+            self.assertIn("Open next", report_html)
+            self.assertIn("Featured results are triage shortcuts", report_html)
+            self.assertIn(
+                "Lineage summaries are exploratory and do not replace phylogenetic analysis",
+                report_html,
+            )
+            self.assertIn("download_manifest.tsv and important_file_index.tsv", report_html)
             self.assertIn("metadata_feature_enrichment.tsv", report_html)
             self.assertIn("lineage_adjusted_top_findings.tsv", report_html)
             self.assertIn("genomic_context_evidence.tsv", report_html)
