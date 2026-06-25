@@ -1089,7 +1089,7 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "@media (max-width: 520px)",
                 "overflow-wrap: anywhere",
                 "main > .report-header, main > .section",
-                "width: 92vw !important",
+                "width: 100% !important",
                 ".figure-guidance",
                 ".section-focus",
                 ".best-figure-note",

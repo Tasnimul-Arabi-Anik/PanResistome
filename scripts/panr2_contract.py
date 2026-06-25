@@ -14937,7 +14937,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
   .sidebar-links::-webkit-scrollbar {{ display: none; }}
   .sidebar a {{ flex: 0 0 auto; white-space: nowrap; font-size: 0.82rem; padding: 0.28rem 0.42rem; border: 1px solid rgba(255,255,255,0.16); border-radius: 999px; }}
   main {{ padding: 0.55rem; width: 100%; max-width: 100%; overflow-x: hidden; }}
-  main > .report-header, main > .section {{ width: 92vw !important; max-width: 92vw !important; min-width: 0; margin-left: 0; margin-right: 0; }}
+  main > .report-header, main > .section {{ width: 100% !important; max-width: 100% !important; min-width: 0; margin-left: 0; margin-right: 0; }}
   .analysis-card {{ width: 100%; max-width: 100%; min-width: 0; margin-left: 0; margin-right: 0; }}
   .report-header * {{ max-width: 100%; min-width: 0; }}
   .report-header {{ border-radius: 8px; padding: 0.9rem; }}
