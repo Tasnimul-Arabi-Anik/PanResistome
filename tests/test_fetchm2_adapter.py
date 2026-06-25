@@ -96,6 +96,9 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("Gene map", html)
             self.assertIn("modeSelect.value = 'individual_feature'", html)
             self.assertIn("blaA", html)
+            self.assertIn("Search feature / gene", html)
+            self.assertIn("featureSearchInput", html)
+            self.assertIn("Search detected features", html)
             self.assertIn("Feature / gene", html)
             self.assertIn("polygon points", html)
             self.assertIn("overflow-x: hidden", html)
@@ -790,6 +793,8 @@ class FetchM2AdapterTests(unittest.TestCase):
             geographic_html = (sample_dir / "important" / "figures" / "geographic_distribution.html").read_text(encoding="utf-8")
             for control in ["Database", "Mode", "Feature", "Geographic level", "Metric", "Minimum group size", "Display", "Warning filter"]:
                 self.assertIn(control, geographic_html)
+            self.assertIn("Search feature / gene", geographic_html)
+            self.assertIn("featureSearchInput", geographic_html)
             for guide_text in ["Map reading guide", "Higher selected-gene prevalence", "positive / total genomes", "small group"]:
                 self.assertIn(guide_text, geographic_html)
             self.assertIn("labelCountries", geographic_html)
@@ -1094,6 +1099,13 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "Important file index preview",
             ]:
                 self.assertIn(report_phrase, report_html)
+            geography_section = report_html.split('id="geography"', 1)[1].split('id="variations"', 1)[0]
+            self.assertIn("figures/geographic_distribution_map.svg", geography_section)
+            self.assertIn("geographic_country_bar", geography_section)
+            self.assertLess(
+                geography_section.index("figures/geographic_distribution_map.svg"),
+                geography_section.index("geographic_country_bar"),
+            )
             self.assertIn("Download report highlights", report_html)
             self.assertIn("Visual index", report_html)
             self.assertIn("Visual quality", report_html)

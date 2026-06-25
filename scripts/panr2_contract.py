@@ -5294,7 +5294,7 @@ html, body { max-width: 100%; overflow-x: hidden; }
 body { font-family: Arial, sans-serif; color: #1f2933; margin: 1.25rem; background: #f8fafc; }
 .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.75rem; align-items: end; }
 label { font-weight: 700; display: block; margin-bottom: 0.25rem; }
-select { width: 100%; padding: 0.35rem; box-sizing: border-box; }
+select, input[type="search"] { width: 100%; padding: 0.35rem; box-sizing: border-box; }
 #map { width: 100%; overflow-x: auto; }
 #map svg { width: 100%; max-width: 960px; height: auto; border: 1px solid #d9e2ec; background: white; display: block; }
 .warning { background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; margin: 1rem 0; }
@@ -5343,6 +5343,7 @@ a.button { display: inline-block; padding: 0.45rem 0.65rem; margin: 0.2rem 0.35r
 <div class="controls">
 <div><label for="mode">Mode</label><select id="mode"><option value="database_burden">Database burden / any feature</option><option value="individual_feature">Individual feature / gene</option></select></div>
 <div><label for="database">Database</label><select id="database"></select></div>
+<div class="control-feature"><label for="featureSearch">Search feature / gene</label><input id="featureSearch" type="search" placeholder="Search detected features"></div>
 <div class="control-feature"><label for="feature">Feature / gene</label><select id="feature"></select></div>
 <div><label for="geo">Geographic level</label><select id="geo"><option value="country">Country</option><option value="continent">Continent</option><option value="subcontinent">Subcontinent / region</option><option value="country_year">Country + collection year</option></select></div>
 <div><label for="metric">Metric</label><select id="metric"><option value="prevalence_percent">Prevalence %</option><option value="positive_genomes">Positive genome count</option><option value="total_genomes">Total genome count</option><option value="mean_feature_burden_per_genome">Mean feature burden per genome</option><option value="median_feature_burden_per_genome">Median feature burden per genome</option><option value="feature_rows">Feature row count</option></select></div>
@@ -5387,6 +5388,7 @@ function esc(value) {
 }
 const databaseSelect = document.getElementById('database');
 const modeSelect = document.getElementById('mode');
+const featureSearchInput = document.getElementById('featureSearch');
 const featureSelect = document.getElementById('feature');
 const geoSelect = document.getElementById('geo');
 const metricSelect = document.getElementById('metric');
@@ -5413,15 +5415,20 @@ function topFeatureForDatabase(db) {
 function updateFeatures() {
   const db = databaseSelect.value;
   const current = featureSelect.value;
+  const query = (featureSearchInput.value || '').toLowerCase().trim();
   featureSelect.innerHTML = '';
-  const features = [...new Set(featureRows.filter(r => r.database === db).map(r => r.feature_id))].sort();
+  const allFeatures = [...new Set(featureRows.filter(r => r.database === db).map(r => r.feature_id))].sort();
+  const features = allFeatures.filter(value => !query || String(value).toLowerCase().includes(query));
   for (const value of features) { const opt = document.createElement('option'); opt.value = value; opt.textContent = value; featureSelect.appendChild(opt); }
   if (features.includes(current)) featureSelect.value = current;
   else {
     const topFeature = topFeatureForDatabase(db);
     if (features.includes(topFeature)) featureSelect.value = topFeature;
+    else if (features.length) featureSelect.value = features[0];
   }
-  featureSelect.disabled = modeSelect.value !== 'individual_feature' || features.length === 0;
+  featureSelect.disabled = modeSelect.value !== 'individual_feature' || allFeatures.length === 0;
+  featureSearchInput.disabled = modeSelect.value !== 'individual_feature' || allFeatures.length === 0;
+  featureSearchInput.placeholder = allFeatures.length ? `Search ${allFeatures.length} detected features` : 'No detected features';
 }
 function rowValue(row, metric) {
   const fallback = metric === 'feature_rows' ? row.total_feature_rows : 0;
@@ -5539,6 +5546,7 @@ function render() {
   renderTable(active);
 }
 for (const control of [databaseSelect, modeSelect, featureSelect, geoSelect, metricSelect, minSelect, displaySelect, warningSelect]) control.addEventListener('change', render);
+featureSearchInput.addEventListener('input', render);
 window.addEventListener('resize', render);
 updateFeatures(); render();
 </script></body></html>
@@ -13591,9 +13599,24 @@ def write_important_results_report(
         f"<div class='finding-card'><h3>4. Audit warnings</h3><p>{geographic_warning_count:,} geographic group(s) carry warning flags; complete burden and feature-distribution TSVs remain downloadable.</p><span class='badge badge-capped'>Preview capped</span></div>"
         "</div>"
     )
+    geographic_map_preview_card = _report_figure_card_html(
+        important_dir,
+        "geographic_distribution_map",
+        "Geographic gene-map preview",
+        "Static preview of the interactive geography map. Redder bubbles show higher dataset prevalence or burden, larger bubbles show country-level genome denominators, and gray bubbles mark small groups.",
+        [("Exploratory", "exploratory")],
+    )
+    geographic_map_preview_html = (
+        "<div class='analysis-card geographic-map-preview'><h3>Map-first geographic view</h3>"
+        "<p>Use this static snapshot to orient yourself, then open the interactive gene map below to search and switch individual features.</p>"
+        f"{geographic_map_preview_card}</div>"
+        if geographic_map_preview_card else ""
+    )
     geographic_figure_items = []
-    for path in sorted((important_dir / "figures").glob("geographic_*_bar_*.svg"))[:6]:
-        stem = path.stem
+    map_first_stems = [path.stem for path in sorted((important_dir / "figures").glob("geographic_map_*.svg"))[:2]]
+    for stem in dict.fromkeys(map_first_stems):
+        if not (important_dir / "figures" / f"{stem}.svg").exists():
+            continue
         geographic_figure_items.append(
             (
                 stem,
@@ -13606,7 +13629,7 @@ def write_important_results_report(
                 ),
             )
         )
-    for path in sorted((important_dir / "figures").glob("geographic_map_*.svg"))[:2]:
+    for path in sorted((important_dir / "figures").glob("geographic_*_bar_*.svg"))[:6]:
         stem = path.stem
         geographic_figure_items.append(
             (
@@ -14444,6 +14467,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 {geographic_cards_html}
 {geographic_summary_html}
 {geographic_reading_cards_html}
+{geographic_map_preview_html}
 <div class="analysis-card"><h3>Interactive gene map</h3><p>Select an individual feature or database burden, then review the map and ranked country bars together. Redder bubbles indicate higher dataset prevalence; larger bubbles indicate more genomes.</p><iframe src="figures/geographic_distribution.html" title="Geographic distribution interactive report"></iframe></div>
 <div class="analysis-card"><h3>Geographic figures</h3>{geographic_figures_html}</div>
 <details class="details-block"><summary>Detailed geographic tables</summary>
