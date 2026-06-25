@@ -3489,6 +3489,39 @@ def _section_focus_panel_html(
     )
 
 
+def _best_figure_note_html(title: str, reason: str) -> str:
+    return (
+        "<p class='best-figure-note'>"
+        "<strong>Best figure to start with:</strong> "
+        f"{html.escape(title)}. {html.escape(reason)}"
+        "</p>"
+    )
+
+
+def _interactive_explorer_card_html(
+    title: str,
+    purpose: str,
+    href: str,
+    iframe_title: str,
+    expanded: bool = False,
+) -> str:
+    details_attr = " open" if expanded else ""
+    summary = "Embedded explorer" if expanded else "Load embedded explorer"
+    return (
+        "<div class='analysis-card interactive-explorer-card'>"
+        f"<h3>{html.escape(title)}</h3>"
+        f"<p>{html.escape(purpose)}</p>"
+        "<div class='downloads'>"
+        f"<a href='{html.escape(href)}'>Open interactive report</a>"
+        "</div>"
+        f"<details class='details-block explorer-frame'{details_attr}>"
+        f"<summary>{html.escape(summary)}</summary>"
+        f"<iframe loading='lazy' src='{html.escape(href)}' title='{html.escape(iframe_title)}'></iframe>"
+        "</details>"
+        "</div>"
+    )
+
+
 def _report_warning_box_html(message: str, badges: list[tuple[str, str]] | None = None) -> str:
     badge_html = " ".join(_report_badge_html(label, kind) for label, kind in (badges or []))
     return (
@@ -12558,6 +12591,42 @@ def write_important_final_interpretation_outputs(
     write_rows(warnings_path, compact_warning_rows, warning_fields)
     warnings_summary_path = tables / "warnings_and_limitations_summary.tsv"
     write_rows(warnings_summary_path, warnings_summary_rows, warning_summary_fields)
+    warning_priority_rows = []
+    for row in warnings_summary_rows:
+        severity = row.get("severity", "")
+        _description, _action, why_it_matters = warning_copy_parts(
+            row.get("warning_type", ""),
+            row.get("section", ""),
+            row.get("description", ""),
+        )
+        priority_score = (
+            {"critical": 100.0, "high": 75.0, "moderate": 45.0, "low": 18.0, "info": 5.0}.get(severity, 10.0)
+            + min(number(row.get("warning_count", "0")), 1000.0) / 20.0
+            + min(number(row.get("affected_rows_total", "0")), 1000.0) / 40.0
+        )
+        warning_priority_rows.append({
+            "rank": "0",
+            "section": row.get("section", ""),
+            "severity": severity,
+            "warning_type": row.get("warning_type", ""),
+            "affected_database": row.get("affected_database", ""),
+            "warning_count": row.get("warning_count", ""),
+            "affected_rows_total": row.get("affected_rows_total", ""),
+            "example_features": row.get("example_features", ""),
+            "why_it_matters": why_it_matters,
+            "recommended_action": row.get("recommended_action", ""),
+            "source_file": row.get("source_file", ""),
+            "priority_score": f"{priority_score:.2f}",
+        })
+    warning_priority_rows.sort(key=lambda item: (-number(item.get("priority_score", "0")), item.get("section", ""), item.get("warning_type", "")))
+    for idx, row in enumerate(warning_priority_rows, 1):
+        row["rank"] = str(idx)
+    warning_priority_path = tables / "warning_priority_summary.tsv"
+    warning_priority_fields = [
+        "rank", "section", "severity", "warning_type", "affected_database", "warning_count", "affected_rows_total",
+        "example_features", "why_it_matters", "recommended_action", "source_file", "priority_score",
+    ]
+    write_rows(warning_priority_path, warning_priority_rows, warning_priority_fields)
     warnings_by_section_rows = [
         {"section": section, "severity": severity, "warning_count": str(count)}
         for (section, severity), count in sorted(warnings_by_section_counter.items())
@@ -12759,6 +12828,41 @@ def write_important_final_interpretation_outputs(
             effect_size=row.get("change_percent_points", ""),
             q_value=row.get("q_value", ""),
         )
+    for row in read_table(important_dir / "key_tables" / "feature_variation_summary.tsv"):
+        db = row.get("database", "")
+        feature_id = row.get("feature_id", "")
+        if not feature_id:
+            continue
+        flags = split_flags(row.get("warning_flags", ""))
+        variation_score = number(row.get("variation_score", "0"))
+        low_identity = number(row.get("low_identity_hits", "0"))
+        low_coverage = number(row.get("low_coverage_hits", "0"))
+        total_hits = number(row.get("total_hits", "0"))
+        if variation_score <= 0 and not (low_identity or low_coverage):
+            continue
+        score = (
+            18.0
+            + database_bonus(db)
+            + min(total_hits, 100.0) / 5.0
+            + min(variation_score, 100.0) / 3.0
+            + min(low_identity + low_coverage, 50.0) / 2.0
+            - warning_penalty(flags) / 2.0
+        )
+        add_highlight(
+            highlight_rows,
+            "Variations",
+            "feature_variation_review",
+            f"{feature_id} variation review",
+            f"{feature_id} has identity/coverage variation or low-quality hit flags; inspect hit-level evidence before interpretation.",
+            "key_tables/feature_variation_summary.tsv",
+            "#variations",
+            score,
+            row,
+            primary_database=db,
+            primary_feature=feature_id,
+            denominator=row.get("total_hits", ""),
+            effect_size=row.get("variation_score", ""),
+        )
     for row in cooccurrence_pair_rows:
         db_a = row.get("feature_a_database", "")
         db_b = row.get("feature_b_database", "")
@@ -12844,6 +12948,99 @@ def write_important_final_interpretation_outputs(
             metadata_context=f"{row.get('metadata_column', '')}={row.get('metadata_group', '')}",
             denominator=row.get("supporting_samples", ""),
         )
+    for row in read_table(tables / "diversity_core_common_accessory_rare_features.tsv"):
+        db = row.get("database", "")
+        feature_id = row.get("feature_id", "")
+        feature_class = row.get("feature_class", "")
+        if not feature_id:
+            continue
+        prevalence = number(row.get("prevalence_percent", "0"))
+        flags = split_flags(row.get("warning_flags", ""))
+        class_bonus = {"core": 24.0, "common": 18.0, "rare": 14.0, "accessory": 8.0}.get(feature_class, 6.0)
+        score = 14.0 + database_bonus(db) + class_bonus + min(prevalence, 100.0) / 5.0 - warning_penalty(flags)
+        add_highlight(
+            highlight_rows,
+            "Diversity / Pan-feature Summary",
+            "feature_class_review",
+            f"{feature_id} is {feature_class}",
+            f"{feature_id} is classified as {feature_class or 'unclassified'} in this dataset, helping separate core/common signal from accessory or rare features.",
+            "tables/diversity_core_common_accessory_rare_features.tsv",
+            "#diversity",
+            score,
+            row,
+            primary_database=db,
+            primary_feature=feature_id,
+            denominator=f"{row.get('positive_genomes', '')}/{row.get('total_genomes', '')}",
+            effect_size=row.get("prevalence_percent", ""),
+        )
+    for row in concordance_feature_rows:
+        feature_id = row.get("feature_id", "")
+        if not feature_id:
+            continue
+        flags = split_flags(row.get("warning_flags", ""))
+        called_by_both = number(row.get("called_by_both", "0"))
+        total_positive = number(row.get("total_positive_genomes", "0"))
+        tool_specific = number(row.get("abricate_only", "0")) + number(row.get("amrfinderplus_only", "0"))
+        score = 22.0 + min(total_positive, 100.0) / 4.0 + called_by_both * 2.0 + min(tool_specific, 50.0) / 5.0 - warning_penalty(flags)
+        add_highlight(
+            highlight_rows,
+            "Concordance / Database Agreement",
+            "amr_concordance_review",
+            f"{feature_id} AMR concordance",
+            f"{feature_id} has {row.get('called_by_both', '0')} called-by-both, {row.get('abricate_only', '0')} ABRicate-only, and {row.get('amrfinderplus_only', '0')} AMRFinderPlus-only genome call(s).",
+            "tables/amr_concordance_feature_level.tsv",
+            "#concordance",
+            score,
+            row,
+            primary_database="amr",
+            primary_feature=feature_id,
+            denominator=row.get("total_positive_genomes", ""),
+            effect_size=row.get("called_by_both", ""),
+        )
+    for row in confidence_rows:
+        section = row.get("section", "")
+        feature_id = row.get("feature_id", "") or row.get("finding_id", "")
+        confidence = row.get("confidence_label", "")
+        if confidence not in {"high_confidence", "moderate_confidence", "warning_heavy"}:
+            continue
+        score = 18.0 + {"high_confidence": 32.0, "moderate_confidence": 22.0, "warning_heavy": 12.0}.get(confidence, 0.0)
+        score += min(number(row.get("sample_size", "0")), 100.0) / 5.0
+        add_highlight(
+            highlight_rows,
+            "Evidence & Confidence",
+            "finding_confidence_review",
+            f"{confidence.replace('_', ' ')} finding",
+            row.get("finding_text", "") or "Finding confidence row selected for review.",
+            "tables/finding_confidence_summary.tsv",
+            "#evidence",
+            score,
+            row,
+            primary_database=row.get("database", ""),
+            primary_feature=feature_id,
+            metadata_context=section,
+            denominator=row.get("sample_size", ""),
+            effect_size=row.get("effect_size", ""),
+            q_value=row.get("q_value", ""),
+        )
+    for row in warning_priority_rows[:80]:
+        warning_type = row.get("warning_type", "")
+        if not warning_type:
+            continue
+        score = number(row.get("priority_score", "0"))
+        add_highlight(
+            highlight_rows,
+            "Warnings & Limitations",
+            "warning_priority_review",
+            f"{row.get('section', '')}: {warning_type}",
+            row.get("why_it_matters", "") or "Warning priority selected for interpretation review.",
+            "tables/warning_priority_summary.tsv",
+            "#warnings",
+            score,
+            row,
+            primary_database=row.get("affected_database", ""),
+            primary_feature=warning_type,
+            denominator=row.get("warning_count", ""),
+        )
     for row in notable_rows[:50]:
         flags = split_flags(row.get("warning_flags", ""))
         score = 30.0 + number(row.get("notable_genome_score", "0")) - warning_penalty(flags) / 2.0
@@ -12903,49 +13100,15 @@ def write_important_final_interpretation_outputs(
     by_section_fields = ["section_rank", *highlight_fields]
     write_rows(by_section_path, by_section_rows, by_section_fields)
 
-    warning_priority_rows = []
-    for row in warnings_summary_rows:
-        severity = row.get("severity", "")
-        _description, _action, why_it_matters = warning_copy_parts(
-            row.get("warning_type", ""),
-            row.get("section", ""),
-            row.get("description", ""),
-        )
-        priority_score = (
-            {"critical": 100.0, "high": 75.0, "moderate": 45.0, "low": 18.0, "info": 5.0}.get(severity, 10.0)
-            + min(number(row.get("warning_count", "0")), 1000.0) / 20.0
-            + min(number(row.get("affected_rows_total", "0")), 1000.0) / 40.0
-        )
-        warning_priority_rows.append({
-            "rank": "0",
-            "section": row.get("section", ""),
-            "severity": severity,
-            "warning_type": row.get("warning_type", ""),
-            "affected_database": row.get("affected_database", ""),
-            "warning_count": row.get("warning_count", ""),
-            "affected_rows_total": row.get("affected_rows_total", ""),
-            "example_features": row.get("example_features", ""),
-            "why_it_matters": why_it_matters,
-            "recommended_action": row.get("recommended_action", ""),
-            "source_file": row.get("source_file", ""),
-            "priority_score": f"{priority_score:.2f}",
-        })
-    warning_priority_rows.sort(key=lambda item: (-number(item.get("priority_score", "0")), item.get("section", ""), item.get("warning_type", "")))
-    for idx, row in enumerate(warning_priority_rows, 1):
-        row["rank"] = str(idx)
-    warning_priority_path = tables / "warning_priority_summary.tsv"
-    warning_priority_fields = [
-        "rank", "section", "severity", "warning_type", "affected_database", "warning_count", "affected_rows_total",
-        "example_features", "why_it_matters", "recommended_action", "source_file", "priority_score",
-    ]
-    write_rows(warning_priority_path, warning_priority_rows, warning_priority_fields)
-
     figure_section_map = [
         ("prevalence", "Prevalence", "descriptive", "Feature prevalence and burden summaries."),
         ("geographic", "Geographic Distribution", "exploratory", "Dataset-specific geography summaries with sampling cautions."),
         ("variation", "Variations", "review", "Identity, coverage, and hit variation summaries."),
         ("temporal", "Temporal Trends", "exploratory", "Collection-year trend summaries."),
         ("cooccurrence", "Co-occurrence / Genomic Context", "exploratory", "Feature-pair and genomic-context summaries."),
+        ("top_context", "Co-occurrence / Genomic Context", "exploratory", "Feature-pair and genomic-context summaries."),
+        ("genomic_context", "Co-occurrence / Genomic Context", "exploratory", "Feature-pair and genomic-context summaries."),
+        ("contig_neighborhood", "Co-occurrence / Genomic Context", "exploratory", "Contig-neighborhood context summaries."),
         ("metadata", "Metadata Associations", "warning-aware", "Metadata enrichment and burden screens."),
         ("lineage", "Lineage / Clonal Structure", "lineage", "Lineage context and confounding summaries."),
         ("diversity", "Diversity / Pan-feature Summary", "descriptive", "Feature richness and pan-feature summaries."),
@@ -13451,12 +13614,14 @@ def write_important_results_report(
         "Concordance / Database Agreement",
         "Evidence & Confidence",
         "Diversity / Pan-feature Summary",
+        "Variations",
         "Geographic Distribution",
         "Temporal Trends",
         "Metadata Associations",
         "Lineage / Clonal Structure",
         "Co-occurrence / Genomic Context",
         "Notable Genomes",
+        "Warnings & Limitations",
     ]
     ranked_report_highlights = sorted(
         report_highlight_rows,
@@ -14440,6 +14605,20 @@ def write_important_results_report(
         f"<div class='finding-card'><h3>4. Figure gallery</h3><p>{len(featured_figure_specs):,} featured figure(s) are shown below with PNG/SVG/PDF/data links for quick manuscript or slide review.</p><span class='badge badge-exploratory'>Visual scan</span></div>"
         "</div>"
     )
+    top_variation_card = top_variation[0] if top_variation else {}
+    top_lineage_card = top_lineage_distribution[0] if top_lineage_distribution else {}
+    report_storyline_html = (
+        "<div class='analysis-card report-storyline'><h2>Report storyline</h2>"
+        "<p>Use this as the shortest path through the report before opening dense tables or interactive explorers.</p>"
+        "<div class='finding-grid'>"
+        f"<div class='finding-card'><h3>What is common?</h3><p>{html.escape(top_prevalence_card.get('feature_id', 'Top features'))} in {html.escape(top_prevalence_card.get('database', 'detected databases'))} is a prevalence starting point ({html.escape(top_prevalence_card.get('prevalence_display') or top_prevalence_card.get('prevalence_percent', 'NA'))}).</p><a href='#prevalence'>Open prevalence</a></div>"
+        f"<div class='finding-card'><h3>What varies?</h3><p>{html.escape(top_variation_card.get('feature_id', 'Variation summaries'))} highlights identity, coverage, or hit-count variability worth manual review.</p><a href='#variations'>Open variations</a></div>"
+        f"<div class='finding-card'><h3>Where and when?</h3><p>{html.escape(top_geography_card.get('group_name', 'Geographic groups'))} and valid-year temporal summaries show dataset structure, not global or causal prevalence.</p><a href='#geography'>Open geography</a></div>"
+        f"<div class='finding-card'><h3>Clone or broad signal?</h3><p>{html.escape(top_lineage_card.get('lineage_id', 'Lineage distribution'))} is the first check for clone/ST/ANI/BioProject concentration.</p><a href='#lineage'>Open lineage</a></div>"
+        f"<div class='finding-card'><h3>Which genomes first?</h3><p>{html.escape(top_notable_card.get('assembly_accession', 'Notable genomes'))} is the current top research-review genome; this is not a clinical risk score.</p><a href='#notable-genomes'>Open notable genomes</a></div>"
+        f"<div class='finding-card'><h3>What can mislead?</h3><p>{html.escape(top_warning_row.get('warning_type', 'Warnings'))} is the highest-priority warning category currently surfaced for interpretation review.</p><a href='#warnings'>Open warnings</a></div>"
+        "</div></div>"
+    )
     top_download_links = _report_download_links_html([
         ("../basic/enriched_genome_dataset.csv", "Download enriched dataset"),
         ("downloads/important_summary_tables.zip", "Download summary tables ZIP"),
@@ -14565,6 +14744,68 @@ def write_important_results_report(
         "Some complete outputs are intentionally outside the compact important report; the manifest tells you what exists.",
         "download_manifest.tsv and important_file_index.tsv.",
     )
+    prevalence_explorer_html = _interactive_explorer_card_html(
+        "Interactive prevalence explorer",
+        "Filter by database, prevalence threshold, and display size when you need feature lookup beyond the curated static figures.",
+        "figures/prevalence_analysis.html",
+        "Feature prevalence interactive report",
+    )
+    geography_explorer_html = _interactive_explorer_card_html(
+        "Interactive gene map",
+        "Select an individual feature or database burden, then review the map and ranked country bars together. Redder bubbles indicate higher dataset prevalence; larger bubbles indicate more genomes.",
+        "figures/geographic_distribution.html",
+        "Geographic distribution interactive report",
+        expanded=True,
+    )
+    variation_explorer_html = _interactive_explorer_card_html(
+        "Interactive variation explorer",
+        "Inspect identity, coverage, alignment length, and hit-count variation after using the static top-variable plots.",
+        "figures/variation_analysis.html",
+        "Feature variation interactive report",
+    )
+    temporal_explorer_html = _interactive_explorer_card_html(
+        "Interactive temporal explorer",
+        "Review yearly prevalence and burden with positive/total denominators. Treat low-support trends as descriptive only.",
+        "figures/temporal_trends.html",
+        "Temporal trends interactive report",
+    )
+    cooccurrence_explorer_html = _interactive_explorer_card_html(
+        "Interactive co-occurrence and context explorer",
+        "Use the heatmap/network for feature-profile screening, then use same-contig and proximity evidence for stronger context review.",
+        "figures/cooccurrence_context.html",
+        "Co-occurrence and genomic context interactive report",
+    )
+    metadata_explorer_html = _interactive_explorer_card_html(
+        "Interactive metadata association explorer",
+        "Use this for exploratory enrichment and burden screens after reviewing metadata usability and warning flags.",
+        "figures/metadata_associations.html",
+        "Metadata associations interactive report",
+    )
+    lineage_explorer_html = _interactive_explorer_card_html(
+        "Interactive lineage explorer",
+        "Use this after metadata associations to check whether patterns are broad or concentrated in a clone, ST, ANI cluster, or BioProject.",
+        "figures/lineage_clonal_structure.html",
+        "Lineage and clonal structure interactive report",
+    )
+    diversity_explorer_html = _interactive_explorer_card_html(
+        "Interactive diversity explorer",
+        "Compare feature richness, database burden, pan-feature classes, accumulation, Jaccard distance, and metadata-stratified diversity.",
+        "figures/diversity_analysis.html",
+        "Diversity and pan-feature summary interactive report",
+    )
+    prevalence_best_figure_html = _best_figure_note_html("Genomes positive by database", "This is the cleanest denominator-aware entry point before inspecting individual genes.")
+    geographic_best_figure_html = _best_figure_note_html("Geographic gene-map preview", "Start with the map, then verify the same pattern in country bars and the full TSV.")
+    variation_best_figure_html = _best_figure_note_html("Most variable features", "Use it to decide which identity/coverage distributions deserve manual review.")
+    temporal_best_figure_html = _best_figure_note_html("Selected feature prevalence over time", "It preserves yearly denominators and is easier to interpret than a dense heatmap.")
+    cooccurrence_best_figure_html = _best_figure_note_html("Co-occurrence heatmap plus context evidence ladder", "Use the heatmap for screening and the ladder for stronger coordinate-level evidence.")
+    metadata_best_figure_html = _best_figure_note_html("Metadata enrichment volcano", "It quickly separates larger candidate effects from low-support association noise.")
+    lineage_best_figure_html = _best_figure_note_html("Lineage distribution", "It tells you whether one clone, ST, ANI cluster, or BioProject may dominate downstream patterns.")
+    diversity_best_figure_html = _best_figure_note_html("Core/common/accessory/rare features by database", "This gives the fastest overview of the pan-feature structure.")
+    notable_best_figure_html = _best_figure_note_html("Notable genome score components", "It explains why each genome ranked highly instead of showing only a final score.")
+    ordination_best_figure_html = _best_figure_note_html("Feature-profile PCoA by lineage", "It shows whether annotation-profile clusters align with clonal structure.")
+    concordance_best_figure_html = _best_figure_note_html("AMR tool concordance summary", "It separates overlapping calls from tool-specific calls before feature-level review.")
+    evidence_best_figure_html = _best_figure_note_html("Evidence confidence overview", "It shows how many findings are strong, exploratory, warning-heavy, or descriptive.")
+    warnings_best_figure_html = _best_figure_note_html("Warnings by severity", "It tells you what needs attention before interpreting section-level findings.")
     report_path = important_dir / "results.html"
     report_path.write_text(
         f"""<!doctype html>
@@ -14618,6 +14859,12 @@ main {{ margin-left: 290px; padding: 1.2rem 1.4rem 2rem; min-width: 0; max-width
 .section-focus-item {{ border-left: 4px solid var(--primary); background: white; border-radius: 8px; padding: 0.7rem; }}
 .section-focus-item h3 {{ margin: 0 0 0.35rem; font-size: 0.88rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }}
 .section-focus-item p {{ margin: 0; color: var(--text); font-size: 0.92rem; }}
+.best-figure-note {{ border-left: 4px solid var(--primary); background: var(--primary-soft); color: var(--text); padding: 0.65rem 0.8rem; border-radius: 8px; margin: 0.75rem 0; }}
+.interactive-explorer-card .downloads {{ margin-bottom: 0.45rem; }}
+.explorer-frame {{ background: #ffffff; }}
+.explorer-frame iframe {{ margin-top: 0.65rem; }}
+.report-storyline {{ background: #f8fafc; }}
+.report-storyline h2 {{ margin-top: 0; }}
 .diagnostic-list {{ columns: 2; column-gap: 2rem; margin: 0.5rem 0 0; padding-left: 1.1rem; }}
 .diagnostic-list li {{ break-inside: avoid; margin-bottom: 0.25rem; }}
 .cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 0.75rem; }}
@@ -14738,6 +14985,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 <section id="featured" class="section"><h1>Featured Results</h1>{card_html}<p>{db_badges}</p>
 {featured_focus_html}
 {featured_guide_cards_html}
+{report_storyline_html}
 <details class="details-block"><summary>How to use this report</summary><p>Start with the cards and featured figures, then use the sidebar to inspect each analysis section. Complete TSVs are preserved even when report-facing tables and figures are capped for readability.</p></details>
 <h2>Executive finding cards</h2>{featured_finding_cards_html}
 <details class="details-block"><summary>Trust, caution, and review queues</summary>
@@ -14772,7 +15020,8 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 {prevalence_cards_html}
 {prevalence_written_html}
 {prevalence_reading_cards_html}
-<div class="analysis-card"><h3>Interactive prevalence explorer</h3><p>Filter by database, prevalence threshold, and display size. Use this for quick feature lookup with denominator-aware percentages.</p><iframe src="figures/prevalence_analysis.html" title="Feature prevalence interactive report"></iframe></div>
+{prevalence_explorer_html}
+{prevalence_best_figure_html}
 <div class="analysis-card"><h3>Report-facing prevalence figures</h3>{prevalence_figures_html}</div>
 <details class="details-block"><summary>Detailed prevalence tables</summary>
 <div class="analysis-card"><h3>Database summary</h3>{prevalence_database_table_html}</div>
@@ -14785,7 +15034,8 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 {geographic_summary_html}
 {geographic_reading_cards_html}
 {geographic_map_preview_html}
-<div class="analysis-card"><h3>Interactive gene map</h3><p>Select an individual feature or database burden, then review the map and ranked country bars together. Redder bubbles indicate higher dataset prevalence; larger bubbles indicate more genomes.</p><iframe src="figures/geographic_distribution.html" title="Geographic distribution interactive report"></iframe></div>
+{geography_explorer_html}
+{geographic_best_figure_html}
 <div class="analysis-card"><h3>Geographic figures</h3>{geographic_figures_html}</div>
 <details class="details-block"><summary>Detailed geographic tables</summary>
 <div class="analysis-card"><h3>Top database burden by country</h3>{geographic_burden_table_html}</div>
@@ -14797,7 +15047,8 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 {variation_focus_html}
 {variation_cards_html}
 {variation_reading_cards_html}
-<div class="analysis-card"><h3>Interactive variation explorer</h3><p>Use this to inspect identity, coverage, alignment length, and hit-count variation where those metrics are available.</p><iframe src="figures/variation_analysis.html" title="Feature variation interactive report"></iframe></div>
+{variation_explorer_html}
+{variation_best_figure_html}
 <div class="analysis-card"><h3>Variation figures</h3>{variation_figures_html}</div>
 <details class="details-block"><summary>Detailed variation tables</summary>
 <div class="analysis-card"><h3>Variation by database</h3>{variation_database_table_html}</div>
@@ -14808,7 +15059,8 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 {temporal_focus_html}
 <p>Prevalence trends use yearly percentages with genome-count denominators. Database burden is summarized as mean detected features per genome by collection year.</p>
 {temporal_reading_cards_html}
-<div class="analysis-card"><h3>Interactive temporal explorer</h3><p>Review yearly prevalence and burden with positive/total denominators. Treat low-support trends as descriptive only.</p><iframe src="figures/temporal_trends.html" title="Temporal trends interactive report"></iframe></div>
+{temporal_explorer_html}
+{temporal_best_figure_html}
 <div class="analysis-card"><h3>Temporal figures</h3>{temporal_figures_html}</div>
 <details class="details-block"><summary>Detailed temporal tables</summary>
 <div class="analysis-card"><h3>Temporal trend table</h3>{temporal_table_html}</div>
@@ -14818,7 +15070,8 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 {cooccurrence_focus_html}
 {cooccurrence_summary_html}
 {cooccurrence_reading_cards_html}
-<div class="analysis-card"><h3>Interactive co-occurrence and context explorer</h3><p>Use the heatmap/network for feature-profile screening, then use same-contig and proximity evidence for stronger context review.</p><iframe src="figures/cooccurrence_context.html" title="Co-occurrence and genomic context interactive report"></iframe></div>
+{cooccurrence_explorer_html}
+{cooccurrence_best_figure_html}
 <div class="analysis-card"><h3>Co-occurrence and context figures</h3>{cooccurrence_figures_html}</div>
 <details class="details-block"><summary>Detailed co-occurrence and context tables</summary>
 <div class="analysis-card"><h3>Top co-occurrence pairs</h3>{cooccurrence_table_html}</div>
@@ -14830,7 +15083,8 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 {metadata_summary_html}
 {metadata_reading_cards_html}
 <div class="analysis-card"><h3>Metadata usability</h3>{metadata_usability_cards}{metadata_usability_table_html}</div>
-<div class="analysis-card"><h3>Interactive metadata association explorer</h3><p>Use this for exploratory enrichment and burden screens. Review warnings before treating any metadata pattern as broad.</p><iframe src="figures/metadata_associations.html" title="Metadata associations interactive report"></iframe></div>
+{metadata_explorer_html}
+{metadata_best_figure_html}
 <div class="analysis-card"><h3>Metadata association figures</h3>{metadata_figures_html}</div>
 <details class="details-block"><summary>Detailed metadata association tables</summary>
 <div class="analysis-card"><h3>Top feature associations</h3>{metadata_feature_table_html}</div>
@@ -14844,7 +15098,8 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 {lineage_summary_html}
 {lineage_reading_cards_html}
 {lineage_written_html}
-<div class="analysis-card"><h3>Interactive lineage explorer</h3><p>Use this after metadata associations to check whether patterns are broad or concentrated in a clone, ST, ANI cluster, or BioProject.</p><iframe src="figures/lineage_clonal_structure.html" title="Lineage and clonal structure interactive report"></iframe></div>
+{lineage_explorer_html}
+{lineage_best_figure_html}
 <div class="analysis-card"><h3>Lineage figures</h3>{lineage_figures_html}</div>
 <details class="details-block"><summary>Detailed lineage tables</summary>
 <div class="analysis-card"><h3>Lineage distribution</h3>{lineage_distribution_table_html}</div>
@@ -14858,7 +15113,8 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 {diversity_focus_html}
 {diversity_cards_html}
 {diversity_written_html}
-<div class="analysis-card"><h3>Interactive diversity explorer</h3><p>Compare feature richness, database burden, pan-feature classes, accumulation, Jaccard distance, and metadata-stratified diversity.</p><iframe src="figures/diversity_analysis.html" title="Diversity and pan-feature summary interactive report"></iframe></div>
+{diversity_explorer_html}
+{diversity_best_figure_html}
 <div class="analysis-card"><h3>Diversity figures</h3>{diversity_figures_html}</div>
 <div class="analysis-card"><h3>Feature richness by genome</h3>{diversity_richness_table_html}</div>
 <div class="analysis-card"><h3>Core/common/accessory/rare features</h3>{diversity_class_table_html}</div>
@@ -14867,29 +15123,34 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 <section id="notable-genomes" class="section"><h2>Notable Genomes / Genome Prioritization</h2><div class="warning-box warning">This prioritization is for research review only. It is not a clinical risk score.</div>
 {notable_focus_html}
 <p>Genomes are ranked by transparent annotation-burden, genomic-context, rare-feature, temporal-trend, and variation components with warning penalties.</p>
+{notable_best_figure_html}
 <div class="analysis-card"><h3>Notable genome visuals</h3>{notable_figures_html}</div>
 <div class="analysis-card"><h3>Prioritized genome table</h3>{notable_table_html}</div>
 <div class="downloads"><a href="tables/notable_genomes.tsv">Download notable genomes</a><a href="tables/notable_genome_score_components.tsv">Download score components</a><a href="figures/notable_genomes_ranked.data.tsv">Download plotted data</a></div></section>
 <section id="ordination" class="section"><h2>Feature-profile Ordination</h2><div class="warning-box warning">Feature-profile ordination reflects annotation similarity, not whole-genome phylogeny.</div>
 {ordination_focus_html}
 <p>PCoA coordinates are computed from Jaccard feature-profile distances when available and colored by lineage, country, source, or BioProject in companion figures.</p>
+{ordination_best_figure_html}
 <div class="analysis-card"><h3>Ordination figures</h3>{ordination_figures_html}</div>
 <div class="analysis-card"><h3>Ordination coordinates</h3>{ordination_table_html}</div>
 <div class="downloads"><a href="tables/feature_profile_ordination.tsv">Download ordination table</a><a href="figures/feature_profile_pcoa_by_lineage.data.tsv">Download PCoA plotted data</a></div></section>
 <section id="concordance" class="section"><h2>Concordance / Database Agreement</h2><div class="warning-box warning">Tool-specific calls are retained for review. Differences may reflect database scope, thresholds, naming, or partial hits.</div>
 {concordance_focus_html}
+{concordance_best_figure_html}
 <div class="analysis-card"><h3>Concordance figures</h3>{concordance_figures_html}</div>
 <div class="analysis-card"><h3>Concordance summary</h3>{concordance_summary_table_html}</div>
 <div class="analysis-card"><h3>Feature-level AMR concordance</h3>{concordance_feature_table_html}</div>
 <div class="downloads"><a href="tables/database_concordance_summary.tsv">Download concordance summary</a><a href="tables/amr_concordance_feature_level.tsv">Download feature-level concordance</a><a href="tables/amr_concordance_by_sample.tsv">Download sample-level concordance</a></div></section>
 <section id="evidence" class="section"><h2>Evidence & Confidence</h2><p>This synthesis classifies report findings by sample support, statistical evidence, genomic-context level, and warning flags. Most findings should be treated as exploratory unless support and warning labels indicate otherwise.</p>
 {evidence_focus_html}
+{evidence_best_figure_html}
 <div class="analysis-card"><h3>Evidence summary figures</h3>{evidence_figures_html}</div>
 <div class="analysis-card"><h3>Finding confidence table</h3>{confidence_table_html}</div>
 <div class="downloads"><a href="tables/evidence_summary.tsv">Download evidence summary</a><a href="tables/finding_confidence_summary.tsv">Download finding confidence summary</a><a href="tables/evidence_by_section.tsv">Download evidence by section</a></div></section>
 <section id="warnings" class="section"><h2>Warnings & Limitations</h2><div class="warning-box warning">Warnings do not necessarily invalidate the run, but they affect interpretation. Complete TSV outputs are preserved even when report-facing figures are capped.</div>
 {warnings_focus_html}
 {warning_triage_cards_html}
+{warnings_best_figure_html}
 <div class="analysis-card"><h3>Warning summary figures</h3>{warnings_figures_html}</div>
 <details class="details-block"><summary>Detailed warning tables</summary>
 <div class="analysis-card"><h3>Top warnings</h3>{warnings_table_html}</div>

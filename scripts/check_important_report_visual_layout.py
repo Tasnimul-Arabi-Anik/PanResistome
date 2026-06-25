@@ -28,6 +28,10 @@ REQUIRED_UI_CLASSES = [
     "figure-card",
     "figure-guidance",
     "section-focus",
+    "best-figure-note",
+    "interactive-explorer-card",
+    "explorer-frame",
+    "report-storyline",
     "table-card",
     "analysis-card",
     "warning-box",
@@ -47,6 +51,10 @@ REQUIRED_CSS_TOKENS = [
     ".figure-card",
     ".figure-guidance",
     ".section-focus",
+    ".best-figure-note",
+    ".interactive-explorer-card",
+    ".explorer-frame",
+    ".report-storyline",
     ".download-bar",
     ".download-card-grid",
     ".details-block",
@@ -92,6 +100,7 @@ class ReportHTMLScanner(html.parser.HTMLParser):
         self.h2_count = 0
         self.img_without_alt: list[str] = []
         self.iframe_without_title: list[str] = []
+        self.iframes: list[dict[str, str]] = []
 
     def handle_starttag(self, tag: str, attrs_raw: list[tuple[str, str | None]]) -> None:
         attrs = _attrs_to_dict(attrs_raw)
@@ -113,8 +122,10 @@ class ReportHTMLScanner(html.parser.HTMLParser):
             self.summary_count += 1
         if tag == "img" and not attrs.get("alt", "").strip():
             self.img_without_alt.append(attrs.get("src", ""))
-        if tag == "iframe" and not attrs.get("title", "").strip():
-            self.iframe_without_title.append(attrs.get("src", ""))
+        if tag == "iframe":
+            self.iframes.append(attrs)
+            if not attrs.get("title", "").strip():
+                self.iframe_without_title.append(attrs.get("src", ""))
 
         figure_obj: dict[str, object] | None = None
         if tag == "div" and "figure-card" in classes:
@@ -201,6 +212,19 @@ def _check_static_layout(html_text: str, scanner: ReportHTMLScanner, errors: lis
         errors.append(f"{len(scanner.img_without_alt)} image(s) are missing alt text")
     if scanner.iframe_without_title:
         errors.append(f"{len(scanner.iframe_without_title)} iframe(s) are missing title attributes")
+    iframe_without_lazy = [
+        attrs.get("src", "")
+        for attrs in scanner.iframes
+        if attrs.get("loading", "").strip().lower() != "lazy"
+    ]
+    if iframe_without_lazy:
+        errors.append(f"{len(iframe_without_lazy)} iframe(s) are not lazy loaded")
+    if "Load embedded explorer" not in html_text:
+        errors.append("results.html does not expose collapsed embedded explorer controls")
+    if "Best figure to start with" not in html_text:
+        errors.append("results.html does not include best-figure guidance notes")
+    if "Report storyline" not in html_text:
+        errors.append("results.html does not include a report storyline card")
     if scanner.details_count == 0 or scanner.summary_count == 0:
         errors.append("results.html has no collapsible details/summary blocks for dense sections")
 

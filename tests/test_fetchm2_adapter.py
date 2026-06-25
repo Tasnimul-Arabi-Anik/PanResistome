@@ -893,6 +893,12 @@ class FetchM2AdapterTests(unittest.TestCase):
                 self.assertFalse(_is_same_feature_pair(str(row.get("primary_feature", "")), str(row.get("secondary_feature", ""))))
             highlight_sections = set(highlights.head(20)["section"].fillna("").astype(str))
             self.assertGreaterEqual(len(highlight_sections), 2)
+            all_highlight_sections = set(highlights["section"].fillna("").astype(str))
+            self.assertIn("Diversity / Pan-feature Summary", all_highlight_sections)
+            self.assertIn("Warnings & Limitations", all_highlight_sections)
+            self.assertIn("Concordance / Database Agreement", all_highlight_sections)
+            if confidence["confidence_label"].isin(["high_confidence", "moderate_confidence", "warning_heavy"]).any():
+                self.assertIn("Evidence & Confidence", all_highlight_sections)
             by_section = pd.read_csv(sample_dir / "important" / "tables" / "report_highlights_by_section.tsv", sep="\t")
             self.assertTrue({"section_rank", "section", "highlight_type", "triage_score", "confidence_label"}.issubset(by_section.columns))
             if not by_section.empty:
@@ -994,8 +1000,15 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("analysis-card", report_html)
             self.assertIn("grid-template-columns: repeat(auto-fit, minmax(150px, 1fr))", report_html)
             self.assertIn("Diagnostics and unavailable plots", report_html)
+            self.assertIn("Report storyline", report_html)
+            self.assertIn("Best figure to start with", report_html)
+            self.assertIn("interactive-explorer-card", report_html)
+            self.assertIn("explorer-frame", report_html)
+            self.assertIn("Load embedded explorer", report_html)
+            self.assertIn("Embedded explorer", report_html)
+            self.assertGreaterEqual(report_html.count("loading='lazy'"), 8)
             if by_section["section"].nunique() >= 5:
-                balanced_preview = report_html.split("<h2>Balanced highlights by section</h2>", 1)[1].split('<div class="downloads"', 1)[0]
+                balanced_preview = report_html.split("<h3>Balanced highlights by section</h3>", 1)[1].split('<div class="downloads"', 1)[0]
                 preview_sections = [
                     section
                     for section in sorted(set(by_section["section"].fillna("").astype(str)))
@@ -1053,6 +1066,10 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "figure-card",
                 "figure-guidance",
                 "section-focus",
+                "best-figure-note",
+                "interactive-explorer-card",
+                "explorer-frame",
+                "report-storyline",
                 "table-card",
                 "table-actions",
                 "table-download-link",
@@ -1075,6 +1092,10 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "width: 92vw !important",
                 ".figure-guidance",
                 ".section-focus",
+                ".best-figure-note",
+                ".interactive-explorer-card",
+                ".explorer-frame",
+                ".report-storyline",
             ]:
                 self.assertIn(css_token, report_html)
             self.assertIn("Featured figure gallery", report_html)
