@@ -9712,6 +9712,26 @@ def _lineage_support_label(lineage_n: int, outside_n: int | None = None) -> str:
     return "standard_support"
 
 
+def _lineage_display_id(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return "not available"
+    if ":" in text:
+        tail = text.rsplit(":", 1)[-1].strip()
+        if tail:
+            text = tail
+    if text.startswith("ST_") and text[3:].isdigit():
+        return f"ST{text[3:]}"
+    return text
+
+
+def _fraction_display_from_value(value: str) -> str:
+    fraction = _float_or_none(value)
+    if fraction is None:
+        return "not available"
+    return f"{fraction * 100:.1f}%"
+
+
 def _lineage_dominance_label(fraction: float | None) -> str:
     if fraction is None:
         return "insufficient_lineage_data"
@@ -10385,15 +10405,32 @@ def write_important_lineage_outputs(
         availability_note = "MLST sequence type information was not available. Lineage interpretation is based on ANI clusters and BioProject context where available."
     else:
         availability_note = "MLST and ANI cluster context were both available for lineage-aware interpretation."
+    lineage_context_parts = []
+    if dominant_st:
+        lineage_context_parts.append(
+            f"The largest MLST group was {_lineage_display_id(dominant_st.get('lineage_id', ''))} "
+            f"({dominant_st.get('fraction_display', 'not available')})."
+        )
+    if dominant_ani and ani_genome_count:
+        lineage_context_parts.append(
+            f"The largest ANI cluster was {_lineage_display_id(dominant_ani.get('lineage_id', ''))} "
+            f"({dominant_ani.get('fraction_display', 'not available')})."
+        )
+    elif not ani_genome_count:
+        lineage_context_parts.append("ANI clusters were not available for this run.")
+    if dominant_project:
+        lineage_context_parts.append(
+            f"The largest BioProject group was {_lineage_display_id(dominant_project.get('lineage_id', ''))} "
+            f"({dominant_project.get('fraction_display', 'not available')})."
+        )
+    lineage_context_sentence = " ".join(lineage_context_parts)
     written_rows = [
         {
             "section": "overall_lineage_summary",
             "summary": (
                 f"Lineage analysis identified {len(set(mlst_by_sample.values()))} MLST sequence type(s) among {mlst_genome_count} typed genome(s) "
                 f"and {len(set(ani_by_sample.values()))} ANI cluster(s) among {ani_genome_count} genome(s). "
-                f"The largest MLST group was {dominant_st.get('lineage_id', 'not available')} ({dominant_st.get('fraction_display', 'not available')}); "
-                f"the largest ANI cluster was {dominant_ani.get('lineage_id', 'not available')} ({dominant_ani.get('fraction_display', 'not available')}); "
-                f"the largest BioProject group was {dominant_project.get('lineage_id', 'not available')} ({dominant_project.get('fraction_display', 'not available')}). "
+                f"{lineage_context_sentence} "
                 f"{availability_note}"
             ),
         },
@@ -10403,7 +10440,8 @@ def write_important_lineage_outputs(
                 (
                     f"Metadata-lineage overlap screening found {len(overlap_rows)} group-by-lineage rows. "
                     f"The strongest default imbalance was {top_overlap.get('metadata_column', 'metadata')}={top_overlap.get('metadata_group', 'not available')} "
-                    f"dominated by {top_overlap.get('dominant_lineage', 'not available')} ({top_overlap.get('dominant_lineage_fraction', '')}). "
+                    f"dominated by {_lineage_display_id(top_overlap.get('dominant_lineage', ''))} "
+                    f"({_fraction_display_from_value(top_overlap.get('dominant_lineage_fraction', ''))}). "
                     "Dominated metadata groups should be treated as possible clonal-structure confounding."
                 )
                 if overlap_rows else "Metadata-lineage overlap could not be summarized because no lineage group and metadata group overlap was available."
@@ -10414,7 +10452,7 @@ def write_important_lineage_outputs(
             "summary": (
                 (
                     f"Feature burden by lineage was summarized for {len(burden_rows)} database-lineage combinations. "
-                    f"The highest median report-facing burden row was {top_burden.get('database', 'database')} in {top_burden.get('lineage_id', 'not available')} "
+                    f"The highest median feature burden was {top_burden.get('database', 'database')} in {_lineage_display_id(top_burden.get('lineage_id', ''))} "
                     f"with median {top_burden.get('median_features_per_genome', '0')} feature row(s) per genome."
                 )
                 if burden_rows else "Feature burden by lineage could not be summarized because no lineage-feature overlap was available."
@@ -10425,7 +10463,7 @@ def write_important_lineage_outputs(
             "summary": (
                 (
                     f"The default selected feature view is {default_database}:{default_feature} by {default_lineage_type}. "
-                    f"The top lineage carrying it was {top_selected_presence.get('lineage_id', 'not available')} "
+                    f"The top lineage carrying it was {_lineage_display_id(top_selected_presence.get('lineage_id', ''))} "
                     f"({top_selected_presence.get('prevalence_display', 'not available')})."
                 )
                 if default_feature else "No default selected-feature lineage prevalence view was available because no feature-lineage overlap was detected."
