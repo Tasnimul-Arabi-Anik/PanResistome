@@ -14192,6 +14192,14 @@ def write_important_results_report(
         )
         for stem, title, caption in featured_figure_specs
     ])
+    featured_guide_cards_html = (
+        "<div class='finding-grid analysis-guide' aria-label='Featured Results reading guide'>"
+        f"<div class='finding-card'><h3>1. Executive cards</h3><p>Start with the run summary and {len(selected_highlights):,} cross-section finding card(s) selected for broad review.</p><span class='badge badge-pass'>Start here</span></div>"
+        f"<div class='finding-card'><h3>2. Trust queue</h3><p>{len(trust_first_highlights):,} lower-warning highlight(s) are available in the trust-first queue when you want the most defensible starting points.</p><span class='badge badge-pass'>Lower warning</span></div>"
+        f"<div class='finding-card'><h3>3. Caution queue</h3><p>{len(caution_first_highlights):,} warning-heavy highlight(s) are grouped separately so caveats are visible before interpretation.</p><span class='badge badge-warning'>Review caution</span></div>"
+        f"<div class='finding-card'><h3>4. Figure gallery</h3><p>{len(featured_figure_specs):,} featured figure(s) are shown below with PNG/SVG/PDF/data links for quick manuscript or slide review.</p><span class='badge badge-exploratory'>Visual scan</span></div>"
+        "</div>"
+    )
     top_download_links = _report_download_links_html([
         ("../basic/enriched_genome_dataset.csv", "Download enriched dataset"),
         ("downloads/important_summary_tables.zip", "Download summary tables ZIP"),
@@ -14391,20 +14399,25 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 {top_download_links}
 </header>
 <section id="featured" class="section"><h1>Featured Results</h1>{card_html}<p>{db_badges}</p>
+{featured_guide_cards_html}
 <details class="details-block"><summary>How to use this report</summary><p>Start with the cards and featured figures, then use the sidebar to inspect each analysis section. Complete TSVs are preserved even when report-facing tables and figures are capped for readability.</p></details>
-<h2>Top findings</h2>{featured_finding_cards_html}
-<h2>What to trust first</h2>
+<h2>Executive finding cards</h2>{featured_finding_cards_html}
+<details class="details-block"><summary>Trust, caution, and review queues</summary>
+<h3>What to trust first</h3>
 <p>These highlights have stronger support and lower warning burden. They are still dataset-specific, but they are better starting points than warning-heavy association rows.</p>
 {trust_first_table_html}
-<h2>What needs caution</h2>
+<h3>What needs caution</h3>
 <p>These highlights are useful for review, but their interpretation is more likely to depend on denominator size, BioProject structure, lineage structure, or missing metadata.</p>
 {caution_first_table_html}
-<h2>What to review first</h2>
+<h3>What to review first</h3>
 <p>These rows are ranked by support, denominator size, warning burden, cross-database context, and biological relevance. Warning-heavy rows remain useful, but should be interpreted through the linked section and complete TSVs.</p>
 {report_highlights_table_html}
-<h2>Balanced highlights by section</h2>
+</details>
+<details class="details-block"><summary>Balanced highlight table by section</summary>
+<h3>Balanced highlights by section</h3>
 {report_highlights_by_section_table_html}
 <div class="downloads"><a href="tables/report_highlights.tsv">Download report highlights</a><a href="tables/report_highlights_by_section.tsv">Download highlights by section</a><a href="tables/warning_priority_summary.tsv">Download warning priorities</a><a href="tables/report_visual_index.tsv">Download visual index</a><a href="tables/report_visual_quality.tsv">Download visual quality</a></div>
+</details>
 <h2>Featured figure gallery</h2>{featured_figures_html}</section>
 <section id="overview" class="section">{_report_section_header_html("Run Overview", "Curated outputs are summarized here while complete advanced outputs remain available in the PanR2 handoff bundle.", [("Schema " + schema_status, "pass" if schema_status == "PASS" else "warning")])}
 {top_download_links}</section>

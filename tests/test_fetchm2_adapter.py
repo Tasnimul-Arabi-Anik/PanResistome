@@ -1057,6 +1057,10 @@ class FetchM2AdapterTests(unittest.TestCase):
             ]:
                 self.assertIn(css_token, report_html)
             self.assertIn("Featured figure gallery", report_html)
+            self.assertIn("Featured Results reading guide", report_html)
+            self.assertIn("Executive finding cards", report_html)
+            self.assertIn("Trust, caution, and review queues", report_html)
+            self.assertIn("Balanced highlight table by section", report_html)
             self.assertIn("Download full TSV", report_html)
             self.assertIn("tables/feature_prevalence.tsv", report_html)
             self.assertIn("tables/report_visual_index.tsv", report_html)
