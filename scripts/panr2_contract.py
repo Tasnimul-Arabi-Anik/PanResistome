@@ -3677,18 +3677,86 @@ def _figure_caption_for(section: str, stem: str) -> str:
     if section == "QC Summary" or stem.startswith("qc_"):
         return "QC figures summarize genome retention and module status before downstream feature interpretation."
     if section == "Geographic Distribution" or stem.startswith("geographic_"):
+        if stem.startswith("geographic_map_") or stem == "geographic_distribution_map":
+            return "Map color shows dataset prevalence or burden and marker size shows genome count; small or missing geography groups need caution."
+        if "_country_bar_" in stem or stem.startswith("geographic_country_bar_"):
+            return "Country bars rank dataset-specific prevalence or burden with plotted denominators; they are not regional prevalence estimates."
+        if "_continent_bar_" in stem or stem.startswith("geographic_continent_bar_"):
+            return "Continent bars summarize the submitted genomes by broad region and should be read with sampling-bias warnings."
         return "Geographic summaries are dataset-specific and should not be interpreted as regional or global prevalence."
     if section == "Co-occurrence / Genomic Context" or stem.startswith(("cooccurrence_", "top_context_features_", "genomic_context_evidence_ladder_", "contig_neighborhood_")):
+        if stem.startswith("cooccurrence_heatmap_"):
+            return "Heatmap cells summarize feature-pair association direction and strength; same-contig evidence is stronger than sample-level co-occurrence."
+        if stem.startswith("cooccurrence_network_"):
+            return "The network highlights selected feature pairs by database and association strength; it is a screening view, not proof of linkage."
+        if stem.startswith("genomic_context_evidence_ladder_"):
+            return "The evidence ladder separates same-genome, same-contig, nearby, adjacent, and overlapping context signals for prioritized review."
+        if stem.startswith("contig_neighborhood_"):
+            return "The neighborhood diagram shows local contig context around a selected feature and should be checked against assembly fragmentation."
         return "Sample-level co-occurrence is separate from same-contig and proximity context evidence."
     if section == "Variations" or stem.startswith("variation_"):
+        if stem.startswith("variation_identity_coverage_"):
+            return "Identity-versus-coverage points highlight partial or divergent hits; low values are review flags, not direct phenotype calls."
+        if stem.startswith("variation_identity_"):
+            return "Identity boxplots compare sequence similarity across hits for each feature; low identity can indicate divergent or partial matches."
+        if stem.startswith("variation_coverage_"):
+            return "Coverage boxplots compare how much of each feature is aligned; low coverage can indicate partial hits or fragmented assemblies."
+        if stem.startswith("variation_top_variable_"):
+            return "Bars rank features with the widest identity or coverage spread so highly variable annotations can be reviewed first."
         return "Variation figures summarize hit identity, coverage, and feature variability; these metrics do not by themselves prove functional change."
     if section == "Metadata Associations" or stem.startswith("metadata_"):
+        if stem.startswith("metadata_volcano_"):
+            return "The volcano plot combines effect size and FDR support; enriched and depleted features still require sampling and lineage review."
+        if stem.startswith("metadata_enrichment_heatmap_"):
+            return "The heatmap summarizes feature-by-group enrichment patterns and should be interpreted with metadata completeness warnings."
+        if stem.startswith("metadata_burden_boxplot_"):
+            return "Boxplots compare database burden across metadata groups; visible differences are descriptive until support and confounding are reviewed."
+        if stem.startswith("metadata_category_enrichment_"):
+            return "Category bars summarize broader feature classes by metadata group and help prioritize detailed feature-level review."
         return "Metadata associations are exploratory and may reflect sampling, BioProject, lineage, geography, or year bias."
     if section == "Temporal Trends" or stem.startswith("temporal_"):
+        if stem == "temporal_selected_feature_prevalence":
+            return "The selected-feature line uses yearly positive/total denominators; low-support years should be treated as descriptive."
+        if stem == "temporal_slope_top40":
+            return "The slope plot compares first and last valid-year prevalence for top-changing features and can exaggerate sparse-year effects."
+        if stem == "temporal_database_burden_top20":
+            return "Database-burden trends show mean detected features per genome by valid collection year, not independent time-series evidence."
+        if stem.startswith("temporal_top_increasing_"):
+            return "Increasing-feature bars prioritize features with higher recent prevalence but remain sensitive to lineage and sampling shifts."
+        if stem.startswith("temporal_top_decreasing_"):
+            return "Decreasing-feature bars prioritize features with lower recent prevalence but remain sensitive to lineage and sampling shifts."
+        if stem == "temporal_feature_heatmap_top40":
+            return "The heatmap shows feature prevalence across valid years; missing or sparse years should not be overinterpreted."
         return "Temporal summaries use valid collection years and remain exploratory because sampling can vary by year."
     if section == "Lineage / Clonal Structure" or stem.startswith("lineage_"):
+        if stem.startswith("lineage_distribution_"):
+            return "Distribution bars show whether one ST, ANI cluster, or BioProject dominates the dataset before association interpretation."
+        if stem.startswith("lineage_metadata_overlap_"):
+            return "Overlap plots show whether metadata groups are dominated by one lineage, which can explain apparent metadata associations."
+        if stem.startswith("lineage_database_burden_"):
+            return "Burden-by-lineage plots compare database feature counts across lineages and highlight clone-concentrated burden."
+        if stem.startswith("lineage_feature_heatmap_"):
+            return "The feature-by-lineage heatmap shows whether individual features are broad or concentrated in specific lineages."
+        if stem.startswith("lineage_feature_enrichment_"):
+            return "Lineage-enrichment plots prioritize features concentrated in one lineage; small lineage groups are descriptive only."
+        if stem.startswith("lineage_feature_presence_"):
+            return "Selected-feature bars show prevalence by lineage with denominators so clone-specific patterns are visible."
+        if stem == "lineage_confounding_top_findings":
+            return "This plot flags top findings whose supporting genomes are dominated by a lineage or BioProject."
         return "Lineage summaries provide clonal-structure context and do not replace formal phylogenetic analysis."
     if section == "Diversity / Pan-feature Summary" or stem.startswith("diversity_"):
+        if stem == "diversity_feature_richness_by_sample":
+            return "Sorted bars show how many distinct annotation features each genome carries and identify feature-rich or feature-poor outliers."
+        if stem == "diversity_database_by_sample_heatmap":
+            return "The heatmap compares database-specific feature burden across genomes so AMR, VFDB, plasmid, and MGE patterns can be contrasted."
+        if stem == "diversity_core_common_accessory_rare_by_database":
+            return "Stacked bars classify features as core, common, accessory, or rare within this dataset using fixed prevalence thresholds."
+        if stem == "diversity_pan_feature_accumulation":
+            return "The accumulation curve shows whether new genomes continue to add new annotation features or whether the feature space is plateauing."
+        if stem == "diversity_jaccard_heatmap":
+            return "The Jaccard heatmap compares genome feature profiles and should not be interpreted as whole-genome phylogeny."
+        if stem.startswith("diversity_richness_by_metadata_"):
+            return "Richness-by-metadata boxplots are descriptive and should be interpreted with group size, lineage, and BioProject warnings."
         return "Diversity summaries reflect detected annotation features, not complete biological diversity."
     if section == "Prevalence" or stem.startswith("prevalence_"):
         return "Prevalence is calculated from positive genome denominators; feature rows may exceed genome counts."
@@ -13568,7 +13636,7 @@ def write_important_results_report(
                     important_dir,
                     stem,
                     title,
-                    "Variation reflects detected hit identity and coverage, not necessarily functional or phenotypic differences.",
+                    _figure_caption_for("Variations", stem),
                     [("Review", "warning")],
                 ),
             )
@@ -13710,7 +13778,7 @@ def write_important_results_report(
                     important_dir,
                     stem,
                     title,
-                    "Metadata associations are exploratory and may reflect sampling, BioProject, lineage, geography, or year bias.",
+                    _figure_caption_for("Metadata Associations", stem),
                     [("Exploratory", "exploratory")],
                 ),
             )
@@ -13774,7 +13842,7 @@ def write_important_results_report(
                     important_dir,
                     stem,
                     title,
-                    "Lineage summaries provide clonal-structure context and do not replace formal phylogenetic analysis.",
+                    _figure_caption_for("Lineage / Clonal Structure", stem),
                     [("Lineage warning", "lineage")],
                 ),
             )
@@ -13820,13 +13888,13 @@ def write_important_results_report(
             (
                 figure_name,
                 _report_figure_card_html(
-                    important_dir,
-                    figure_name,
-                    title,
-                    "Diversity summaries reflect detected annotation features, not complete biological diversity.",
-                    [("Descriptive", "descriptive")],
-                ),
-            )
+                        important_dir,
+                        figure_name,
+                        title,
+                        _figure_caption_for("Diversity / Pan-feature Summary", figure_name),
+                        [("Descriptive", "descriptive")],
+                    ),
+                )
         )
     for svg_path in sorted((important_dir / "figures").glob("diversity_richness_by_metadata_*.svg"))[:1]:
         stem = svg_path.stem
@@ -13837,7 +13905,7 @@ def write_important_results_report(
                     important_dir,
                     stem,
                     _human_figure_title(stem),
-                    "Richness-by-metadata summaries are descriptive and should be interpreted alongside sampling and lineage warnings.",
+                    _figure_caption_for("Diversity / Pan-feature Summary", stem),
                     [("Descriptive", "descriptive")],
                 ),
             )

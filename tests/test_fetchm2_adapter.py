@@ -15,6 +15,7 @@ from export_panr2_inputs import parse_version_line
 from panr2_contract import (
     REPORT_FIGURE_REGISTRY,
     export_contract,
+    _figure_caption_for,
     _figure_visibility_metadata,
     _figure_render_quality,
     _human_figure_title,
@@ -196,6 +197,19 @@ class FetchM2AdapterTests(unittest.TestCase):
         self.assertEqual(_human_figure_title("geographic_map_vfdb_adeH"), "VFDB adeH geographic distribution")
         self.assertEqual(_human_figure_title("diversity_richness_by_metadata_isolation_source"), "Feature richness by Isolation Source")
         self.assertEqual(_human_figure_title("feature_profile_pcoa_by_bioproject"), "Feature-profile PCoA by BioProject")
+
+    def test_figure_caption_conversions_are_specific(self):
+        caption_cases = {
+            "variation_identity_coverage_amr_top20": "Identity-versus-coverage",
+            "lineage_metadata_overlap_mlst_ST_isolation_source": "metadata groups are dominated by one lineage",
+            "diversity_core_common_accessory_rare_by_database": "core, common, accessory, or rare",
+            "temporal_slope_top40": "first and last valid-year prevalence",
+            "metadata_volcano_amr_isolation_source_missing": "effect size and FDR support",
+            "cooccurrence_heatmap_vfdb_vs_mlst": "feature-pair association direction",
+        }
+        for stem, expected_phrase in caption_cases.items():
+            with self.subTest(stem=stem):
+                self.assertIn(expected_phrase, _figure_caption_for("", stem))
         self.assertTrue(_is_same_feature_pair("aph(3'')-Ib", "aph(3'')-Ib"))
 
     def test_empty_report_figures_render_explicit_unavailable_state(self):
