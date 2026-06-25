@@ -3719,6 +3719,8 @@ def _figure_render_quality(important_dir: Path, stem: str) -> tuple[str, str, st
         required_axis_text = ["Prevalence", "q-value"]
     elif stem.startswith("lineage_feature_enrichment_"):
         required_axis_text = ["Prevalence", "q-value"]
+    elif stem == "temporal_database_burden_top20":
+        required_axis_text = ["Mean features/genome"]
     elif stem.startswith("temporal_"):
         required_axis_text = ["Prevalence"]
     if required_axis_text:
@@ -5725,6 +5727,7 @@ def _write_temporal_slope_svg(path: Path, rows: list[dict[str, str]], title: str
 
     parts = _svg_base(width, height, title, "Red indicates increasing prevalence; blue indicates decreasing prevalence; gray indicates stable or unsupported trend.")
     parts.extend([
+        f"<text x='{(left_x + right_x) / 2:.1f}' y='52' text-anchor='middle' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('muted')}'>Prevalence (%) at first and last valid collection year</text>",
         f"<text x='{left_x - 24}' y='72' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('muted')}'>First year</text>",
         f"<text x='{right_x - 20}' y='72' font-family='{REPORT_SVG_FONT}' font-size='12' fill='{_plot_color('muted')}'>Last year</text>",
         f"<rect x='760' y='44' width='10' height='10' fill='{_plot_color('red')}'/><text x='776' y='53' font-family='{REPORT_SVG_FONT}' font-size='11' fill='{_plot_color('muted')}'>Increasing</text>",
@@ -8026,7 +8029,7 @@ def write_important_temporal_outputs(sample_dir: Path, out_dir: Path, important_
             for row in rows
         ]
         write_rows(data_path, figure_rows, trend_fields + ["feature_label", "display_change_percent_points"])
-        _write_bar_svg(svg_path, figure_rows, label, "feature_label", "display_change_percent_points", "Absolute change in prevalence percentage points")
+        _write_bar_svg(svg_path, figure_rows, label, "feature_label", "display_change_percent_points", "Absolute change in Prevalence percentage points")
         _write_bar_png(png_path, figure_rows, "display_change_percent_points")
         outputs[f"important_{filename}_data"] = str(data_path)
         outputs[f"important_{filename}_svg"] = str(svg_path)

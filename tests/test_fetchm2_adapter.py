@@ -907,6 +907,9 @@ class FetchM2AdapterTests(unittest.TestCase):
             qc_quality = visual_quality[visual_quality["figure_stem"].fillna("").astype(str).str.startswith("qc_")]
             if not qc_quality.empty:
                 self.assertNotIn("generic_caption", set(qc_quality["caption_quality_label"].fillna("").astype(str)))
+            temporal_quality = visual_quality[visual_quality["figure_stem"].fillna("").astype(str).str.startswith("temporal_")]
+            if not temporal_quality.empty:
+                self.assertNotIn("missing_axis_labels", set(temporal_quality["axis_label_status"].fillna("").astype(str)))
             warnings = pd.read_csv(sample_dir / "important" / "tables" / "warnings_and_limitations.tsv", sep="\t")
             self.assertTrue({"warning_id", "section", "severity", "warning_type", "recommended_action"}.issubset(warnings.columns))
             warning_summary = pd.read_csv(sample_dir / "important" / "tables" / "warnings_and_limitations_summary.tsv", sep="\t")
