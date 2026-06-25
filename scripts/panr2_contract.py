@@ -13344,6 +13344,8 @@ def write_important_results_report(
         empty_message: str,
         max_primary: int = 6,
         supporting_summary: str = "More supporting and technical figures",
+        preserve_order: bool = False,
+        supporting_primary_count: int = 1,
     ) -> str:
         present = [(stem, card) for stem, card in items if card]
         if not present:
@@ -13362,10 +13364,12 @@ def write_important_results_report(
             for stem, card in present
             if figure_visibility(stem) not in {"featured", "standard"}
         ]
-        primary.sort(key=lambda item: (-figure_priority(item[0]), item[0]))
-        supporting.sort(key=lambda item: (-figure_priority(item[0]), item[0]))
+        if not preserve_order:
+            primary.sort(key=lambda item: (-figure_priority(item[0]), item[0]))
+            supporting.sort(key=lambda item: (-figure_priority(item[0]), item[0]))
         if not primary and supporting:
-            primary, supporting = supporting[:1], supporting[1:]
+            promoted_count = max(1, min(max_primary, supporting_primary_count))
+            primary, supporting = supporting[:promoted_count], supporting[promoted_count:]
         output = _report_figure_grid_html([card for _stem, card in primary[:max_primary]])
         hidden = primary[max_primary:] + supporting
         if hidden:
@@ -13648,6 +13652,8 @@ def write_important_results_report(
         "No geographic figures were generated because no mappable country groups were available.",
         max_primary=3,
         supporting_summary="More geographic figures",
+        preserve_order=True,
+        supporting_primary_count=3,
     )
     variation_unique_features = len(variation_rows)
     variation_total_hits = sum(int(_float_or_none(row.get("total_hits", "")) or 0) for row in variation_rows)
@@ -13881,8 +13887,10 @@ def write_important_results_report(
     metadata_figures_html = curated_figure_html(
         metadata_figure_items,
         "No metadata association figures were generated because metadata groups or feature rows were unavailable.",
-        max_primary=2,
+        max_primary=3,
         supporting_summary="More metadata association figures",
+        preserve_order=True,
+        supporting_primary_count=3,
     )
     lineage_summary = {row.get("metric", ""): row.get("value", "") for row in lineage_summary_rows}
     lineage_cards_html = (
@@ -13920,11 +13928,11 @@ def write_important_results_report(
     for key, title in [
         ("important_lineage_distribution_svg", "Lineage distribution"),
         ("important_lineage_metadata_overlap_svg", "Metadata-lineage overlap"),
-        ("important_lineage_database_burden_svg", "Database burden by lineage"),
         ("important_lineage_feature_heatmap_svg", "Feature prevalence by lineage"),
+        ("important_lineage_confounding_top_findings_svg", "Lineage-adjusted top findings"),
+        ("important_lineage_database_burden_svg", "Database burden by lineage"),
         ("important_lineage_feature_enrichment_svg", "Lineage feature enrichment"),
         ("important_lineage_feature_presence_svg", "Selected feature by lineage"),
-        ("important_lineage_confounding_top_findings_svg", "Lineage-adjusted top findings"),
     ]:
         figure_path = Path(lineage_outputs.get(key, ""))
         if not figure_path.exists():
@@ -13947,6 +13955,8 @@ def write_important_results_report(
         "No lineage figures were generated because lineage context was unavailable.",
         max_primary=4,
         supporting_summary="More lineage context figures",
+        preserve_order=True,
+        supporting_primary_count=4,
     )
     diversity_summary = {row.get("metric", ""): row.get("value", "") for row in diversity_summary_rows}
     diversity_cards_html = (

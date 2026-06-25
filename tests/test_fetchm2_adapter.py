@@ -1106,6 +1106,23 @@ class FetchM2AdapterTests(unittest.TestCase):
                 geography_section.index("figures/geographic_distribution_map.svg"),
                 geography_section.index("geographic_country_bar"),
             )
+            metadata_section = report_html.split('id="metadata-associations"', 1)[1].split('id="lineage"', 1)[0]
+            self.assertIn("metadata_volcano_", metadata_section)
+            self.assertIn("metadata_enrichment_heatmap_", metadata_section)
+            self.assertIn("metadata_burden_boxplot_", metadata_section)
+            self.assertLess(
+                metadata_section.index("metadata_volcano_"),
+                metadata_section.index("metadata_burden_boxplot_"),
+            )
+            lineage_section = report_html.split('id="lineage"', 1)[1].split('id="diversity"', 1)[0]
+            self.assertIn("lineage_distribution_", lineage_section)
+            self.assertIn("lineage_metadata_overlap_", lineage_section)
+            self.assertIn("lineage_feature_heatmap_", lineage_section)
+            self.assertIn("lineage_confounding_top_findings", lineage_section)
+            self.assertLess(
+                lineage_section.index("lineage_feature_heatmap_"),
+                lineage_section.index("lineage_database_burden_"),
+            )
             self.assertIn("Download report highlights", report_html)
             self.assertIn("Visual index", report_html)
             self.assertIn("Visual quality", report_html)
