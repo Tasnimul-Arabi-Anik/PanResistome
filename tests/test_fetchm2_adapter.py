@@ -206,6 +206,8 @@ class FetchM2AdapterTests(unittest.TestCase):
             "temporal_slope_top40": "first and last valid-year prevalence",
             "metadata_volcano_amr_isolation_source_missing": "effect size and FDR support",
             "cooccurrence_heatmap_vfdb_vs_mlst": "feature-pair association direction",
+            "prevalence_genomes_positive_by_database": "at least one feature from each database",
+            "geographic_map_amr_burden": "marker size shows genome count",
         }
         for stem, expected_phrase in caption_cases.items():
             with self.subTest(stem=stem):

@@ -3759,6 +3759,16 @@ def _figure_caption_for(section: str, stem: str) -> str:
             return "Richness-by-metadata boxplots are descriptive and should be interpreted with group size, lineage, and BioProject warnings."
         return "Diversity summaries reflect detected annotation features, not complete biological diversity."
     if section == "Prevalence" or stem.startswith("prevalence_"):
+        if stem == "prevalence_feature_counts_by_database":
+            return "Bars show how many unique features and feature rows each database contributed to this dataset."
+        if stem == "prevalence_genomes_positive_by_database":
+            return "Bars show the number of genomes with at least one feature from each database, using positive-genome denominators."
+        if stem == "prevalence_core_accessory_rare_by_database":
+            return "Stacked bars classify database features by prevalence as core, common, accessory, or rare within this dataset."
+        if stem == "prevalence_database_burden_by_sample":
+            return "The burden plot summarizes feature counts per genome by database so high-burden samples are easy to spot."
+        if stem.startswith("prevalence_top_features_"):
+            return "Horizontal bars rank the most prevalent features for one database and preserve positive/total genome denominators in the plotted data."
         return "Prevalence is calculated from positive genome denominators; feature rows may exceed genome counts."
     return "Supporting report figure; review the linked source table, warning status, and companion plotted-data TSV before interpretation."
 
@@ -13474,7 +13484,7 @@ def write_important_results_report(
                     important_dir,
                     figure_name,
                     title,
-                    "Prevalence is calculated as genomes with at least one hit; labels and tables preserve denominators.",
+                    _figure_caption_for("Prevalence", figure_name),
                     [("Descriptive", "descriptive")],
                 ),
             )
@@ -13490,7 +13500,7 @@ def write_important_results_report(
                     important_dir,
                     stem,
                     f"{database} prevalence",
-                    "Horizontal bars show dataset prevalence with positive-genome denominators in the plotted data.",
+                    _figure_caption_for("Prevalence", stem),
                     [("Descriptive", "descriptive")],
                 ),
             )
@@ -13565,7 +13575,7 @@ def write_important_results_report(
                     important_dir,
                     stem,
                     _human_figure_title(stem),
-                    "Bars summarize dataset-specific geographic prevalence or burden; small groups are flagged in the plotted data.",
+                    _figure_caption_for("Geographic Distribution", stem),
                     [("Exploratory", "exploratory")],
                 ),
             )
@@ -13579,7 +13589,7 @@ def write_important_results_report(
                     important_dir,
                     stem,
                     _human_figure_title(stem),
-                    "Map colors reflect the analyzed dataset and should not be read as regional or global prevalence.",
+                    _figure_caption_for("Geographic Distribution", stem),
                     [("Exploratory", "exploratory")],
                 ),
             )
@@ -13666,7 +13676,7 @@ def write_important_results_report(
                     important_dir,
                     figure_name,
                     title,
-                    "Temporal trends are exploratory and may reflect uneven sampling by year, lineage, geography, or BioProject.",
+                    _figure_caption_for("Temporal Trends", figure_name),
                     [("Exploratory", "exploratory")],
                 ),
             )
