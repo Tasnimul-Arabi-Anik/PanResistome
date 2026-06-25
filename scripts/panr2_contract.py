@@ -14842,7 +14842,7 @@ a:focus, button:focus, input:focus {{ outline: 3px solid var(--primary-soft); ou
 .sidebar-links {{ display: block; }}
 .sidebar a {{ display: block; color: #e0f2fe; text-decoration: none; margin: 0.35rem 0; padding: 0.42rem 0.55rem; border-radius: 6px; }}
 .sidebar a:hover, .sidebar a:focus {{ background: rgba(255,255,255,0.12); color: white; }}
-main {{ margin-left: 290px; padding: 1.2rem 1.4rem 2rem; min-width: 0; max-width: 100%; }}
+main {{ margin-left: 290px; width: calc(100% - 290px); max-width: calc(100vw - 290px); padding: 1.2rem 1.4rem 2rem; min-width: 0; overflow-x: hidden; }}
 .report-header {{ background: linear-gradient(135deg, #0f766e 0%, #14532d 100%); color: white; border-radius: 10px; padding: 1.2rem; margin-bottom: 1rem; box-shadow: 0 14px 32px rgba(15, 23, 42, 0.14); overflow: hidden; }}
 .report-header h1 {{ margin: 0; font-size: clamp(1.7rem, 3vw, 2.4rem); overflow-wrap: anywhere; }}
 .report-header p {{ margin: 0.35rem 0 0; color: #d1fae5; overflow-wrap: anywhere; }}

@@ -11,8 +11,12 @@ from __future__ import annotations
 
 import argparse
 import html.parser
+import json
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -72,6 +76,114 @@ VIEWPORTS = {
     "laptop": (1180, 820),
     "mobile": (390, 844),
 }
+
+SECTION_SCREENSHOT_IDS = ["featured", "geography", "metadata-associations", "lineage", "downloads"]
+CHROME_CANDIDATES = ("google-chrome-stable", "google-chrome", "chromium", "chromium-browser")
+CHROME_BASE_FLAGS = [
+    "--headless",
+    "--disable-gpu",
+    "--disable-dev-shm-usage",
+    "--no-sandbox",
+    "--run-all-compositor-stages-before-draw",
+    "--virtual-time-budget=3000",
+]
+
+QA_METRICS_JS = """
+(() => {
+  const sectionIds = __SECTION_IDS__;
+  const allowedOverflowSelectors = [
+    '.table-scroll',
+    '.figure-box',
+    '.heatmap-scroll',
+    'pre',
+    'code',
+    'iframe',
+    '.sidebar-links'
+  ];
+  const allowed = (el) => allowedOverflowSelectors.some(sel => el.closest(sel));
+  const textOf = (el) => (el.textContent || '').trim().replace(/\\s+/g, ' ').slice(0, 120);
+  const measure = () => {
+    const doc = document.documentElement;
+    const body = document.body;
+    const overflow = Math.max(doc.scrollWidth, body.scrollWidth) - window.innerWidth;
+    const offenders = [];
+    for (const el of Array.from(document.body.querySelectorAll('*'))) {
+      const rect = el.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0 || allowed(el)) continue;
+      if (rect.right > window.innerWidth + 4 || rect.left < -4) {
+        offenders.push({
+          tag: el.tagName.toLowerCase(),
+          id: el.id || '',
+          cls: el.className ? String(el.className).slice(0, 120) : '',
+          text: textOf(el),
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          width: Math.round(rect.width)
+        });
+      }
+      if (offenders.length >= 8) break;
+    }
+    const blankFigures = Array.from(document.querySelectorAll('.figure-card img')).filter(img => {
+      const rect = img.getBoundingClientRect();
+      return rect.width < 40 || rect.height < 30;
+    }).map(img => img.getAttribute('src')).slice(0, 8);
+    const header = document.querySelector('.report-header');
+    const sidebar = document.querySelector('.sidebar');
+    const clippedHeaderDownloads = Array.from(document.querySelectorAll('.report-header .download-button, .report-header .downloads a')).filter(el => {
+      const rect = el.getBoundingClientRect();
+      return rect.width <= 0 || rect.right > window.innerWidth + 4 || rect.left < -4;
+    }).map(textOf).slice(0, 8);
+    const sections = {};
+    for (const id of sectionIds) {
+      const section = document.getElementById(id);
+      const rect = section ? section.getBoundingClientRect() : null;
+      sections[id] = {
+        present: !!section,
+        height: rect ? Math.round(rect.height) : 0,
+        textLength: section ? textOf(section).length : 0
+      };
+    }
+    return {
+      overflow,
+      offenders,
+      blankFigures,
+      clippedHeaderDownloads,
+      sections,
+      figureCards: document.querySelectorAll('.figure-card').length,
+      tableCards: document.querySelectorAll('.table-card').length,
+      downloadCards: document.querySelectorAll('.download-card').length,
+      headerVisible: !!header && header.getBoundingClientRect().height > 40,
+      sidebarVisible: !!sidebar && sidebar.getBoundingClientRect().height > 40
+    };
+  };
+  const finish = () => {
+    const metrics = measure();
+    document.body.innerHTML = '<pre id="qa-metrics"></pre>';
+    document.getElementById('qa-metrics').textContent = JSON.stringify(metrics);
+  };
+  if (document.readyState === 'complete') {
+    setTimeout(finish, 500);
+  } else {
+    window.addEventListener('load', () => setTimeout(finish, 500));
+  }
+})();
+"""
+
+SCROLL_TO_ANCHOR_JS = """
+(() => {
+  const scrollToHash = () => {
+    const id = decodeURIComponent((window.location.hash || '').replace(/^#/, ''));
+    if (!id) return;
+    const target = document.getElementById(id);
+    if (target) target.scrollIntoView({block: 'start'});
+  };
+  if (document.readyState === 'complete') {
+    setTimeout(scrollToHash, 500);
+  } else {
+    window.addEventListener('load', () => setTimeout(scrollToHash, 500));
+  }
+})();
+"""
 
 
 def _attrs_to_dict(attrs: list[tuple[str, str | None]]) -> dict[str, str]:
@@ -257,41 +369,48 @@ def _check_static_layout(html_text: str, scanner: ReportHTMLScanner, errors: lis
         )
 
 
-def _run_browser_checks(
-    important_dir: Path,
-    screenshots_dir: Path | None,
-    section_screenshots: bool,
-    max_overflow_px: int,
-    require_browser: bool,
-    errors: list[str],
-    notes: list[str],
-) -> None:
-    try:
-        from playwright.sync_api import Error as PlaywrightError
-        from playwright.sync_api import sync_playwright
-    except Exception as exc:  # pragma: no cover - depends on optional local tooling
-        message = f"Browser layout QA skipped because Playwright is unavailable: {exc}"
-        if require_browser:
-            errors.append(message)
-        else:
-            notes.append(message)
-        return
+def _check_browser_metrics(metrics: dict[str, object], name: str, max_overflow_px: int, errors: list[str]) -> None:
+    overflow = float(metrics.get("overflow", 0) or 0)
+    if overflow > max_overflow_px:
+        errors.append(f"{name} viewport has {overflow:.0f}px whole-page horizontal overflow")
+    offenders = metrics.get("offenders") or []
+    if offenders:
+        errors.append(f"{name} viewport has overflowing elements: {offenders}")
+    blank_figures = metrics.get("blankFigures") or []
+    if blank_figures:
+        errors.append(f"{name} viewport has tiny/blank figure previews: {blank_figures}")
+    clipped_downloads = metrics.get("clippedHeaderDownloads") or []
+    if clipped_downloads:
+        errors.append(f"{name} viewport has clipped header download buttons: {clipped_downloads}")
+    if not metrics.get("headerVisible"):
+        errors.append(f"{name} viewport does not render a visible report header")
+    if not metrics.get("sidebarVisible"):
+        errors.append(f"{name} viewport does not render a visible sidebar/navigation")
+    sections = metrics.get("sections") or {}
+    if isinstance(sections, dict):
+        for section_id in SECTION_SCREENSHOT_IDS:
+            section = sections.get(section_id, {})
+            if not isinstance(section, dict) or not section.get("present"):
+                errors.append(f"{name} viewport cannot find section #{section_id}")
+            elif int(section.get("height", 0) or 0) < 20 or int(section.get("textLength", 0) or 0) < 10:
+                errors.append(f"{name} viewport has blank/tiny section #{section_id}")
 
-    screenshots_dir = screenshots_dir.resolve() if screenshots_dir else None
-    if screenshots_dir:
-        screenshots_dir.mkdir(parents=True, exist_ok=True)
 
-    js_metrics = """
+def _playwright_metrics_js() -> str:
+    return """
     () => {
+      const sectionIds = __SECTION_IDS__;
       const allowedOverflowSelectors = [
         '.table-scroll',
         '.figure-box',
         '.heatmap-scroll',
         'pre',
         'code',
-        'iframe'
+        'iframe',
+        '.sidebar-links'
       ];
       const allowed = (el) => allowedOverflowSelectors.some(sel => el.closest(sel));
+      const textOf = (el) => (el.textContent || '').trim().replace(/\\s+/g, ' ').slice(0, 120);
       const doc = document.documentElement;
       const body = document.body;
       const overflow = Math.max(doc.scrollWidth, body.scrollWidth) - window.innerWidth;
@@ -304,6 +423,7 @@ def _run_browser_checks(
             tag: el.tagName.toLowerCase(),
             id: el.id || '',
             cls: el.className ? String(el.className).slice(0, 120) : '',
+            text: textOf(el),
             left: Math.round(rect.left),
             right: Math.round(rect.right),
             width: Math.round(rect.width)
@@ -317,10 +437,26 @@ def _run_browser_checks(
       }).map(img => img.getAttribute('src')).slice(0, 8);
       const header = document.querySelector('.report-header');
       const sidebar = document.querySelector('.sidebar');
+      const clippedHeaderDownloads = Array.from(document.querySelectorAll('.report-header .download-button, .report-header .downloads a')).filter(el => {
+        const rect = el.getBoundingClientRect();
+        return rect.width <= 0 || rect.right > window.innerWidth + 4 || rect.left < -4;
+      }).map(textOf).slice(0, 8);
+      const sections = {};
+      for (const id of sectionIds) {
+        const section = document.getElementById(id);
+        const rect = section ? section.getBoundingClientRect() : null;
+        sections[id] = {
+          present: !!section,
+          height: rect ? Math.round(rect.height) : 0,
+          textLength: section ? textOf(section).length : 0
+        };
+      }
       return {
         overflow,
         offenders,
         blankFigures,
+        clippedHeaderDownloads,
+        sections,
         figureCards: document.querySelectorAll('.figure-card').length,
         tableCards: document.querySelectorAll('.table-card').length,
         downloadCards: document.querySelectorAll('.download-card').length,
@@ -328,7 +464,23 @@ def _run_browser_checks(
         sidebarVisible: !!sidebar && sidebar.getBoundingClientRect().height > 40
       };
     }
-    """
+    """.replace("__SECTION_IDS__", json.dumps(SECTION_SCREENSHOT_IDS))
+
+
+def _run_playwright_browser_checks(
+    important_dir: Path,
+    screenshots_dir: Path | None,
+    section_screenshots: bool,
+    max_overflow_px: int,
+    errors: list[str],
+    notes: list[str],
+) -> bool:
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+        from playwright.sync_api import sync_playwright
+    except Exception as exc:  # pragma: no cover - depends on optional local tooling
+        notes.append(f"Playwright unavailable: {exc}")
+        return False
 
     try:  # pragma: no cover - exercised only when local browser tooling exists
         with sync_playwright() as playwright:
@@ -337,34 +489,178 @@ def _run_browser_checks(
                 page = browser.new_page(viewport={"width": width, "height": height}, device_scale_factor=1)
                 page.goto((important_dir / "results.html").as_uri(), wait_until="load")
                 page.wait_for_timeout(500)
-                metrics = page.evaluate(js_metrics)
-                if metrics["overflow"] > max_overflow_px:
-                    errors.append(
-                        f"{name} viewport has {metrics['overflow']:.0f}px whole-page horizontal overflow"
-                    )
-                if metrics["offenders"]:
-                    errors.append(f"{name} viewport has overflowing elements: {metrics['offenders']}")
-                if metrics["blankFigures"]:
-                    errors.append(f"{name} viewport has tiny/blank figure previews: {metrics['blankFigures']}")
-                if not metrics["headerVisible"]:
-                    errors.append(f"{name} viewport does not render a visible report header")
-                if not metrics["sidebarVisible"]:
-                    errors.append(f"{name} viewport does not render a visible sidebar/navigation")
+                metrics = page.evaluate(_playwright_metrics_js())
+                _check_browser_metrics(metrics, name, max_overflow_px, errors)
                 if screenshots_dir:
                     page.screenshot(path=str(screenshots_dir / f"results_{name}.png"), full_page=False)
                     if section_screenshots:
-                        for section_id in ["featured", "geography", "metadata-associations", "lineage", "downloads"]:
+                        for section_id in SECTION_SCREENSHOT_IDS:
                             locator = page.locator(f"section#{section_id}")
                             if locator.count():
                                 locator.screenshot(path=str(screenshots_dir / f"{name}_{section_id}.png"))
                 page.close()
             browser.close()
+        notes.append("Browser layout QA used playwright")
+        return True
     except PlaywrightError as exc:  # pragma: no cover - depends on optional local tooling
-        message = f"Browser layout QA could not run: {exc}"
-        if require_browser:
-            errors.append(message)
-        else:
-            notes.append(message)
+        notes.append(f"Playwright browser layout QA could not run: {exc}")
+        return False
+
+
+def _find_chrome_executable(candidates: tuple[str, ...] = CHROME_CANDIDATES) -> str | None:
+    for candidate in candidates:
+        executable = shutil.which(candidate)
+        if executable:
+            return executable
+    return None
+
+
+def _chrome_screenshot_command(executable: str, url: str, output_path: Path, width: int, height: int) -> list[str]:
+    return [
+        executable,
+        *CHROME_BASE_FLAGS,
+        f"--window-size={width},{height}",
+        f"--screenshot={output_path}",
+        url,
+    ]
+
+
+def _chrome_dump_dom_command(executable: str, url: str, width: int, height: int) -> list[str]:
+    return [
+        executable,
+        *CHROME_BASE_FLAGS,
+        f"--window-size={width},{height}",
+        "--dump-dom",
+        url,
+    ]
+
+
+def _html_with_base_and_script(html_text: str, base_uri: str, script: str) -> str:
+    base_tag = f'<base href="{base_uri}">\n'
+    if re.search(r"<head[^>]*>", html_text, flags=re.IGNORECASE):
+        html_text = re.sub(r"(<head[^>]*>)", r"\1\n" + base_tag, html_text, count=1, flags=re.IGNORECASE)
+    else:
+        html_text = base_tag + html_text
+    script_tag = f"\n<script>{script}</script>\n"
+    if re.search(r"</body>", html_text, flags=re.IGNORECASE):
+        return re.sub(r"</body>", lambda _match: script_tag + "</body>", html_text, count=1, flags=re.IGNORECASE)
+    return html_text + script_tag
+
+
+def _extract_chrome_metrics(dom_text: str) -> dict[str, object] | None:
+    match = re.search(r"<pre[^>]*id=[\"']qa-metrics[\"'][^>]*>(.*?)</pre>", dom_text, flags=re.DOTALL)
+    if not match:
+        return None
+    text = html.unescape(match.group(1))
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _run_chrome_browser_checks(
+    important_dir: Path,
+    html_text: str,
+    screenshots_dir: Path | None,
+    section_screenshots: bool,
+    max_overflow_px: int,
+    errors: list[str],
+    notes: list[str],
+) -> bool:
+    executable = _find_chrome_executable()
+    if not executable:
+        notes.append("Chrome/Chromium unavailable")
+        return False
+
+    base_uri = important_dir.resolve().as_uri().rstrip("/") + "/"
+    metrics_js = QA_METRICS_JS.replace("__SECTION_IDS__", json.dumps(SECTION_SCREENSHOT_IDS))
+    screenshot_js = SCROLL_TO_ANCHOR_JS
+    with tempfile.TemporaryDirectory(prefix="panr2_report_browser_qa_") as tmpdir:
+        tmp = Path(tmpdir)
+        metrics_html = tmp / "metrics.html"
+        metrics_html.write_text(_html_with_base_and_script(html_text, base_uri, metrics_js), encoding="utf-8")
+        screenshot_html = tmp / "screenshot.html"
+        screenshot_html.write_text(_html_with_base_and_script(html_text, base_uri, screenshot_js), encoding="utf-8")
+
+        for name, (width, height) in VIEWPORTS.items():
+            command = _chrome_dump_dom_command(executable, metrics_html.resolve().as_uri(), width, height)
+            result = subprocess.run(command, check=False, capture_output=True, text=True, timeout=60)
+            if result.returncode != 0:
+                errors.append(f"Chrome browser QA failed for {name}: {result.stderr.strip()[:500]}")
+                continue
+            metrics = _extract_chrome_metrics(result.stdout)
+            if metrics is None:
+                errors.append(f"Chrome browser QA could not parse metrics for {name}")
+                continue
+            _check_browser_metrics(metrics, name, max_overflow_px, errors)
+            if screenshots_dir:
+                screenshot_command = _chrome_screenshot_command(
+                    executable,
+                    screenshot_html.resolve().as_uri(),
+                    screenshots_dir / f"results_{name}.png",
+                    width,
+                    height,
+                )
+                screenshot_result = subprocess.run(screenshot_command, check=False, capture_output=True, text=True, timeout=60)
+                if screenshot_result.returncode != 0:
+                    errors.append(f"Chrome screenshot failed for {name}: {screenshot_result.stderr.strip()[:500]}")
+
+        if screenshots_dir and section_screenshots:
+            for section_id in SECTION_SCREENSHOT_IDS:
+                command = _chrome_screenshot_command(
+                    executable,
+                    screenshot_html.resolve().as_uri() + f"#{section_id}",
+                    screenshots_dir / f"section_{section_id}.png",
+                    1440,
+                    1000,
+                )
+                result = subprocess.run(command, check=False, capture_output=True, text=True, timeout=60)
+                if result.returncode != 0:
+                    errors.append(f"Chrome section screenshot failed for #{section_id}: {result.stderr.strip()[:500]}")
+    notes.append(f"Browser layout QA used chrome: {executable}")
+    return True
+
+
+def _run_browser_checks(
+    important_dir: Path,
+    html_text: str,
+    screenshots_dir: Path | None,
+    section_screenshots: bool,
+    max_overflow_px: int,
+    require_browser: bool,
+    errors: list[str],
+    notes: list[str],
+) -> None:
+    screenshots_dir = screenshots_dir.resolve() if screenshots_dir else None
+    if screenshots_dir:
+        screenshots_dir.mkdir(parents=True, exist_ok=True)
+
+    if _run_playwright_browser_checks(
+        important_dir,
+        screenshots_dir,
+        section_screenshots,
+        max_overflow_px,
+        errors,
+        notes,
+    ):
+        return
+    if _run_chrome_browser_checks(
+        important_dir,
+        html_text,
+        screenshots_dir,
+        section_screenshots,
+        max_overflow_px,
+        errors,
+        notes,
+    ):
+        return
+
+    message = "Browser layout QA skipped because no Playwright or Chrome/Chromium engine was available"
+    if require_browser:
+        errors.append(message)
+    else:
+        notes.append(message)
 
 
 def validate(
@@ -390,6 +686,7 @@ def validate(
     if browser != "skip":
         _run_browser_checks(
             important_dir,
+            html_text,
             screenshots_dir,
             section_screenshots,
             max_overflow_px,
