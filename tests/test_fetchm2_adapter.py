@@ -964,8 +964,16 @@ class FetchM2AdapterTests(unittest.TestCase):
                 self.assertEqual(geographic_map_quality.iloc[0]["asset_quality_label"], "asset_ready")
             warnings = pd.read_csv(sample_dir / "important" / "tables" / "warnings_and_limitations.tsv", sep="\t")
             self.assertTrue({"warning_id", "section", "severity", "warning_type", "recommended_action"}.issubset(warnings.columns))
+            self.assertNotIn("Warning flags reported in", "\n".join(warnings["description"].fillna("").astype(str)))
+            self.assertTrue(warnings["recommended_action"].fillna("").astype(str).str.len().gt(20).all())
             warning_summary = pd.read_csv(sample_dir / "important" / "tables" / "warnings_and_limitations_summary.tsv", sep="\t")
             self.assertTrue({"section", "severity", "warning_type", "warning_count", "recommended_action"}.issubset(warning_summary.columns))
+            warning_priorities = pd.read_csv(sample_dir / "important" / "tables" / "warning_priority_summary.tsv", sep="\t")
+            if not warning_priorities.empty:
+                self.assertNotEqual(
+                    set(warning_priorities["why_it_matters"].fillna("").astype(str)),
+                    {"This warning can change whether a finding is broad, lineage-driven, BioProject-driven, or under-supported."},
+                )
             download_manifest = pd.read_csv(sample_dir / "important" / "tables" / "download_manifest.tsv", sep="\t")
             self.assertIn("basic/enriched_genome_dataset.csv", set(download_manifest["file_path"]))
             all_index_rows = download_manifest[download_manifest["file_path"] == "all/file_index.tsv"]
@@ -977,7 +985,11 @@ class FetchM2AdapterTests(unittest.TestCase):
             report_html = (sample_dir / "important" / "results.html").read_text(encoding="utf-8")
             self.assertNotIn("Report-facing figure with PNG", report_html)
             self.assertNotIn("Warning rows represent", report_html)
+            self.assertNotIn("warning rows:", report_html)
             self.assertIn("Warning flags average", report_html)
+            self.assertIn("one comparison may carry several warnings", report_html)
+            self.assertIn("Look for:", report_html)
+            self.assertIn("Caution:", report_html)
             self.assertIn("sidebar-links", report_html)
             self.assertIn("analysis-card", report_html)
             self.assertIn("grid-template-columns: repeat(auto-fit, minmax(150px, 1fr))", report_html)

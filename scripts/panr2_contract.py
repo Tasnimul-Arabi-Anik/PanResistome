@@ -3805,7 +3805,22 @@ def _figure_caption_for(section: str, stem: str) -> str:
         if stem.startswith("prevalence_top_features_"):
             return "Horizontal bars rank the most prevalent features for one database and preserve positive/total genome denominators in the plotted data."
         return "Prevalence is calculated from positive genome denominators; feature rows may exceed genome counts."
-    return "Supporting report figure; review the linked source table, warning status, and companion plotted-data TSV before interpretation."
+    return "This supporting figure previews one report-facing pattern; verify exact denominators, warnings, and plotted values in the companion data TSV."
+
+
+def _polish_figure_guidance_text(text: str) -> str:
+    """Make compact figure guidance read like a user-facing note."""
+    polished = str(text or "").strip()
+    if not polished:
+        return ""
+    polished = polished.replace("How to read:", "Look for:")
+    polished = polished.replace(" Do not ", " Caution: do not ")
+    polished = polished.replace(" Do not", " Caution: do not")
+    if "Caution:" not in polished and "Next table:" in polished:
+        polished = polished.replace("Next table:", "Caution: treat this as a report preview, then verify exact values. Next table:", 1)
+    if "Caution:" not in polished and "Next tables:" in polished:
+        polished = polished.replace("Next tables:", "Caution: treat this as a report preview, then verify exact values. Next tables:", 1)
+    return polished
 
 
 def _figure_guidance_for(section: str, stem: str) -> str:
@@ -3881,7 +3896,7 @@ def _figure_guidance_for(section: str, stem: str) -> str:
         return "How to read: prioritize high and critical warnings before interpreting the affected section. Next table: warnings_and_limitations.tsv."
     if section == "QC Summary" or stem.startswith("qc_"):
         return "How to read: check retained genomes and failed/skipped modules before interpreting downstream feature summaries. Next table: qc_by_genome.tsv."
-    return "How to read: use the figure as a preview, then verify denominators, warnings, and source rows in the linked plotted-data TSV."
+    return "Look for: the main visual pattern, then verify exact denominators, warnings, and source rows in the linked plotted-data TSV. Caution: this figure is a preview, not the complete evidence table."
 
 
 def _figure_render_quality(important_dir: Path, stem: str) -> tuple[str, str, str]:
@@ -4146,7 +4161,7 @@ def _report_figure_card_html(
         display_badges.append(("Missing axis labels", "warning"))
     badge_html = " ".join(_report_badge_html(label, kind) for label, kind in display_badges)
     links_html = _report_download_links_html(_figure_asset_links(important_dir, stem))
-    guidance = _figure_guidance_for("", stem)
+    guidance = _polish_figure_guidance_text(_figure_guidance_for("", stem))
     guidance_html = (
         "<details class='figure-guidance'><summary>How to read this figure</summary>"
         f"<p>{html.escape(guidance)}</p></details>"
@@ -12293,6 +12308,80 @@ def write_important_final_interpretation_outputs(
             return "info"
         return "low"
 
+    def warning_copy_parts(warning_type: str, section: str = "", default_description: str = "") -> tuple[str, str, str]:
+        text = f"{warning_type} {section}".lower()
+        default_description = str(default_description or "").strip()
+        generic_description = (
+            "This output row carries an interpretation warning. Review the complete table before using it as a headline finding."
+            if not default_description or default_description.startswith("Warning flags reported in ")
+            else default_description
+        )
+        if any(term in text for term in ["small", "low_sample", "low_support", "few_positive"]):
+            return (
+                "Some groups or comparisons have limited sample support, so one or two genomes can strongly change the percentage.",
+                "Check positive/total denominators and treat these rows as descriptive unless support improves.",
+                "Small denominators make apparent enrichment, prevalence, or trend strength unstable.",
+            )
+        if any(term in text for term in ["bioproject"]):
+            return (
+                "One BioProject or study contributes a large share of the supporting genomes.",
+                "Inspect BioProject composition and validate the pattern in independent sampling before broad interpretation.",
+                "Study design can mimic biology when most supporting genomes come from one submission.",
+            )
+        if any(term in text for term in ["lineage", "st_dominance", "ani", "confounding", "dominance"]):
+            return (
+                "Supporting genomes may be concentrated in one lineage, ST, ANI cluster, or dominant group.",
+                "Use the lineage section and lineage-adjusted tables before interpreting this as a broad metadata or feature pattern.",
+                "Clonal structure can explain apparent associations without an independent metadata effect.",
+            )
+        if "same_genome_only" in text:
+            return (
+                "The evidence is at sample/genome level only and does not show that features are physically linked.",
+                "Look for same-contig, nearby, adjacent, or overlap evidence before claiming genomic context.",
+                "Co-detection in one genome is weaker than coordinate-level context evidence.",
+            )
+        if any(term in text for term in ["low_identity", "low_coverage"]):
+            return (
+                "Some hits have low identity or coverage and may represent partial, divergent, or fragmented annotations.",
+                "Inspect hit-level identity/coverage rows and raw tool output before treating the feature as high confidence.",
+                "Partial or divergent hits can inflate apparent feature presence or variation.",
+            )
+        if any(term in text for term in ["missing", "unavailable", "empty"]):
+            return (
+                "A required metadata field, optional analysis output, or plot input was missing or unavailable.",
+                "Use sections with available denominators and check module/status tables to see what was skipped or absent.",
+                "Missing context limits which comparisons can be interpreted from this run.",
+            )
+        if any(term in text for term in ["cap", "large_dataset"]):
+            return (
+                "The report-facing preview was capped for readability because the run is large.",
+                "Use the complete TSV or ZIP download for exhaustive review; the important report shows a curated subset.",
+                "Capping affects what is visible in HTML, not whether complete tables were preserved.",
+            )
+        if any(term in text for term in ["skipped", "optional"]):
+            return (
+                "An optional module or report output was skipped or intentionally not generated.",
+                "Confirm whether the skipped module is needed for your question; otherwise use the available sections.",
+                "Skipped optional modules reduce context but do not automatically invalidate completed analyses.",
+            )
+        if any(term in text for term in ["failed", "schema", "invalid", "duplicate"]):
+            return (
+                "A validation or module status warning may affect downstream interpretation.",
+                "Review the source file and rerun or repair the affected module before using affected rows as final evidence.",
+                "Validation and module failures can propagate into missing or unreliable report summaries.",
+            )
+        if "exploratory" in text:
+            return (
+                "This result is useful for screening but is not strong enough to treat as a final biological conclusion.",
+                "Use it to prioritize review, then confirm with denominators, lineage/BioProject checks, and raw outputs.",
+                "Exploratory labels mark hypotheses or descriptive patterns rather than confirmed effects.",
+            )
+        return (
+            generic_description,
+            "Review denominators, complete TSVs, lineage/BioProject balance, and raw tool outputs before interpretation.",
+            "This warning marks interpretation context that can change how strongly the row should be trusted.",
+        )
+
     def add_warning_summary(row: dict[str, str]) -> None:
         key = (
             row.get("section", ""),
@@ -12336,6 +12425,7 @@ def write_important_final_interpretation_outputs(
             return
         for warning in [item.strip() for item in re.split(r"[;,|]", warning_type) if item.strip()]:
             severity = severity_for_warning(warning, section)
+            warning_description, warning_action, _warning_why = warning_copy_parts(warning, section, description)
             warning_count_total += 1
             row = {
                 "warning_id": f"W{warning_count_total:05d}",
@@ -12346,8 +12436,8 @@ def write_important_final_interpretation_outputs(
                 "affected_feature": affected_feature,
                 "affected_samples": affected_samples,
                 "affected_rows": affected_rows,
-                "description": description,
-                "recommended_action": "Review denominators, complete TSVs, lineage/BioProject balance, and raw tool outputs before interpretation.",
+                "description": warning_description,
+                "recommended_action": warning_action,
                 "source_file": str(source_file.relative_to(important_dir)) if important_dir in source_file.parents else str(source_file),
             }
             add_warning_summary(row)
@@ -12816,6 +12906,11 @@ def write_important_final_interpretation_outputs(
     warning_priority_rows = []
     for row in warnings_summary_rows:
         severity = row.get("severity", "")
+        _description, _action, why_it_matters = warning_copy_parts(
+            row.get("warning_type", ""),
+            row.get("section", ""),
+            row.get("description", ""),
+        )
         priority_score = (
             {"critical": 100.0, "high": 75.0, "moderate": 45.0, "low": 18.0, "info": 5.0}.get(severity, 10.0)
             + min(number(row.get("warning_count", "0")), 1000.0) / 20.0
@@ -12830,7 +12925,7 @@ def write_important_final_interpretation_outputs(
             "warning_count": row.get("warning_count", ""),
             "affected_rows_total": row.get("affected_rows_total", ""),
             "example_features": row.get("example_features", ""),
-            "why_it_matters": "This warning can change whether a finding is broad, lineage-driven, BioProject-driven, or under-supported.",
+            "why_it_matters": why_it_matters,
             "recommended_action": row.get("recommended_action", ""),
             "source_file": row.get("source_file", ""),
             "priority_score": f"{priority_score:.2f}",
@@ -12866,7 +12961,7 @@ def write_important_final_interpretation_outputs(
         stem = svg_path.stem
         section = "Other"
         interpretation = "descriptive"
-        description = "Report-facing figure with companion downloads."
+        description = "Supporting visualization with companion image and plotted-data downloads."
         for prefix, candidate_section, candidate_interpretation, candidate_description in figure_section_map:
             if stem.startswith(prefix):
                 section = candidate_section
@@ -13934,8 +14029,12 @@ def write_important_results_report(
     metadata_feature_comparisons = int(_float_or_none(metadata_summary.get("feature_enrichment_rows", "0")) or 0)
     metadata_warning_density = (metadata_warning_rows / metadata_feature_comparisons) if metadata_feature_comparisons else 0.0
     metadata_warning_note = (
-        f" Warning flags average {metadata_warning_density:.2f} per feature-by-group comparison; one comparison can carry multiple warning flags."
+        f" Warning flags average {metadata_warning_density:.2f} per feature-by-group comparison; one comparison may carry several warnings."
         if metadata_feature_comparisons else ""
+    )
+    metadata_warning_phrase = (
+        f"{metadata_warning_rows:,} warning flag(s)"
+        if metadata_warning_rows else "no warning flags"
     )
     metadata_summary_html = (
         "<p>"
@@ -13944,7 +14043,7 @@ def write_important_results_report(
         f"{html.escape(metadata_summary.get('database_burden_associations', '0'))} database-burden comparisons. "
         f"Strong feature associations: {html.escape(metadata_summary.get('strong_feature_associations', '0'))}; "
         f"moderate feature associations: {html.escape(metadata_summary.get('moderate_feature_associations', '0'))}; "
-        f"warning rows: {html.escape(metadata_summary.get('warning_rows', '0'))}."
+        f"{metadata_warning_phrase} were recorded across the screened comparisons."
         f"{metadata_warning_note}"
         "</p>"
     )
