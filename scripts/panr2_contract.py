@@ -3246,9 +3246,15 @@ def _html_table(
     download_href: str = "",
     download_label: str = "Download full TSV",
 ) -> str:
-    def display_cell(field: str, value: object) -> str:
+    def display_cell(row: dict[str, str], field: str, value: object) -> str:
         text = str(value or "")
-        if ("date" in field.lower() or "year" in field.lower()) and _is_placeholder_date_value(text):
+        field_lower = field.lower()
+        metadata_column = str(row.get("metadata_column", "") or row.get("column", "")).lower()
+        date_like_field = "date" in field_lower or "year" in field_lower
+        date_like_context = field_lower in {"largest_group", "top_group", "metadata_group"} and (
+            "date" in metadata_column or "year" in metadata_column
+        )
+        if (date_like_field or date_like_context) and _is_placeholder_date_value(text):
             return "missing / placeholder"
         return text
 
@@ -3269,7 +3275,7 @@ def _html_table(
     for row in rows[:max_rows]:
         body_rows.append(
             "<tr>"
-            + "".join(f"<td>{html.escape(display_cell(field, row.get(field, '')))}</td>" for field in fields)
+            + "".join(f"<td>{html.escape(display_cell(row, field, row.get(field, '')))}</td>" for field in fields)
             + "</tr>"
         )
     capped_note = f"Showing {min(len(rows), max_rows)} of {len(rows)} rows"
