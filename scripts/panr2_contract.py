@@ -3561,14 +3561,14 @@ def _human_figure_title(stem: str) -> str:
         left = _display_database_name(match.group(2))
         right = _display_database_name(match.group(3))
         return f"{left} vs {right} co-occurrence {visual}"
+    match = re.fullmatch(r"variation_identity_coverage_(.+)_top\d+", text)
+    if match:
+        return f"{_display_database_name(match.group(1))} identity vs coverage"
     match = re.fullmatch(r"variation_(identity|coverage)_(.+)_top\d+", text)
     if match:
         metric = match.group(1)
         db = _display_database_name(match.group(2))
         return f"{db} {metric} variation"
-    match = re.fullmatch(r"variation_identity_coverage_(.+)_top\d+", text)
-    if match:
-        return f"{_display_database_name(match.group(1))} identity vs coverage"
     match = re.fullmatch(r"variation_top_variable_(.+)_top\d+", text)
     if match:
         return f"{_display_database_name(match.group(1))} most variable features"
@@ -13636,16 +13636,7 @@ def write_important_results_report(
     variation_figures = []
     for path in sorted((important_dir / "figures").glob("variation_*_top20.svg")):
         figure_name = path.name.replace(".svg", "")
-        if figure_name.startswith("variation_identity_coverage_"):
-            title = figure_name.replace("variation_identity_coverage_", "").replace("_top20", "") + " identity vs coverage"
-        elif figure_name.startswith("variation_top_variable_"):
-            title = figure_name.replace("variation_top_variable_", "").replace("_top20", "") + " top variable features"
-        elif figure_name.startswith("variation_coverage_"):
-            title = figure_name.replace("variation_coverage_", "").replace("_top20", "") + " coverage variation"
-        elif figure_name.startswith("variation_identity_"):
-            title = figure_name.replace("variation_identity_", "").replace("_top20", "") + " identity variation"
-        else:
-            title = figure_name
+        title = _human_figure_title(figure_name)
         stem = path.stem
         variation_figures.append(
             (
