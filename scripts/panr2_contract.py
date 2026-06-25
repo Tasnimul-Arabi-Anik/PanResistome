@@ -5367,6 +5367,12 @@ function renderMap(active) {
     [[-11,58],[2,55],[0,50],[-8,50]],
   ];
   for (const shape of land) svg += `<polygon points="${poly(shape)}" fill="#dbeafe" stroke="#bfdbfe" stroke-width="1.2" opacity="0.82"/>`;
+  const labelCountries = new Set([...active]
+    .sort((a, b) => Number(b.total_genomes || 0) - Number(a.total_genomes || 0)
+      || Number(b.prevalence_percent || 0) - Number(a.prevalence_percent || 0)
+      || String(a.country || '').localeCompare(String(b.country || '')))
+    .slice(0, 10)
+    .map(row => row.country));
   for (const row of active) {
     const point = xy(row.country); if (!point) continue;
     const total = Number(row.total_genomes || 0);
@@ -5376,7 +5382,9 @@ function renderMap(active) {
     const fill = (row.warning_flags || '').includes('small_group_warning') ? '#cbd5e1' : `rgb(${Math.round(254 - 64 * (1 - p))},${Math.round(226 - 175 * p)},${Math.round(226 - 175 * p)})`;
     const label = `${row.group_name}. Dataset prevalence: ${row.prevalence_display}. Positive / total genomes: ${positive}/${row.total_genomes || 0}. Warnings: ${row.warning_flags || 'none'}. Dataset-specific summary, not a regional or global prevalence estimate.`;
     svg += `<circle cx="${point[0].toFixed(1)}" cy="${point[1].toFixed(1)}" r="${radius.toFixed(1)}" fill="${fill}" fill-opacity="0.75" stroke="#1f2933"><title>${esc(label)}</title></circle>`;
-    svg += `<text x="${(point[0] + radius + 3).toFixed(1)}" y="${(point[1] + 4).toFixed(1)}" font-size="11" fill="#1f2933">${esc(row.country)}</text>`;
+    if (labelCountries.has(row.country)) {
+      svg += `<text x="${(point[0] + radius + 3).toFixed(1)}" y="${(point[1] + 4).toFixed(1)}" font-size="11" fill="#1f2933">${esc(row.country)}</text>`;
+    }
   }
   svg += `</g><g transform="translate(20,${height + 78})" font-family="Arial" font-size="12" fill="#52606d">`;
   svg += `<text x="0" y="-18" font-size="13" font-weight="700" fill="#102a43">Map reading guide</text>`;

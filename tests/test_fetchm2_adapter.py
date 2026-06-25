@@ -99,6 +99,7 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("polygon points", html)
             self.assertIn("overflow-x: hidden", html)
             self.assertIn("window.addEventListener('resize', render)", html)
+            self.assertIn("labelCountries", html)
             self.assertIn("Map reading guide", html)
             self.assertIn("Higher selected-gene prevalence", html)
             self.assertIn("positive / total genomes", html)
@@ -770,6 +771,7 @@ class FetchM2AdapterTests(unittest.TestCase):
                 self.assertIn(control, geographic_html)
             for guide_text in ["Map reading guide", "Higher selected-gene prevalence", "positive / total genomes", "small group"]:
                 self.assertIn(guide_text, geographic_html)
+            self.assertIn("labelCountries", geographic_html)
             geographic_burden = pd.read_csv(sample_dir / "important" / "tables" / "geographic_database_burden.tsv", sep="\t")
             self.assertTrue({"database", "geo_level", "group_name", "positive_genomes", "prevalence_percent", "warning_flags"}.issubset(geographic_burden.columns))
             country_rows = geographic_burden[(geographic_burden["database"] == "amr") & (geographic_burden["geo_level"] == "country")]
