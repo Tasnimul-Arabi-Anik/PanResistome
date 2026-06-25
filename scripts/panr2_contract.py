@@ -13470,6 +13470,14 @@ def write_important_results_report(
         max_rows=20,
         download_href="tables/prevalence_summary_by_database.tsv",
     )
+    prevalence_reading_cards_html = (
+        "<div class='finding-grid analysis-guide' aria-label='Prevalence reading guide'>"
+        f"<div class='finding-card'><h3>1. Start with denominators</h3><p>{prevalence_unique_features:,} unique feature(s) were summarized across {prevalence_databases:,} database(s). Prevalence always means genomes positive / genomes analyzed.</p><span class='badge badge-pass'>Denominator aware</span></div>"
+        f"<div class='finding-card'><h3>2. Separate rows from genomes</h3><p>{prevalence_total_rows:,} feature row(s) were detected; repeated hits can make row counts higher than positive-genome counts.</p><span class='badge badge-exploratory'>Descriptive</span></div>"
+        f"<div class='finding-card'><h3>3. Check feature class</h3><p>Core/common: {prevalence_core_features + prevalence_common_features:,}; accessory/rare: {prevalence_accessory_features + prevalence_rare_features:,}. Use this before focusing on individual genes.</p><span class='badge badge-pass'>Feature classes</span></div>"
+        f"<div class='finding-card'><h3>4. Open tables last</h3><p>Detailed previews include {len(prevalence_database_rows):,} database row(s) and {len(top_prevalence):,} top feature row(s); complete TSVs remain downloadable.</p><span class='badge badge-capped'>Preview capped</span></div>"
+        "</div>"
+    )
     prevalence_figure_items = []
     for figure_name, title in [
         ("prevalence_feature_counts_by_database", "Feature counts by database"),
@@ -13499,7 +13507,7 @@ def write_important_results_report(
                 _report_figure_card_html(
                     important_dir,
                     stem,
-                    f"{database} prevalence",
+                    f"{_display_database_name(database)} prevalence",
                     _figure_caption_for("Prevalence", stem),
                     [("Descriptive", "descriptive")],
                 ),
@@ -13564,6 +13572,14 @@ def write_important_results_report(
         ["database", "feature_id", "geo_level", "group_name", "total_genomes", "positive_genomes", "prevalence_display", "feature_rows", "mean_hits_per_positive_genome", "warning_flags"],
         max_rows=20,
         download_href="tables/geographic_feature_distribution.tsv",
+    )
+    geographic_reading_cards_html = (
+        "<div class='finding-grid analysis-guide' aria-label='Geographic distribution reading guide'>"
+        f"<div class='finding-card'><h3>1. Use the map first</h3><p>Maps and country bars summarize {geographic_country_groups:,} country group(s); redder bubbles show higher dataset prevalence or burden.</p><span class='badge badge-exploratory'>Dataset map</span></div>"
+        f"<div class='finding-card'><h3>2. Check sample size</h3><p>{geographic_min_n_groups:,} country group(s) pass the default n&gt;=5 threshold. Small groups are useful for review but should not drive conclusions.</p><span class='badge badge-warning'>Denominator check</span></div>"
+        f"<div class='finding-card'><h3>3. Check missingness</h3><p>{geographic_missing_country:,} genome(s) lack country metadata. Missing geography can change the apparent distribution.</p><span class='badge badge-warning'>Metadata caution</span></div>"
+        f"<div class='finding-card'><h3>4. Audit warnings</h3><p>{geographic_warning_count:,} geographic group(s) carry warning flags; complete burden and feature-distribution TSVs remain downloadable.</p><span class='badge badge-capped'>Preview capped</span></div>"
+        "</div>"
     )
     geographic_figure_items = []
     for path in sorted((important_dir / "figures").glob("geographic_*_bar_*.svg"))[:6]:
@@ -14356,18 +14372,24 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 <div class="warning-box warning">Prevalence reflects the analyzed dataset, not global prevalence. This section is descriptive and does not test association or causality.</div>
 {prevalence_cards_html}
 {prevalence_written_html}
+{prevalence_reading_cards_html}
 <div class="analysis-card"><h3>Interactive prevalence explorer</h3><p>Filter by database, prevalence threshold, and display size. Use this for quick feature lookup with denominator-aware percentages.</p><iframe src="figures/prevalence_analysis.html" title="Feature prevalence interactive report"></iframe></div>
 <div class="analysis-card"><h3>Report-facing prevalence figures</h3>{prevalence_figures_html}</div>
+<details class="details-block"><summary>Detailed prevalence tables</summary>
 <div class="analysis-card"><h3>Database summary</h3>{prevalence_database_table_html}</div>
 <div class="analysis-card"><h3>Top feature prevalence</h3>{prevalence_table_html}</div>
+</details>
 <div class="downloads"><a href="figures/prevalence_analysis.html">Open interactive prevalence report</a><a href="prevalence_tables.zip">Download prevalence tables ZIP</a><a href="prevalence_figures.zip">Download prevalence figures ZIP</a><a href="tables/feature_prevalence.tsv">Download full feature prevalence</a><a href="tables/feature_prevalence_top.tsv">Download top feature prevalence</a><a href="tables/prevalence_summary_by_database.tsv">Download database summary</a><a href="tables/prevalence_core_accessory_rare_summary.tsv">Download core/common/accessory/rare summary</a><a href="tables/prevalence_database_burden_by_sample.tsv">Download database burden by sample</a></div></section>
 <section id="geography" class="section"><h2>Geographic Distribution</h2><div class="warning-box warning">Geographic patterns reflect the analyzed dataset only. They are not global prevalence estimates and can be affected by BioProject, lineage, country, and year sampling bias.</div>
 {geographic_cards_html}
 {geographic_summary_html}
+{geographic_reading_cards_html}
 <div class="analysis-card"><h3>Interactive gene map</h3><p>Select an individual feature or database burden, then review the map and ranked country bars together. Redder bubbles indicate higher dataset prevalence; larger bubbles indicate more genomes.</p><iframe src="figures/geographic_distribution.html" title="Geographic distribution interactive report"></iframe></div>
 <div class="analysis-card"><h3>Geographic figures</h3>{geographic_figures_html}</div>
+<details class="details-block"><summary>Detailed geographic tables</summary>
 <div class="analysis-card"><h3>Top database burden by country</h3>{geographic_burden_table_html}</div>
 <div class="analysis-card"><h3>Top feature distributions by country</h3>{geographic_feature_table_html}</div>
+</details>
 <div class="downloads"><a href="figures/geographic_distribution.html">Open interactive geographic report</a><a href="figures/geographic_distribution_map.html">Open compatibility map</a><a href="geographic_tables.zip">Download geographic tables ZIP</a><a href="geographic_figures.zip">Download geographic figures ZIP</a><a href="tables/geographic_distribution_summary.tsv">Download geographic summary</a><a href="tables/geographic_database_burden.tsv">Download database burden table</a><a href="tables/geographic_feature_distribution.tsv">Download feature distribution table</a><a href="tables/geographic_warning_summary.tsv">Download warning summary</a></div></section>
 <section id="variations" class="section"><h2>Variations</h2><p>Variation summaries use identity, coverage, alignment length, and hit-count values when available. Low identity, low coverage, high variation, and few-hit flags are review cues, not automatic failures.</p>
 <div class="warning-box warning">A feature can be common but conserved, common and variable, or rare with unstable estimates. Use the complete hit-level table when reviewing low-confidence or partial hits.</div>
