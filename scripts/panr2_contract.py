@@ -3239,9 +3239,25 @@ def _relative_link(target: Path, base: Path) -> str:
         return target.as_posix()
 
 
-def _html_table(rows: list[dict[str, str]], fields: list[str], max_rows: int = 25) -> str:
+def _html_table(
+    rows: list[dict[str, str]],
+    fields: list[str],
+    max_rows: int = 25,
+    download_href: str = "",
+    download_label: str = "Download full TSV",
+) -> str:
+    download_html = (
+        f"<a class='table-download-link' href='{html.escape(download_href)}'>{html.escape(download_label)}</a>"
+        if download_href else ""
+    )
     if not rows:
-        return "<div class='table-card'><p>No rows available.</p></div>"
+        return (
+            "<div class='table-card'>"
+            "<div class='table-card-header'>"
+            "<span>No rows available in this preview.</span>"
+            f"{download_html}"
+            "</div></div>"
+        )
     header = "".join(f"<th>{html.escape(field)}</th>" for field in fields)
     body_rows = []
     for row in rows[:max_rows]:
@@ -3257,7 +3273,10 @@ def _html_table(rows: list[dict[str, str]], fields: list[str], max_rows: int = 2
         "<div class='table-card'>"
         "<div class='table-card-header'>"
         f"<span>{html.escape(capped_note)}</span>"
+        "<div class='table-actions'>"
+        f"{download_html}"
         "<input class='table-search' type='search' placeholder='Search this preview' aria-label='Search table preview'>"
+        "</div>"
         "</div>"
         "<div class='table-scroll'>"
         f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(body_rows)}</tbody></table>"
@@ -13051,64 +13070,70 @@ def write_important_results_report(
         key=lambda row: (row.get("category", ""), row.get("file_path", "")),
     )[:40]
     enriched_dataset_fields = list(dataset_rows[0].keys())[:14] if dataset_rows else []
-    enriched_dataset_table_html = _html_table(dataset_rows, enriched_dataset_fields, max_rows=20) if enriched_dataset_fields else "<p>No enriched dataset rows available.</p>"
+    enriched_dataset_table_html = _html_table(dataset_rows, enriched_dataset_fields, max_rows=20, download_href="../basic/enriched_genome_dataset.csv", download_label="Download full CSV") if enriched_dataset_fields else "<p>No enriched dataset rows available.</p>"
     qc_table_html = _html_table(qc_steps, ["step_order", "qc_step", "tool", "enabled", "pass", "warning", "fail", "skipped", "status", "notes"], max_rows=20)
-    prevalence_table_html = _html_table(top_prevalence, ["database", "feature_id", "feature_category", "positive_genomes", "total_genomes", "prevalence_display", "feature_rows", "mean_hits_per_positive_genome", "prevalence_label", "warning_flags"], max_rows=20)
-    variation_table_html = _html_table(top_variation, ["database", "feature_id", "total_hits", "positive_genomes", "mean_hits_per_positive_genome", "median_identity", "iqr_identity", "median_coverage", "iqr_coverage", "variation_label", "warning_flags"], max_rows=20)
-    temporal_table_html = _html_table(top_temporal, ["database", "feature_id", "first_year", "last_year", "first_year_prevalence_percent", "last_year_prevalence_percent", "change_percent_points", "correlation", "trend_label", "support_label", "warning_flags"], max_rows=20)
-    cooccurrence_table_html = _html_table(top_cooccurrence, ["feature_a_database", "feature_a_id", "feature_b_database", "feature_b_id", "n_total", "n_both_present", "phi_correlation", "q_value", "direction", "significance_label", "warning_flags"], max_rows=20)
-    context_table_html = _html_table(top_context, ["selected_database", "selected_feature", "context_database", "context_feature", "assembly_accession", "contig", "distance_bp", "evidence_level", "warning_flags"], max_rows=20)
-    metadata_feature_table_html = _html_table(top_metadata_features, ["database", "feature_id", "metadata_column", "metadata_group", "group_n", "positive_in_group", "prevalence_in_group", "prevalence_difference", "odds_ratio", "q_value", "effect_size_label", "support_label", "interpretation_label", "warning_flags"], max_rows=20)
-    metadata_burden_table_html = _html_table(top_metadata_burden, ["database", "metadata_column", "metadata_group", "group_n", "median_burden_group", "median_burden_outside", "burden_difference", "q_value", "support_label", "interpretation_label", "warning_flags"], max_rows=20)
-    metadata_omnibus_table_html = _html_table(top_metadata_omnibus, ["database", "feature_category", "metadata_column", "groups_tested", "samples_tested", "burden_range_median", "test_name", "test_statistic", "q_value", "support_label", "interpretation_label", "warning_flags"], max_rows=20)
-    lineage_distribution_table_html = _html_table(top_lineage_distribution, ["lineage_type", "lineage_id", "total_genomes", "fraction_display", "top_country", "top_source", "top_bioproject", "warning_flags"], max_rows=20)
-    lineage_overlap_table_html = _html_table(top_lineage_overlap, ["lineage_type", "metadata_column", "metadata_group", "dominant_lineage", "dominant_lineage_fraction", "dominance_label", "warning_flags"], max_rows=20)
-    lineage_burden_table_html = _html_table(top_lineage_burden, ["lineage_type", "lineage_id", "database", "lineage_n", "positive_genomes", "prevalence_percent", "median_features_per_genome", "support_label", "warning_flags"], max_rows=20)
-    lineage_enrichment_table_html = _html_table(top_lineage_enrichment, ["lineage_type", "lineage_id", "database", "feature_id", "lineage_n", "positive_in_lineage", "prevalence_in_lineage", "prevalence_difference", "odds_ratio", "q_value", "support_label", "interpretation_label", "warning_flags"], max_rows=20)
-    lineage_presence_table_html = _html_table(top_lineage_presence, ["database", "feature_id", "lineage_type", "lineage_id", "lineage_n", "positive_genomes", "prevalence_display", "top_country", "top_source", "top_bioproject", "warning_flags"], max_rows=20)
-    diversity_richness_table_html = _html_table(top_diversity_richness, ["assembly_accession", "sample_id", "total_unique_features", "total_feature_rows", "amr_richness", "vfdb_richness", "plasmidfinder_richness", "integronfinder_richness", "metadata_country", "metadata_source", "lineage_mlst_ST", "lineage_ani_cluster", "richness_label", "warning_flags"], max_rows=20)
-    diversity_class_table_html = _html_table(top_diversity_classes, ["database", "feature_id", "positive_genomes", "total_genomes", "prevalence_percent", "feature_class", "feature_rows", "median_identity", "median_coverage", "warning_flags"], max_rows=20)
-    diversity_metadata_table_html = _html_table(top_diversity_metadata, ["metadata_column", "metadata_group", "group_n", "database", "mean_richness", "median_richness", "min_richness", "max_richness", "iqr_richness", "warning_flags"], max_rows=20)
-    notable_table_html = _html_table(top_notable, ["rank", "assembly_accession", "sample_id", "notable_genome_score", "notable_label", "score_explanation", "country", "collection_year", "mlst_ST", "ani_cluster", "amr_gene_count", "plasmid_replicon_count", "integron_feature_count", "same_contig_context_count", "within_10kb_context_count", "warning_flags"], max_rows=20)
-    ordination_table_html = _html_table(ordination_rows[:20], ["assembly_accession", "sample_id", "PCoA1", "PCoA2", "explained_variance_PCoA1", "explained_variance_PCoA2", "country", "isolation_source", "bioproject", "mlst_ST", "ani_cluster", "amr_burden", "warning_flags"], max_rows=20)
-    concordance_summary_table_html = _html_table(concordance_summary_rows, ["comparison", "concordance_label", "feature_count", "warning_flags"], max_rows=20)
-    concordance_feature_table_html = _html_table(top_concordance_features, ["feature_id", "feature_name", "drug_class", "called_by_both", "abricate_only", "amrfinderplus_only", "total_positive_genomes", "concordance_label", "warning_flags"], max_rows=20)
-    confidence_table_html = _html_table(top_confidence, ["finding_id", "section", "database", "feature_id", "finding_text", "support_label", "evidence_level", "sample_size", "effect_size", "q_value", "confidence_label", "recommended_interpretation"], max_rows=20)
+    prevalence_table_html = _html_table(top_prevalence, ["database", "feature_id", "feature_category", "positive_genomes", "total_genomes", "prevalence_display", "feature_rows", "mean_hits_per_positive_genome", "prevalence_label", "warning_flags"], max_rows=20, download_href="tables/feature_prevalence.tsv")
+    variation_table_html = _html_table(top_variation, ["database", "feature_id", "total_hits", "positive_genomes", "mean_hits_per_positive_genome", "median_identity", "iqr_identity", "median_coverage", "iqr_coverage", "variation_label", "warning_flags"], max_rows=20, download_href="key_tables/feature_variation_summary.tsv")
+    temporal_table_html = _html_table(top_temporal, ["database", "feature_id", "first_year", "last_year", "first_year_prevalence_percent", "last_year_prevalence_percent", "change_percent_points", "correlation", "trend_label", "support_label", "warning_flags"], max_rows=20, download_href="key_tables/temporal_trend_summary.tsv")
+    cooccurrence_table_html = _html_table(top_cooccurrence, ["feature_a_database", "feature_a_id", "feature_b_database", "feature_b_id", "n_total", "n_both_present", "phi_correlation", "q_value", "direction", "significance_label", "warning_flags"], max_rows=20, download_href="tables/cooccurrence_pair_summary.tsv")
+    context_table_html = _html_table(top_context, ["selected_database", "selected_feature", "context_database", "context_feature", "assembly_accession", "contig", "distance_bp", "evidence_level", "warning_flags"], max_rows=20, download_href="tables/genomic_context_evidence.tsv")
+    metadata_feature_table_html = _html_table(top_metadata_features, ["database", "feature_id", "metadata_column", "metadata_group", "group_n", "positive_in_group", "prevalence_in_group", "prevalence_difference", "odds_ratio", "q_value", "effect_size_label", "support_label", "interpretation_label", "warning_flags"], max_rows=20, download_href="tables/metadata_feature_enrichment.tsv")
+    metadata_burden_table_html = _html_table(top_metadata_burden, ["database", "metadata_column", "metadata_group", "group_n", "median_burden_group", "median_burden_outside", "burden_difference", "q_value", "support_label", "interpretation_label", "warning_flags"], max_rows=20, download_href="tables/metadata_burden_associations.tsv")
+    metadata_omnibus_table_html = _html_table(top_metadata_omnibus, ["database", "feature_category", "metadata_column", "groups_tested", "samples_tested", "burden_range_median", "test_name", "test_statistic", "q_value", "support_label", "interpretation_label", "warning_flags"], max_rows=20, download_href="tables/metadata_burden_omnibus.tsv")
+    lineage_distribution_table_html = _html_table(top_lineage_distribution, ["lineage_type", "lineage_id", "total_genomes", "fraction_display", "top_country", "top_source", "top_bioproject", "warning_flags"], max_rows=20, download_href="tables/lineage_distribution.tsv")
+    lineage_overlap_table_html = _html_table(top_lineage_overlap, ["lineage_type", "metadata_column", "metadata_group", "dominant_lineage", "dominant_lineage_fraction", "dominance_label", "warning_flags"], max_rows=20, download_href="tables/lineage_metadata_overlap.tsv")
+    lineage_burden_table_html = _html_table(top_lineage_burden, ["lineage_type", "lineage_id", "database", "lineage_n", "positive_genomes", "prevalence_percent", "median_features_per_genome", "support_label", "warning_flags"], max_rows=20, download_href="tables/lineage_feature_burden.tsv")
+    lineage_enrichment_table_html = _html_table(top_lineage_enrichment, ["lineage_type", "lineage_id", "database", "feature_id", "lineage_n", "positive_in_lineage", "prevalence_in_lineage", "prevalence_difference", "odds_ratio", "q_value", "support_label", "interpretation_label", "warning_flags"], max_rows=20, download_href="tables/lineage_feature_enrichment.tsv")
+    lineage_presence_table_html = _html_table(top_lineage_presence, ["database", "feature_id", "lineage_type", "lineage_id", "lineage_n", "positive_genomes", "prevalence_display", "top_country", "top_source", "top_bioproject", "warning_flags"], max_rows=20, download_href="tables/lineage_feature_presence.tsv")
+    diversity_richness_table_html = _html_table(top_diversity_richness, ["assembly_accession", "sample_id", "total_unique_features", "total_feature_rows", "amr_richness", "vfdb_richness", "plasmidfinder_richness", "integronfinder_richness", "metadata_country", "metadata_source", "lineage_mlst_ST", "lineage_ani_cluster", "richness_label", "warning_flags"], max_rows=20, download_href="tables/diversity_feature_richness_by_sample.tsv")
+    diversity_class_table_html = _html_table(top_diversity_classes, ["database", "feature_id", "positive_genomes", "total_genomes", "prevalence_percent", "feature_class", "feature_rows", "median_identity", "median_coverage", "warning_flags"], max_rows=20, download_href="tables/diversity_core_common_accessory_rare_features.tsv")
+    diversity_metadata_table_html = _html_table(top_diversity_metadata, ["metadata_column", "metadata_group", "group_n", "database", "mean_richness", "median_richness", "min_richness", "max_richness", "iqr_richness", "warning_flags"], max_rows=20, download_href="tables/diversity_by_metadata_group.tsv")
+    notable_table_html = _html_table(top_notable, ["rank", "assembly_accession", "sample_id", "notable_genome_score", "notable_label", "score_explanation", "country", "collection_year", "mlst_ST", "ani_cluster", "amr_gene_count", "plasmid_replicon_count", "integron_feature_count", "same_contig_context_count", "within_10kb_context_count", "warning_flags"], max_rows=20, download_href="tables/notable_genomes.tsv")
+    ordination_table_html = _html_table(ordination_rows, ["assembly_accession", "sample_id", "PCoA1", "PCoA2", "explained_variance_PCoA1", "explained_variance_PCoA2", "country", "isolation_source", "bioproject", "mlst_ST", "ani_cluster", "amr_burden", "warning_flags"], max_rows=20, download_href="tables/feature_profile_ordination.tsv")
+    concordance_summary_table_html = _html_table(concordance_summary_rows, ["comparison", "concordance_label", "feature_count", "warning_flags"], max_rows=20, download_href="tables/database_concordance_summary.tsv")
+    concordance_feature_table_html = _html_table(top_concordance_features, ["feature_id", "feature_name", "drug_class", "called_by_both", "abricate_only", "amrfinderplus_only", "total_positive_genomes", "concordance_label", "warning_flags"], max_rows=20, download_href="tables/amr_concordance_feature_level.tsv")
+    confidence_table_html = _html_table(top_confidence, ["finding_id", "section", "database", "feature_id", "finding_text", "support_label", "evidence_level", "sample_size", "effect_size", "q_value", "confidence_label", "recommended_interpretation"], max_rows=20, download_href="tables/finding_confidence_summary.tsv")
     report_highlights_table_html = _html_table(
         top_report_highlights,
         ["rank", "section", "highlight_type", "title", "description", "warning_severity", "primary_database", "primary_feature", "secondary_database", "secondary_feature", "metadata_context", "denominator", "effect_size", "q_value", "triage_score"],
         max_rows=20,
+        download_href="tables/report_highlights.tsv",
     )
     report_highlights_by_section_table_html = _html_table(
         top_report_highlights_by_section,
         ["section_rank", "section", "highlight_type", "title", "description", "warning_severity", "primary_database", "primary_feature", "secondary_database", "secondary_feature", "metadata_context", "denominator", "triage_score"],
         max_rows=30,
+        download_href="tables/report_highlights_by_section.tsv",
     )
     trust_first_table_html = _html_table(
         trust_first_highlights,
         ["section", "highlight_type", "title", "description", "primary_database", "primary_feature", "metadata_context", "denominator", "triage_score"],
         max_rows=12,
+        download_href="tables/report_highlights_by_section.tsv",
     )
     caution_first_table_html = _html_table(
         caution_first_highlights,
         ["section", "highlight_type", "title", "description", "warning_severity", "warning_flags", "metadata_context", "denominator", "triage_score"],
         max_rows=12,
+        download_href="tables/report_highlights_by_section.tsv",
     )
-    warnings_table_html = _html_table(top_warnings, ["rank", "section", "severity", "warning_type", "affected_database", "warning_count", "affected_rows_total", "example_features", "example_samples", "why_it_matters", "recommended_action", "source_file"], max_rows=30)
-    warnings_by_section_table_html = _html_table(warnings_by_section_rows, ["section", "severity", "warning_count"], max_rows=30)
-    module_warning_table_html = _html_table(module_warning_rows, ["module", "status", "enabled", "samples_processed", "samples_failed", "feature_rows_created", "severity", "message"], max_rows=30)
-    report_cap_table_html = _html_table(report_cap_rows, ["setting", "value", "message", "warning_flags"], max_rows=30)
+    warnings_table_html = _html_table(top_warnings, ["rank", "section", "severity", "warning_type", "affected_database", "warning_count", "affected_rows_total", "example_features", "example_samples", "why_it_matters", "recommended_action", "source_file"], max_rows=30, download_href="tables/warnings_and_limitations_summary.tsv")
+    warnings_by_section_table_html = _html_table(warnings_by_section_rows, ["section", "severity", "warning_count"], max_rows=30, download_href="tables/warnings_by_section.tsv")
+    module_warning_table_html = _html_table(module_warning_rows, ["module", "status", "enabled", "samples_processed", "samples_failed", "feature_rows_created", "severity", "message"], max_rows=30, download_href="tables/module_warning_summary.tsv")
+    report_cap_table_html = _html_table(report_cap_rows, ["setting", "value", "message", "warning_flags"], max_rows=30, download_href="tables/report_cap_summary.tsv")
     visual_index_table_html = _html_table(
         top_visuals,
         ["section", "title", "default_visibility", "recommended_audience", "publication_candidate", "interpretation_type", "warning_status", "description", "png_path", "svg_path", "pdf_path", "data_tsv_path"],
         max_rows=40,
+        download_href="tables/report_visual_index.tsv",
     )
     visual_quality_table_html = _html_table(
         top_visual_quality,
         ["figure_stem", "section", "default_visibility", "publication_candidate", "asset_quality_label", "interpretation_quality_label", "title_quality_label", "caption_quality_label", "final_publication_label", "png_available", "svg_available", "pdf_available", "data_tsv_available", "warning_status", "recommended_action"],
         max_rows=40,
+        download_href="tables/report_visual_quality.tsv",
     )
-    file_index_table_html = _html_table(top_files, ["file_path", "category", "description", "audience", "complete_or_capped", "recommended_use", "exists", "row_count"], max_rows=40)
+    file_index_table_html = _html_table(top_files, ["file_path", "category", "description", "audience", "complete_or_capped", "recommended_use", "exists", "row_count"], max_rows=40, download_href="tables/important_file_index.tsv")
     prevalence_total_rows = sum(int(_float_or_none(row.get("feature_rows", "")) or 0) for row in prevalence_rows)
     prevalence_unique_features = len(prevalence_rows)
     prevalence_databases = len({row.get("database", "") for row in prevalence_rows if row.get("database", "")})
@@ -13130,6 +13155,7 @@ def write_important_results_report(
         prevalence_database_rows,
         ["database", "total_feature_rows", "unique_features", "positive_genomes", "total_genomes", "genomes_positive_percent", "median_features_per_genome", "top_feature_id", "top_feature_prevalence_percent"],
         max_rows=20,
+        download_href="tables/prevalence_summary_by_database.tsv",
     )
     prevalence_figure_items = []
     for figure_name, title in [
@@ -13218,11 +13244,13 @@ def write_important_results_report(
         top_geographic_burden,
         ["database", "geo_level", "group_name", "total_genomes", "positive_genomes", "prevalence_display", "mean_feature_burden_per_genome", "median_feature_burden_per_genome", "warning_flags"],
         max_rows=20,
+        download_href="tables/geographic_database_burden.tsv",
     )
     geographic_feature_table_html = _html_table(
         top_geographic_features,
         ["database", "feature_id", "geo_level", "group_name", "total_genomes", "positive_genomes", "prevalence_display", "feature_rows", "mean_hits_per_positive_genome", "warning_flags"],
         max_rows=20,
+        download_href="tables/geographic_feature_distribution.tsv",
     )
     geographic_figure_items = []
     for path in sorted((important_dir / "figures").glob("geographic_*_bar_*.svg"))[:6]:
@@ -13282,6 +13310,7 @@ def write_important_results_report(
         variation_database_rows,
         ["database", "unique_features", "total_hits", "median_identity", "median_coverage", "high_variation_features", "low_identity_hits", "low_coverage_hits"],
         max_rows=20,
+        download_href="key_tables/feature_variation_database_summary.tsv",
     )
     variation_figures = []
     for path in sorted((important_dir / "figures").glob("variation_*_top20.svg")):
@@ -13418,6 +13447,7 @@ def write_important_results_report(
         metadata_usability_rows,
         ["metadata_column", "non_missing_count", "missing_fraction", "unique_values", "largest_group", "largest_group_fraction", "eligible_for_testing", "recommended_use", "reason"],
         max_rows=20,
+        download_href="tables/metadata_usability_summary.tsv",
     )
     metadata_figure_items = []
     for key, title in [
@@ -13882,6 +13912,8 @@ main {{ margin-left: 290px; padding: 1.2rem 1.4rem 2rem; min-width: 0; max-width
 iframe {{ width: 100%; min-height: 680px; border: 1px solid var(--border); border-radius: 8px; background: white; }}
 .table-card {{ border: 1px solid var(--border); border-radius: 8px; background: white; margin: 0.75rem 0; overflow: hidden; }}
 .table-card-header {{ display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; padding: 0.55rem 0.7rem; background: #f8fafc; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; }}
+.table-actions {{ display: flex; align-items: center; justify-content: flex-end; gap: 0.55rem; flex-wrap: wrap; min-width: 240px; }}
+.table-download-link {{ color: var(--primary); font-weight: 700; white-space: nowrap; }}
 .table-search {{ max-width: 240px; width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.45rem; }}
 .table-scroll {{ max-height: 550px; overflow: auto; }}
 table {{ border-collapse: collapse; width: 100%; font-size: 0.88rem; }}
@@ -13900,6 +13932,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
   .sidebar a {{ display: block; margin: 0; padding: 0.35rem 0.45rem; white-space: normal; overflow-wrap: anywhere; font-size: 0.92rem; }}
   main {{ margin-left: 0; padding: 0.8rem; width: 100%; max-width: 100vw; overflow-x: hidden; }}
   .section-header, .figure-card-header, .table-card-header {{ flex-direction: column; align-items: stretch; }}
+  .table-actions {{ justify-content: flex-start; min-width: 0; }}
   .diagnostic-list {{ columns: 1; }}
   iframe {{ min-height: 520px; }}
 }}

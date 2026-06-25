@@ -985,6 +985,8 @@ class FetchM2AdapterTests(unittest.TestCase):
                 "summary-card",
                 "figure-card",
                 "table-card",
+                "table-actions",
+                "table-download-link",
                 "table-search",
                 "warning-box",
                 "download-card",
@@ -1005,6 +1007,9 @@ class FetchM2AdapterTests(unittest.TestCase):
             ]:
                 self.assertIn(css_token, report_html)
             self.assertIn("Featured figure gallery", report_html)
+            self.assertIn("Download full TSV", report_html)
+            self.assertIn("tables/feature_prevalence.tsv", report_html)
+            self.assertIn("tables/report_visual_index.tsv", report_html)
             self.assertIn("What to review first", report_html)
             self.assertIn("What to trust first", report_html)
             self.assertIn("What needs caution", report_html)
