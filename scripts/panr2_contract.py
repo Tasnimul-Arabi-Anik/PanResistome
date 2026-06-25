@@ -13684,6 +13684,14 @@ def write_important_results_report(
         max_rows=20,
         download_href="tables/metadata_usability_summary.tsv",
     )
+    metadata_reading_cards_html = (
+        "<div class='finding-grid analysis-guide' aria-label='Metadata association reading guide'>"
+        f"<div class='finding-card'><h3>1. Check usability</h3><p>{html.escape(metadata_usable)} metadata column(s) were usable; {html.escape(metadata_sparse)} were sparse or biased and {html.escape(metadata_excluded)} were excluded.</p><span class='badge badge-pass'>Start here</span></div>"
+        "<div class='finding-card'><h3>2. Scan figures</h3><p>Use the volcano, heatmap, and burden plot to find broad patterns before opening row-level tables.</p><span class='badge badge-exploratory'>Exploratory screen</span></div>"
+        f"<div class='finding-card'><h3>3. Verify denominators</h3><p>The detailed tables preview {len(top_metadata_features):,} feature, {len(top_metadata_burden):,} burden, and {len(top_metadata_omnibus):,} multi-group result(s); complete TSVs remain downloadable.</p><span class='badge badge-capped'>Preview capped</span></div>"
+        "<div class='finding-card'><h3>4. Check lineage next</h3><p>Use the following Lineage section to decide whether metadata patterns are broad or mostly one ST, ANI cluster, or BioProject.</p><span class='badge badge-lineage'>Confounding check</span></div>"
+        "</div>"
+    )
     metadata_figure_items = []
     for key, title in [
         ("important_metadata_volcano_svg", "Metadata enrichment volcano"),
@@ -13732,6 +13740,14 @@ def write_important_results_report(
         f"The default view is {html.escape(lineage_summary.get('default_view', ''))}. "
         "Use this section to check whether feature, geography, temporal, or metadata patterns are concentrated in one ST, ANI cluster, or BioProject."
         "</p>"
+    )
+    lineage_reading_cards_html = (
+        "<div class='finding-grid analysis-guide' aria-label='Lineage reading guide'>"
+        f"<div class='finding-card'><h3>1. Availability</h3><p>MLST, ANI, and BioProject context determine how much clonal-structure interpretation is possible.</p><span class='badge badge-pass'>{html.escape(lineage_summary.get('lineage_types_available', 'context recorded'))}</span></div>"
+        f"<div class='finding-card'><h3>2. Dominance</h3><p>Start with the distribution plot and dominant ST/BioProject cards before interpreting metadata or feature associations.</p><span class='badge badge-lineage'>{html.escape(lineage_summary.get('dominant_ST', 'dominant lineage') or 'dominant lineage')}</span></div>"
+        "<div class='finding-card'><h3>3. Overlap</h3><p>Use metadata-lineage overlap and feature-burden figures to see whether a pattern is broad or clone-concentrated.</p><span class='badge badge-warning'>Caution context</span></div>"
+        f"<div class='finding-card'><h3>4. Audit tables</h3><p>Detailed previews cover {len(top_lineage_distribution):,} distribution, {len(top_lineage_overlap):,} overlap, and {len(top_lineage_enrichment):,} enrichment result(s); full TSVs are preserved.</p><span class='badge badge-capped'>Preview capped</span></div>"
+        "</div>"
     )
     lineage_written_html = "".join(
         f"<p><strong>{html.escape(row.get('section', '').replace('_', ' ').title())}:</strong> {html.escape(row.get('summary', ''))}</p>"
@@ -14299,24 +14315,30 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 <div class="downloads"><a href="figures/cooccurrence_context.html">Open interactive co-occurrence report</a><a href="cooccurrence_tables.zip">Download all co-occurrence tables ZIP</a><a href="cooccurrence_figures.zip">Download all co-occurrence figures ZIP</a><a href="tables/cooccurrence_pair_summary.tsv">Download pair summary</a><a href="tables/cooccurrence_heatmap_matrix.tsv">Download heatmap matrix</a><a href="tables/cooccurrence_network_edges.tsv">Download network edges</a><a href="tables/cooccurrence_network_nodes.tsv">Download network nodes</a><a href="tables/genomic_context_evidence.tsv">Download genomic context evidence</a><a href="tables/contig_neighborhoods.tsv">Download contig neighborhoods</a></div></section>
 <section id="metadata-associations" class="section"><h2>Metadata Associations</h2><div class="warning-box warning">Metadata associations are exploratory enrichment-style screens. They may reflect sampling, BioProject structure, lineage composition, geography, collection year, or missing metadata and should not be interpreted as causal.</div>
 {metadata_summary_html}
+{metadata_reading_cards_html}
 <div class="analysis-card"><h3>Metadata usability</h3>{metadata_usability_cards}{metadata_usability_table_html}</div>
 <div class="analysis-card"><h3>Interactive metadata association explorer</h3><p>Use this for exploratory enrichment and burden screens. Review warnings before treating any metadata pattern as broad.</p><iframe src="figures/metadata_associations.html" title="Metadata associations interactive report"></iframe></div>
 <div class="analysis-card"><h3>Metadata association figures</h3>{metadata_figures_html}</div>
+<details class="details-block"><summary>Detailed metadata association tables</summary>
 <div class="analysis-card"><h3>Top feature associations</h3>{metadata_feature_table_html}</div>
 <div class="analysis-card"><h3>Top database-burden associations</h3>{metadata_burden_table_html}</div>
 <div class="analysis-card"><h3>Top multi-group burden tests</h3>{metadata_omnibus_table_html}</div>
+</details>
 <div class="downloads"><a href="figures/metadata_associations.html">Open interactive metadata association report</a><a href="metadata_association_tables.zip">Download all metadata association tables ZIP</a><a href="metadata_association_figures.zip">Download all metadata association figures ZIP</a><a href="tables/metadata_usability_summary.tsv">Download metadata usability summary</a><a href="tables/metadata_feature_enrichment.tsv">Download feature enrichment</a><a href="tables/metadata_burden_associations.tsv">Download burden associations</a><a href="tables/metadata_category_enrichment.tsv">Download category enrichment</a><a href="tables/metadata_burden_omnibus.tsv">Download burden omnibus tests</a><a href="tables/metadata_category_omnibus.tsv">Download category omnibus tests</a><a href="tables/metadata_association_summary.tsv">Download metadata association summary</a></div></section>
 <section id="lineage" class="section"><h2>Lineage / Clonal Structure</h2><div class="warning-box warning">Lineage summaries are exploratory and do not replace phylogenetic analysis. Apparent metadata associations may reflect clonal structure, BioProject sampling, geography, or temporal sampling.</div>
 {lineage_cards_html}
 {lineage_summary_html}
+{lineage_reading_cards_html}
 {lineage_written_html}
 <div class="analysis-card"><h3>Interactive lineage explorer</h3><p>Use this after metadata associations to check whether patterns are broad or concentrated in a clone, ST, ANI cluster, or BioProject.</p><iframe src="figures/lineage_clonal_structure.html" title="Lineage and clonal structure interactive report"></iframe></div>
 <div class="analysis-card"><h3>Lineage figures</h3>{lineage_figures_html}</div>
+<details class="details-block"><summary>Detailed lineage tables</summary>
 <div class="analysis-card"><h3>Lineage distribution</h3>{lineage_distribution_table_html}</div>
 <div class="analysis-card"><h3>Metadata-lineage overlap</h3>{lineage_overlap_table_html}</div>
 <div class="analysis-card"><h3>Feature burden by lineage</h3>{lineage_burden_table_html}</div>
 <div class="analysis-card"><h3>Feature enrichment by lineage</h3>{lineage_enrichment_table_html}</div>
 <div class="analysis-card"><h3>Selected feature lineage report</h3>{lineage_presence_table_html}</div>
+</details>
 <div class="downloads"><a href="figures/lineage_clonal_structure.html">Open interactive lineage report</a><a href="lineage_tables.zip">Download lineage tables ZIP</a><a href="lineage_figures.zip">Download lineage figures ZIP</a><a href="tables/lineage_summary.tsv">Download sample lineage summary</a><a href="tables/lineage_distribution.tsv">Download lineage distribution</a><a href="tables/lineage_metadata_overlap.tsv">Download metadata-lineage overlap</a><a href="tables/lineage_feature_burden.tsv">Download lineage feature burden</a><a href="tables/lineage_feature_enrichment.tsv">Download lineage feature enrichment</a><a href="tables/lineage_adjusted_top_findings.tsv">Download lineage-adjusted top findings</a><a href="tables/lineage_feature_presence.tsv">Download selected feature lineage table</a><a href="tables/lineage_written_summaries.tsv">Download written summaries</a></div></section>
 <section id="diversity" class="section"><h2>Diversity / Pan-feature Summary</h2><div class="warning-box warning">Diversity summaries reflect detected annotation features, not complete biological diversity. Results depend on selected databases, genome quality, sample composition, and feature-calling tools.</div>
 {diversity_cards_html}
