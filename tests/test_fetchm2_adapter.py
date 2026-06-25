@@ -929,6 +929,7 @@ class FetchM2AdapterTests(unittest.TestCase):
             qc_quality = visual_quality[visual_quality["figure_stem"].fillna("").astype(str).str.startswith("qc_")]
             if not qc_quality.empty:
                 self.assertNotIn("generic_caption", set(qc_quality["caption_quality_label"].fillna("").astype(str)))
+                self.assertNotIn("asset_incomplete", set(qc_quality["asset_quality_label"].fillna("").astype(str)))
             temporal_quality = visual_quality[visual_quality["figure_stem"].fillna("").astype(str).str.startswith("temporal_")]
             if not temporal_quality.empty:
                 self.assertNotIn("missing_axis_labels", set(temporal_quality["axis_label_status"].fillna("").astype(str)))

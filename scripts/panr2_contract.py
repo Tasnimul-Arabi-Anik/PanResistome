@@ -6757,6 +6757,11 @@ def write_important_qc_outputs(sample_dir: Path, out_dir: Path, important_dir: P
     write_rows(funnel_path, funnel_rows, ["step", "genomes", "status"])
     _write_bar_svg(figures / "qc_funnel.svg", funnel_rows, "QC Funnel", "step", "genomes", "Genomes")
     _write_bar_png(figures / "qc_funnel.png", funnel_rows, "genomes")
+    _write_simple_pdf(
+        figures / "qc_funnel.pdf",
+        "QC Funnel",
+        [f"{row.get('step', '')}: {row.get('genomes', '')} genomes; status={row.get('status', '')}" for row in funnel_rows],
+    )
 
     status_rows = []
     for row in step_rows:
@@ -6767,15 +6772,22 @@ def write_important_qc_outputs(sample_dir: Path, out_dir: Path, important_dir: P
     compact_status = [{"label": f"{row['qc_step']} {row['status']}", "count": row["count"]} for row in status_rows if row["count"] != "0"]
     _write_bar_svg(figures / "qc_status_overview.svg", compact_status, "QC Status Overview", "label", "count", "Genomes")
     _write_bar_png(figures / "qc_status_overview.png", compact_status, "count")
+    _write_simple_pdf(
+        figures / "qc_status_overview.pdf",
+        "QC Status Overview",
+        [f"{row.get('label', '')}: {row.get('count', '')} genomes" for row in compact_status],
+    )
 
     outputs = {
         "important_qc_step_summary": str(step_path),
         "important_qc_by_genome": str(qc_by_genome_path),
         "important_qc_funnel_svg": str(figures / "qc_funnel.svg"),
         "important_qc_funnel_png": str(figures / "qc_funnel.png"),
+        "important_qc_funnel_pdf": str(figures / "qc_funnel.pdf"),
         "important_qc_funnel_data": str(funnel_path),
         "important_qc_status_svg": str(figures / "qc_status_overview.svg"),
         "important_qc_status_png": str(figures / "qc_status_overview.png"),
+        "important_qc_status_pdf": str(figures / "qc_status_overview.pdf"),
         "important_qc_status_data": str(status_path),
     }
 
