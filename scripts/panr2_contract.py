@@ -13712,6 +13712,28 @@ def write_important_results_report(
         max_primary=2,
         supporting_summary="More temporal exploratory figures",
     )
+    temporal_valid_years = sorted(
+        {
+            row.get("first_year", "")
+            for row in temporal_rows
+            if row.get("first_year", "") and not _is_placeholder_date_value(row.get("first_year", ""))
+        }
+        | {
+            row.get("last_year", "")
+            for row in temporal_rows
+            if row.get("last_year", "") and not _is_placeholder_date_value(row.get("last_year", ""))
+        }
+    )
+    temporal_low_support = sum(1 for row in temporal_rows if row.get("support_label") == "low_support")
+    temporal_warning_rows = sum(1 for row in temporal_rows if row.get("warning_flags", ""))
+    temporal_reading_cards_html = (
+        "<div class='finding-grid analysis-guide' aria-label='Temporal trends reading guide'>"
+        f"<div class='finding-card'><h3>1. Check valid years</h3><p>{len(temporal_valid_years):,} valid collection-year value(s) contributed to trend summaries after placeholder dates were excluded.</p><span class='badge badge-pass'>Valid years only</span></div>"
+        f"<div class='finding-card'><h3>2. Treat trends as exploratory</h3><p>{temporal_low_support:,} trend row(s) have low support. Yearly prevalence can shift with sampling, BioProject, geography, or lineage.</p><span class='badge badge-exploratory'>Exploratory</span></div>"
+        "<div class='finding-card'><h3>3. Read denominators</h3><p>Use the line plot and slope plot together; points and plotted data preserve yearly positive / total genome denominators.</p><span class='badge badge-warning'>Denominator check</span></div>"
+        f"<div class='finding-card'><h3>4. Audit warnings</h3><p>{temporal_warning_rows:,} temporal row(s) carry warning flags; full yearly prevalence and burden TSVs remain downloadable.</p><span class='badge badge-capped'>Preview capped</span></div>"
+        "</div>"
+    )
     cooccurrence_summary = cooccurrence_summary_rows[0] if cooccurrence_summary_rows else {}
     cooccurrence_summary_html = (
         "<p>"
@@ -13721,6 +13743,21 @@ def write_important_results_report(
         f"Same-contig/proximity evidence rows: {html.escape(cooccurrence_summary.get('same_contig_context_pairs', '0'))}; "
         f"within 10 kb: {html.escape(cooccurrence_summary.get('within_10kb_context_pairs', '0'))}."
         "</p>"
+    )
+    cooccurrence_tested_pairs = int(_float_or_none(cooccurrence_summary.get("tested_pairs", "")) or 0)
+    cooccurrence_positive_pairs = int(_float_or_none(cooccurrence_summary.get("significant_positive_pairs", "")) or 0)
+    cooccurrence_negative_pairs = int(_float_or_none(cooccurrence_summary.get("significant_negative_pairs", "")) or 0)
+    cooccurrence_context_pairs = int(_float_or_none(cooccurrence_summary.get("same_contig_context_pairs", "")) or 0)
+    cooccurrence_within_10kb = int(_float_or_none(cooccurrence_summary.get("within_10kb_context_pairs", "")) or 0)
+    cooccurrence_warning_rows = sum(1 for row in cooccurrence_rows if row.get("warning_flags", ""))
+    context_warning_rows = sum(1 for row in context_rows if row.get("warning_flags", ""))
+    cooccurrence_reading_cards_html = (
+        "<div class='finding-grid analysis-guide' aria-label='Co-occurrence and context reading guide'>"
+        f"<div class='finding-card'><h3>1. Separate evidence types</h3><p>{cooccurrence_tested_pairs:,} sample-level pair(s) were screened; sample co-occurrence does not prove physical linkage.</p><span class='badge badge-exploratory'>Screening view</span></div>"
+        f"<div class='finding-card'><h3>2. Review direction</h3><p>{cooccurrence_positive_pairs:,} positive and {cooccurrence_negative_pairs:,} negative significant pair(s) were detected after filtering.</p><span class='badge badge-pass'>Pair direction</span></div>"
+        f"<div class='finding-card'><h3>3. Prioritize context</h3><p>{cooccurrence_context_pairs:,} same-contig/proximity context pair(s) and {cooccurrence_within_10kb:,} within-10-kb pair(s) provide stronger review cues.</p><span class='badge badge-warning'>Context evidence</span></div>"
+        f"<div class='finding-card'><h3>4. Audit warnings</h3><p>{cooccurrence_warning_rows + context_warning_rows:,} co-occurrence/context row(s) carry warning flags; complete TSVs remain downloadable.</p><span class='badge badge-capped'>Preview capped</span></div>"
+        "</div>"
     )
     cooccurrence_figure_items = []
     for key, title in [
@@ -14414,16 +14451,22 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 <div class="downloads"><a href="figures/variation_analysis.html">Open interactive variation report</a><a href="variation_figures.zip">Download variation figures ZIP</a><a href="key_tables/feature_variation_database_summary.tsv">Download variation database summary</a><a href="key_tables/feature_variation_summary.tsv">Download variation summary</a><a href="key_tables/feature_variation_hits.tsv">Download hit-level variation table</a></div></section>
 <section id="temporal" class="section"><h2>Temporal Trends</h2><div class="warning-box warning">Temporal trends reflect the analyzed dataset only. They can be affected by sampling year, BioProject, country, lineage, and missing collection-year metadata.</div>
 <p>Prevalence trends use yearly percentages with genome-count denominators. Database burden is summarized as mean detected features per genome by collection year.</p>
+{temporal_reading_cards_html}
 <div class="analysis-card"><h3>Interactive temporal explorer</h3><p>Review yearly prevalence and burden with positive/total denominators. Treat low-support trends as descriptive only.</p><iframe src="figures/temporal_trends.html" title="Temporal trends interactive report"></iframe></div>
 <div class="analysis-card"><h3>Temporal figures</h3>{temporal_figures_html}</div>
+<details class="details-block"><summary>Detailed temporal tables</summary>
 <div class="analysis-card"><h3>Temporal trend table</h3>{temporal_table_html}</div>
+</details>
 <div class="downloads"><a href="figures/temporal_trends.html">Open interactive temporal report</a><a href="key_tables/temporal_database_burden.tsv">Download database burden by year</a><a href="key_tables/temporal_feature_prevalence.tsv">Download yearly feature prevalence</a><a href="key_tables/temporal_trend_summary.tsv">Download temporal trend summary</a><a href="key_tables/temporal_increasing_features.tsv">Download increasing features</a><a href="key_tables/temporal_decreasing_features.tsv">Download decreasing features</a></div></section>
 <section id="cooccurrence" class="section"><h2>Co-occurrence / Genomic Context</h2><div class="warning-box warning">Sample-level co-occurrence does not prove physical linkage. Same-contig and proximity evidence are stronger context signals, but do not prove transfer, expression, phenotype, or plasmid localization.</div>
 {cooccurrence_summary_html}
+{cooccurrence_reading_cards_html}
 <div class="analysis-card"><h3>Interactive co-occurrence and context explorer</h3><p>Use the heatmap/network for feature-profile screening, then use same-contig and proximity evidence for stronger context review.</p><iframe src="figures/cooccurrence_context.html" title="Co-occurrence and genomic context interactive report"></iframe></div>
 <div class="analysis-card"><h3>Co-occurrence and context figures</h3>{cooccurrence_figures_html}</div>
+<details class="details-block"><summary>Detailed co-occurrence and context tables</summary>
 <div class="analysis-card"><h3>Top co-occurrence pairs</h3>{cooccurrence_table_html}</div>
 <div class="analysis-card"><h3>Genomic context evidence</h3>{context_table_html}</div>
+</details>
 <div class="downloads"><a href="figures/cooccurrence_context.html">Open interactive co-occurrence report</a><a href="cooccurrence_tables.zip">Download all co-occurrence tables ZIP</a><a href="cooccurrence_figures.zip">Download all co-occurrence figures ZIP</a><a href="tables/cooccurrence_pair_summary.tsv">Download pair summary</a><a href="tables/cooccurrence_heatmap_matrix.tsv">Download heatmap matrix</a><a href="tables/cooccurrence_network_edges.tsv">Download network edges</a><a href="tables/cooccurrence_network_nodes.tsv">Download network nodes</a><a href="tables/genomic_context_evidence.tsv">Download genomic context evidence</a><a href="tables/contig_neighborhoods.tsv">Download contig neighborhoods</a></div></section>
 <section id="metadata-associations" class="section"><h2>Metadata Associations</h2><div class="warning-box warning">Metadata associations are exploratory enrichment-style screens. They may reflect sampling, BioProject structure, lineage composition, geography, collection year, or missing metadata and should not be interpreted as causal.</div>
 {metadata_summary_html}
