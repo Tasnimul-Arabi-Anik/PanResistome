@@ -1046,6 +1046,16 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("What to trust first", report_html)
             self.assertIn("What needs caution", report_html)
             self.assertIn("Balanced highlights by section", report_html)
+            for report_phrase in [
+                "Warning triage cards",
+                "Detailed warning tables",
+                "Main files",
+                "Review and interpretation tables",
+                "Reproducibility and audit files",
+                "Visual index and quality previews",
+                "Important file index preview",
+            ]:
+                self.assertIn(report_phrase, report_html)
             self.assertIn("Download report highlights", report_html)
             self.assertIn("Visual index", report_html)
             self.assertIn("Visual quality", report_html)

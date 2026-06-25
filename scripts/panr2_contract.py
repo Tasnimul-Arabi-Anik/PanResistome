@@ -13338,6 +13338,24 @@ def write_important_results_report(
     warnings_by_section_table_html = _html_table(warnings_by_section_rows, ["section", "severity", "warning_count"], max_rows=30, download_href="tables/warnings_by_section.tsv")
     module_warning_table_html = _html_table(module_warning_rows, ["module", "status", "enabled", "samples_processed", "samples_failed", "feature_rows_created", "severity", "message"], max_rows=30, download_href="tables/module_warning_summary.tsv")
     report_cap_table_html = _html_table(report_cap_rows, ["setting", "value", "message", "warning_flags"], max_rows=30, download_href="tables/report_cap_summary.tsv")
+    warning_severity_counts = Counter(row.get("severity", "info") for row in warning_priority_rows or warnings_summary_rows or warnings_rows)
+    warning_priority_total = sum(int(_float_or_none(row.get("warning_count", "")) or 0) for row in warning_priority_rows)
+    top_warning_row = top_warnings[0] if top_warnings else {}
+    warning_sections = sorted({row.get("section", "") for row in warning_priority_rows if row.get("section", "")})
+    non_pass_modules = [
+        row for row in module_warning_rows
+        if str(row.get("severity", "")).lower() in {"moderate", "high", "critical"}
+        or str(row.get("status", "")).upper() not in {"", "PASS", "SKIPPED"}
+    ]
+    warning_triage_cards_html = (
+        "<div class='finding-grid warning-triage' aria-label='Warning triage cards'>"
+        f"<div class='finding-card'><h3>High-priority categories</h3><p><strong>{warning_severity_counts.get('critical', 0)} critical</strong> and <strong>{warning_severity_counts.get('high', 0)} high</strong> warning categories are summarized here.</p><span class='badge badge-warning'>Review first</span></div>"
+        f"<div class='finding-card'><h3>Highest priority warning</h3><p>{html.escape(top_warning_row.get('section', 'No warning section'))}: {html.escape(top_warning_row.get('warning_type', 'No warning type'))} ({html.escape(top_warning_row.get('warning_count', '0'))} flags).</p><span class='badge badge-warning'>Actionable</span></div>"
+        f"<div class='finding-card'><h3>Sections affected</h3><p>{len(warning_sections)} report section(s) have warning categories. Use the grouped table only after reading the summary cards and figures.</p><span class='badge badge-exploratory'>Interpretation context</span></div>"
+        f"<div class='finding-card'><h3>Report caps and modules</h3><p>{len(report_cap_rows)} report cap setting(s) are recorded; {len(non_pass_modules)} module row(s) need review.</p><span class='badge badge-capped'>Complete TSVs preserved</span></div>"
+        "</div>"
+        f"<p class='section-note'>Warning categories represent interpretation context, not automatic run failure. {warning_priority_total:,} warning flags were summarized across complete report tables; one result can carry more than one warning.</p>"
+    )
     visual_index_table_html = _html_table(
         top_visuals,
         ["section", "title", "default_visibility", "recommended_audience", "publication_candidate", "interpretation_type", "warning_status", "description", "png_path", "svg_path", "pdf_path", "data_tsv_path"],
@@ -14028,13 +14046,15 @@ def write_important_results_report(
         ("../panr2_inputs/manifest/reproducibility_manifest.json", "Download reproducibility manifest"),
         ("../panr2_inputs/manifest/feature_contract.json", "Download feature contract"),
     ])
-    download_cards_html = _report_download_cards_html(important_dir, [
+    download_main_cards_html = _report_download_cards_html(important_dir, [
         ("../basic/enriched_genome_dataset.csv", "Enriched dataset", "One row per genome with metadata, QC, annotation burdens, lineage labels, and module provenance.", "Start here for spreadsheet review."),
         ("downloads/important_summary_tables.zip", "Summary tables ZIP", "Compact report summaries and prioritized findings without the largest exhaustive matrices.", "Start here for routine review."),
         ("downloads/important_tables.zip", "Complete tables ZIP", "All curated report-facing TSV tables, including large exhaustive association tables.", "Use for downstream analysis and complete review."),
         ("downloads/important_figures.zip", "Important figures ZIP", "Publication-friendly PNG/SVG/PDF/data figure outputs.", "Use for presentations and manuscripts."),
         ("downloads/publication_candidate_figures.zip", "Publication-candidate figures ZIP", "Curated featured and standard figures with complete companion assets where available.", "Start here when choosing figures for talks, manuscripts, or reports."),
         ("downloads/important_report_assets.zip", "Report assets ZIP", "Report HTML, figures, tables, and related assets.", "Use to move the important report as a bundle."),
+    ])
+    download_review_cards_html = _report_download_cards_html(important_dir, [
         ("tables/report_highlights.tsv", "Report highlights", "Ranked cross-section findings selected by support, warning burden, and review value.", "Use as the first triage table."),
         ("tables/report_highlights_by_section.tsv", "Highlights by section", "Balanced report highlights so each major section stays visible.", "Use when the global ranking is dominated by one section."),
         ("tables/warning_priority_summary.tsv", "Warning priorities", "Highest-priority warning categories with counts, examples, and recommended actions.", "Use before interpreting warning-heavy sections."),
@@ -14043,7 +14063,13 @@ def write_important_results_report(
         ("tables/warnings_and_limitations_summary.tsv", "Warnings summary", "Compact warning categories with counts, examples, and recommended actions.", "Start here before opening detailed source tables."),
         ("tables/notable_genomes.tsv", "Notable genomes", "Transparent research-prioritization output with score explanations.", "Use to choose genomes for manual review."),
         ("tables/finding_confidence_summary.tsv", "Finding confidence", "Cross-section finding confidence labels and recommended interpretation.", "Use to triage strongest and exploratory findings."),
+    ])
+    download_repro_cards_html = _report_download_cards_html(important_dir, [
         ("../panr2_inputs/manifest/feature_contract.json", "Feature contract", "Machine-readable feature schema and allowed values.", "Use for reproducibility and parser validation."),
+        ("../panr2_inputs/manifest/reproducibility_manifest.json", "Reproducibility manifest", "Report-facing provenance entry points and bundle paths.", "Use to document exactly what was generated."),
+        ("../panr2_inputs/manifest/schema_validation_summary.txt", "Schema validation summary", "Feature-contract validation status and warnings.", "Use when debugging downstream parser assumptions."),
+        ("tables/important_file_index.tsv", "Important file index", "Human-readable inventory of key report files and intended uses.", "Use when sharing a subset of outputs."),
+        ("tables/download_manifest.tsv", "Download manifest", "Machine-readable file inventory used by the report download cards.", "Use for automated checks."),
     ])
     report_path = important_dir / "results.html"
     report_path.write_text(
@@ -14141,6 +14167,8 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 .finding-card h3, .download-card h3 {{ margin: 0 0 0.35rem; overflow-wrap: anywhere; }}
 .finding-card-footer {{ display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }}
 .details-block {{ border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; background: #f8fafc; margin: 0.75rem 0; }}
+.details-block > summary {{ cursor: pointer; font-weight: 800; color: var(--text); }}
+.section-note {{ color: var(--muted); font-size: 0.94rem; margin: 0.65rem 0 1rem; }}
 .back-to-top {{ position: fixed; right: 1rem; bottom: 1rem; background: var(--primary); color: white; padding: 0.55rem 0.7rem; border-radius: 999px; text-decoration: none; box-shadow: 0 8px 20px rgba(15,23,42,0.22); z-index: 20; }}
 @media (max-width: 920px) {{
   .sidebar {{ position: sticky; top: 0; width: 100%; max-height: 42vh; overflow-y: auto; border-bottom: 1px solid rgba(255,255,255,0.18); }}
@@ -14319,21 +14347,28 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 <div class="analysis-card"><h3>Finding confidence table</h3>{confidence_table_html}</div>
 <div class="downloads"><a href="tables/evidence_summary.tsv">Download evidence summary</a><a href="tables/finding_confidence_summary.tsv">Download finding confidence summary</a><a href="tables/evidence_by_section.tsv">Download evidence by section</a></div></section>
 <section id="warnings" class="section"><h2>Warnings & Limitations</h2><div class="warning-box warning">Warnings do not necessarily invalidate the run, but they affect interpretation. Complete TSV outputs are preserved even when report-facing figures are capped.</div>
+{warning_triage_cards_html}
 <div class="analysis-card"><h3>Warning summary figures</h3>{warnings_figures_html}</div>
+<details class="details-block"><summary>Detailed warning tables</summary>
 <div class="analysis-card"><h3>Top warnings</h3>{warnings_table_html}</div>
 <div class="analysis-card"><h3>Warnings by section</h3>{warnings_by_section_table_html}</div>
 <div class="analysis-card"><h3>Module warning summary</h3>{module_warning_table_html}</div>
 <div class="analysis-card"><h3>Report caps</h3>{report_cap_table_html}</div>
+</details>
 <div class="downloads"><a href="tables/warnings_and_limitations_summary.tsv">Download compact warning summary</a><a href="tables/warnings_and_limitations.tsv">Download compact warnings table</a><a href="tables/warnings_by_section.tsv">Download warnings by section</a><a href="tables/module_warning_summary.tsv">Download module warning summary</a><a href="tables/report_cap_summary.tsv">Download report cap summary</a></div></section>
 <section id="downloads" class="section"><h2>Downloads / Important Files</h2><p>Use these files to navigate the report-facing outputs and complete reproducibility artifacts.</p>
 <div class="downloads"><a href="../basic/enriched_genome_dataset.csv">Download enriched dataset CSV</a><a href="../basic/enriched_genome_dataset.tsv">Download enriched dataset TSV</a><a href="downloads/important_summary_tables.zip">Download summary tables ZIP</a><a href="downloads/important_tables.zip">Download complete tables ZIP</a><a href="downloads/important_figures.zip">Download important figures ZIP</a><a href="downloads/publication_candidate_figures.zip">Download publication candidates ZIP</a><a href="downloads/important_report_assets.zip">Download report assets ZIP</a><a href="../panr2_inputs/report/panr2_handoff_index.html">Open complete output bundle</a><a href="../panr2_inputs/manifest/reproducibility_manifest.json">Download reproducibility manifest</a><a href="../panr2_inputs/manifest/feature_contract.json">Download feature contract</a></div>
-{download_cards_html}
+<div class="analysis-card"><h3>Main files</h3>{download_main_cards_html}</div>
+<div class="analysis-card"><h3>Review and interpretation tables</h3>{download_review_cards_html}</div>
+<div class="analysis-card"><h3>Reproducibility and audit files</h3>{download_repro_cards_html}</div>
+<details class="details-block"><summary>Visual index and quality previews</summary>
 <div class="analysis-card"><h3>Visual index</h3>
 <p>More supporting and technical figures are preserved in the visual index and complete figure downloads even when they are collapsed in the main report.</p>
 {visual_index_table_html}</div>
 <div class="analysis-card"><h3>Visual quality</h3>{visual_quality_table_html}</div>
 <div class="downloads"><a href="tables/report_visual_index.tsv">Download visual index</a><a href="tables/report_visual_quality.tsv">Download visual quality</a><a href="tables/report_highlights.tsv">Download report highlights</a><a href="tables/report_highlights_by_section.tsv">Download highlights by section</a><a href="tables/warning_priority_summary.tsv">Download warning priorities</a></div>
-<div class="analysis-card"><h3>Important file index</h3>{file_index_table_html}</div>
+</details>
+<details class="details-block"><summary>Important file index preview</summary><div class="analysis-card"><h3>Important file index</h3>{file_index_table_html}</div></details>
 <div class="downloads"><a href="tables/important_file_index.tsv">Download important file index</a><a href="tables/download_manifest.tsv">Download download manifest</a><a href="../panr2_inputs/features/all_features.tsv">Download complete feature table</a><a href="../panr2_inputs/manifest/schema_validation_summary.txt">Download schema validation summary</a></div></section>
 <a class="back-to-top" href="#top">Back to top</a>
 </main>
