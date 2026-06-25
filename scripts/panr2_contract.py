@@ -3246,6 +3246,12 @@ def _html_table(
     download_href: str = "",
     download_label: str = "Download full TSV",
 ) -> str:
+    def display_cell(field: str, value: object) -> str:
+        text = str(value or "")
+        if ("date" in field.lower() or "year" in field.lower()) and _is_placeholder_date_value(text):
+            return "missing / placeholder"
+        return text
+
     download_html = (
         f"<a class='table-download-link' href='{html.escape(download_href)}'>{html.escape(download_label)}</a>"
         if download_href else ""
@@ -3263,7 +3269,7 @@ def _html_table(
     for row in rows[:max_rows]:
         body_rows.append(
             "<tr>"
-            + "".join(f"<td>{html.escape(str(row.get(field, '') or ''))}</td>" for field in fields)
+            + "".join(f"<td>{html.escape(display_cell(field, row.get(field, '')))}</td>" for field in fields)
             + "</tr>"
         )
     capped_note = f"Showing {min(len(rows), max_rows)} of {len(rows)} rows"
@@ -12218,6 +12224,15 @@ def write_important_final_interpretation_outputs(
             score += 8.0
         return score
 
+    def highlight_sample_size(row: dict[str, str], denominator: str) -> str:
+        for field in ["total_genomes", "n_total", "group_n", "supporting_samples", "samples_tested", "lineage_n"]:
+            value = row.get(field, "")
+            if value not in {"", None}:
+                return str(value)
+        if "/" in str(denominator):
+            return str(denominator).split("/", 1)[1]
+        return str(denominator or "")
+
     def add_highlight(
         rows: list[dict[str, str]],
         section: str,
@@ -12239,14 +12254,30 @@ def write_important_final_interpretation_outputs(
     ) -> None:
         flags = split_flags(row.get("warning_flags", "") or row.get("lineage_warning_flags", ""))
         severity = warning_severity_from_flags(flags)
+        support = row.get("support_label", "")
+        interpretation = (
+            row.get("interpretation_label", "")
+            or row.get("lineage_adjusted_interpretation", "")
+            or row.get("notable_label", "")
+        )
+        derived_confidence = row.get("confidence_label", "") or confidence_label(
+            section,
+            support,
+            interpretation,
+            q_value or row.get("q_value", ""),
+            row.get("evidence_level", ""),
+            ";".join(sorted(flags)),
+            highlight_sample_size(row, denominator),
+            effect_size,
+        )
         rows.append({
             "rank": "0",
             "section": section,
             "highlight_type": highlight_type,
             "title": title,
             "description": description,
-            "support_label": row.get("support_label", ""),
-            "confidence_label": row.get("confidence_label", ""),
+            "support_label": support,
+            "confidence_label": derived_confidence,
             "warning_severity": severity,
             "warning_flags": ";".join(sorted(flags)),
             "primary_database": primary_database,

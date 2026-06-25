@@ -855,7 +855,9 @@ class FetchM2AdapterTests(unittest.TestCase):
             confidence = pd.read_csv(sample_dir / "important" / "tables" / "finding_confidence_summary.tsv", sep="\t")
             self.assertTrue({"confidence_label", "recommended_interpretation"}.issubset(confidence.columns))
             highlights = pd.read_csv(sample_dir / "important" / "tables" / "report_highlights.tsv", sep="\t")
-            self.assertTrue({"rank", "section", "highlight_type", "triage_score", "recommended_action"}.issubset(highlights.columns))
+            self.assertTrue({"rank", "section", "highlight_type", "triage_score", "confidence_label", "recommended_action"}.issubset(highlights.columns))
+            if not highlights.empty:
+                self.assertTrue(highlights["confidence_label"].fillna("").astype(str).str.len().gt(0).all())
             self.assertNotIn("database_burden", set(highlights.head(20)["primary_feature"].fillna("").astype(str)))
             informative_pairs = highlights[highlights["highlight_type"] == "informative_cooccurrence"]
             for _, row in informative_pairs.iterrows():
@@ -863,7 +865,9 @@ class FetchM2AdapterTests(unittest.TestCase):
             highlight_sections = set(highlights.head(20)["section"].fillna("").astype(str))
             self.assertGreaterEqual(len(highlight_sections), 2)
             by_section = pd.read_csv(sample_dir / "important" / "tables" / "report_highlights_by_section.tsv", sep="\t")
-            self.assertTrue({"section_rank", "section", "highlight_type", "triage_score"}.issubset(by_section.columns))
+            self.assertTrue({"section_rank", "section", "highlight_type", "triage_score", "confidence_label"}.issubset(by_section.columns))
+            if not by_section.empty:
+                self.assertTrue(by_section["confidence_label"].fillna("").astype(str).str.len().gt(0).all())
             warning_priorities = pd.read_csv(sample_dir / "important" / "tables" / "warning_priority_summary.tsv", sep="\t")
             self.assertTrue({"rank", "section", "severity", "warning_type", "priority_score", "why_it_matters"}.issubset(warning_priorities.columns))
             visual_index = pd.read_csv(sample_dir / "important" / "tables" / "report_visual_index.tsv", sep="\t")
@@ -1028,6 +1032,8 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("tables/feature_prevalence.tsv", report_html)
             self.assertIn("tables/report_visual_index.tsv", report_html)
             self.assertIn("What to review first", report_html)
+            self.assertNotIn(">1-01-01<", report_html)
+            self.assertNotIn(">0001-01-01<", report_html)
             self.assertIn("What to trust first", report_html)
             self.assertIn("What needs caution", report_html)
             self.assertIn("Balanced highlights by section", report_html)
