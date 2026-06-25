@@ -13986,8 +13986,10 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 }}
 @media (max-width: 520px) {{
   html, body {{ width: 100%; max-width: 100vw; overflow-x: hidden; }}
-  .sidebar {{ max-width: 100vw; }}
-  .sidebar-links {{ grid-template-columns: 1fr; }}
+  .sidebar {{ max-width: 100vw; max-height: none; overflow-x: hidden; overflow-y: visible; padding: 0.55rem; }}
+  .sidebar h2 {{ font-size: 0.92rem; margin-bottom: 0.35rem; }}
+  .sidebar-links {{ display: flex; grid-template-columns: none; gap: 0.35rem; overflow-x: auto; overflow-y: hidden; padding-bottom: 0.2rem; scrollbar-width: thin; }}
+  .sidebar a {{ flex: 0 0 auto; white-space: nowrap; font-size: 0.82rem; padding: 0.28rem 0.42rem; border: 1px solid rgba(255,255,255,0.16); border-radius: 999px; }}
   main {{ padding: 0.55rem; width: 100%; max-width: 100%; overflow-x: hidden; }}
   main > .report-header, main > .section {{ width: 92vw !important; max-width: 92vw !important; min-width: 0; margin-left: 0; margin-right: 0; }}
   .analysis-card {{ width: 100%; max-width: 100%; min-width: 0; margin-left: 0; margin-right: 0; }}
