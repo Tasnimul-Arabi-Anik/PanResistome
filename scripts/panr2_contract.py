@@ -10398,13 +10398,21 @@ def write_important_lineage_outputs(
     mlst_genome_count = sum(1 for sample in samples if mlst_by_sample.get(sample))
     ani_genome_count = sum(1 for sample in samples if ani_by_sample.get(sample))
     if not mlst_genome_count and not ani_genome_count:
-        availability_note = "MLST and ANI cluster information were not available. Lineage-aware interpretation could not be performed; BioProject context is still reported where possible."
+        availability_note = "Lineage-aware interpretation could not be performed from MLST or ANI; BioProject context is still reported where possible."
     elif not ani_genome_count:
-        availability_note = "ANI cluster information was not available. Lineage interpretation is based on MLST and BioProject context where available."
+        availability_note = "Lineage interpretation is based on MLST and BioProject context where available."
     elif not mlst_genome_count:
-        availability_note = "MLST sequence type information was not available. Lineage interpretation is based on ANI clusters and BioProject context where available."
+        availability_note = "Lineage interpretation is based on ANI clusters and BioProject context where available."
     else:
         availability_note = "MLST and ANI cluster context were both available for lineage-aware interpretation."
+    mlst_count_sentence = (
+        f"{len(set(mlst_by_sample.values()))} MLST sequence type(s) among {mlst_genome_count} typed genome(s)"
+        if mlst_genome_count else "no MLST sequence type calls"
+    )
+    ani_count_sentence = (
+        f"{len(set(ani_by_sample.values()))} ANI cluster(s) among {ani_genome_count} genome(s)"
+        if ani_genome_count else "ANI clusters were not available"
+    )
     lineage_context_parts = []
     if dominant_st:
         lineage_context_parts.append(
@@ -10416,20 +10424,19 @@ def write_important_lineage_outputs(
             f"The largest ANI cluster was {_lineage_display_id(dominant_ani.get('lineage_id', ''))} "
             f"({dominant_ani.get('fraction_display', 'not available')})."
         )
-    elif not ani_genome_count:
-        lineage_context_parts.append("ANI clusters were not available for this run.")
     if dominant_project:
         lineage_context_parts.append(
             f"The largest BioProject group was {_lineage_display_id(dominant_project.get('lineage_id', ''))} "
             f"({dominant_project.get('fraction_display', 'not available')})."
         )
     lineage_context_sentence = " ".join(lineage_context_parts)
+    burden_median = _float_or_none(top_burden.get("median_features_per_genome", ""))
+    burden_median_display = f"{burden_median:.1f}" if burden_median is not None else top_burden.get("median_features_per_genome", "0")
     written_rows = [
         {
             "section": "overall_lineage_summary",
             "summary": (
-                f"Lineage analysis identified {len(set(mlst_by_sample.values()))} MLST sequence type(s) among {mlst_genome_count} typed genome(s) "
-                f"and {len(set(ani_by_sample.values()))} ANI cluster(s) among {ani_genome_count} genome(s). "
+                f"Lineage analysis identified {mlst_count_sentence}; {ani_count_sentence}. "
                 f"{lineage_context_sentence} "
                 f"{availability_note}"
             ),
@@ -10453,7 +10460,7 @@ def write_important_lineage_outputs(
                 (
                     f"Feature burden by lineage was summarized for {len(burden_rows)} database-lineage combinations. "
                     f"The highest median feature burden was {top_burden.get('database', 'database')} in {_lineage_display_id(top_burden.get('lineage_id', ''))} "
-                    f"with median {top_burden.get('median_features_per_genome', '0')} feature row(s) per genome."
+                    f"with a median of {burden_median_display} feature row(s) per genome."
                 )
                 if burden_rows else "Feature burden by lineage could not be summarized because no lineage-feature overlap was available."
             ),

@@ -815,6 +815,7 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("lineage_adjusted_top_findings_summary", set(lineage_written["section"]))
             lineage_summary_text = " ".join(lineage_written["summary"].fillna("").astype(str))
             self.assertNotIn("not available (not available)", lineage_summary_text)
+            self.assertNotIn("among 0 genome(s)", lineage_summary_text)
             self.assertNotIn("report-facing burden row", lineage_summary_text)
             diversity_html = (sample_dir / "important" / "figures" / "diversity_analysis.html").read_text(encoding="utf-8")
             for control in ["Diversity scope", "Diversity view", "Metadata color/group", "Display", "Sort", "Core/common/accessory/rare", "Pan-feature accumulation", "Jaccard similarity/distance"]:
