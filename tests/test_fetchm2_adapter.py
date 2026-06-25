@@ -932,6 +932,10 @@ class FetchM2AdapterTests(unittest.TestCase):
             temporal_quality = visual_quality[visual_quality["figure_stem"].fillna("").astype(str).str.startswith("temporal_")]
             if not temporal_quality.empty:
                 self.assertNotIn("missing_axis_labels", set(temporal_quality["axis_label_status"].fillna("").astype(str)))
+                self.assertNotIn("asset_incomplete", set(temporal_quality["asset_quality_label"].fillna("").astype(str)))
+            geographic_map_quality = visual_quality[visual_quality["figure_stem"].fillna("").astype(str) == "geographic_distribution_map"]
+            if not geographic_map_quality.empty:
+                self.assertEqual(geographic_map_quality.iloc[0]["asset_quality_label"], "asset_ready")
             warnings = pd.read_csv(sample_dir / "important" / "tables" / "warnings_and_limitations.tsv", sep="\t")
             self.assertTrue({"warning_id", "section", "severity", "warning_type", "recommended_action"}.issubset(warnings.columns))
             warning_summary = pd.read_csv(sample_dir / "important" / "tables" / "warnings_and_limitations_summary.tsv", sep="\t")

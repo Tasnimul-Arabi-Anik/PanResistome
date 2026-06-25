@@ -5181,10 +5181,21 @@ def write_important_geographic_outputs(sample_dir: Path, out_dir: Path, importan
         figure_files += _write_geographic_bar_figure(figures, f"geographic_region_bar_{feature_stem}", plot_ready(feature_default_rows, "subcontinent"), f"{feature_database}:{feature_id} by region", GEOGRAPHIC_FEATURE_FIELDS)
 
     initial_rows = [row for row in database_rows if row.get("database") == default_database and row.get("geo_level") == "country" and row.get("country") not in {"", "missing"}] if default_database else []
+    map_data_path = figures / "geographic_distribution_map.data.tsv"
+    write_rows(map_data_path, initial_rows, GEOGRAPHIC_DATABASE_FIELDS)
     svg_path = figures / "geographic_distribution_map.svg"
     svg_path.write_text(_svg_geographic_map(initial_rows, "Geographic Distribution"), encoding="utf-8")
     png_path = figures / "geographic_distribution_map.png"
     _geographic_map_png(initial_rows, png_path)
+    map_pdf_path = figures / "geographic_distribution_map.pdf"
+    _write_simple_pdf(
+        map_pdf_path,
+        "Geographic Distribution",
+        [
+            f"{row.get('country', '')}: {row.get('prevalence_display', '')}; warnings={row.get('warning_flags', '')}"
+            for row in initial_rows[:30]
+        ],
+    )
 
     report_feature_rows = [row for row in feature_rows if (row.get("database", ""), row.get("feature_id", "")) in selected_feature_keys]
     geographic_html = """<!doctype html>
@@ -5458,7 +5469,7 @@ updateFeatures(); render();
     table_zip = important_dir / "geographic_tables.zip"
     figure_zip = important_dir / "geographic_figures.zip"
     table_files = [summary_path, feature_path, burden_path, warning_path, data_path]
-    figure_files += [analysis_html_path, html_path, svg_path, png_path, figures / "geographic_distribution.data.tsv"]
+    figure_files += [analysis_html_path, html_path, svg_path, png_path, map_pdf_path, map_data_path, figures / "geographic_distribution.data.tsv"]
     tables_zip = _write_zip_bundle(table_zip, table_files, important_dir)
     figures_zip = _write_zip_bundle(figure_zip, figure_files, important_dir)
     return {
@@ -8078,13 +8089,20 @@ def write_important_temporal_outputs(sample_dir: Path, out_dir: Path, important_
     burden_data = figures / "temporal_database_burden_top20.data.tsv"
     burden_svg = figures / "temporal_database_burden_top20.svg"
     burden_png = figures / "temporal_database_burden_top20.png"
+    burden_pdf = figures / "temporal_database_burden_top20.pdf"
     write_rows(burden_data, latest_burden[:top_n], ["database", "mean_feature_count_per_genome"])
     _write_bar_svg(burden_svg, latest_burden[:top_n], "Temporal Database Burden", "database", "mean_feature_count_per_genome", "Mean features/genome in latest year")
     _write_bar_png(burden_png, latest_burden[:top_n], "mean_feature_count_per_genome")
+    _write_simple_pdf(
+        burden_pdf,
+        "Temporal Database Burden",
+        [f"{row.get('database', '')}: {row.get('mean_feature_count_per_genome', '')} mean features/genome" for row in latest_burden[:30]],
+    )
     outputs.update({
         "important_temporal_database_burden_data": str(burden_data),
         "important_temporal_database_burden_svg": str(burden_svg),
         "important_temporal_database_burden_png": str(burden_png),
+        "important_temporal_database_burden_pdf": str(burden_pdf),
     })
 
     for label, rows, filename in [
@@ -8094,6 +8112,7 @@ def write_important_temporal_outputs(sample_dir: Path, out_dir: Path, important_
         data_path = figures / f"{filename}.data.tsv"
         svg_path = figures / f"{filename}.svg"
         png_path = figures / f"{filename}.png"
+        pdf_path = figures / f"{filename}.pdf"
         figure_rows = [
             {
                 **row,
@@ -8105,9 +8124,18 @@ def write_important_temporal_outputs(sample_dir: Path, out_dir: Path, important_
         write_rows(data_path, figure_rows, trend_fields + ["feature_label", "display_change_percent_points"])
         _write_bar_svg(svg_path, figure_rows, label, "feature_label", "display_change_percent_points", "Absolute change in Prevalence percentage points")
         _write_bar_png(png_path, figure_rows, "display_change_percent_points")
+        _write_simple_pdf(
+            pdf_path,
+            label,
+            [
+                f"{row.get('feature_label', '')}: {row.get('change_percent_points', '')} percentage points; support={row.get('support_label', '')}"
+                for row in figure_rows[:30]
+            ],
+        )
         outputs[f"important_{filename}_data"] = str(data_path)
         outputs[f"important_{filename}_svg"] = str(svg_path)
         outputs[f"important_{filename}_png"] = str(png_path)
+        outputs[f"important_{filename}_pdf"] = str(pdf_path)
 
     heatmap_features = increasing[:top_n] + decreasing[:top_n]
     heatmap_keys = {(row["database"], row["feature_id"]) for row in heatmap_features[: top_n * 2]}
@@ -8119,13 +8147,23 @@ def write_important_temporal_outputs(sample_dir: Path, out_dir: Path, important_
     heatmap_data = figures / "temporal_feature_heatmap_top40.data.tsv"
     heatmap_svg = figures / "temporal_feature_heatmap_top40.svg"
     heatmap_png = figures / "temporal_feature_heatmap_top40.png"
+    heatmap_pdf = figures / "temporal_feature_heatmap_top40.pdf"
     write_rows(heatmap_data, heatmap_rows, prevalence_fields + ["feature_label"])
     _write_heatmap_svg(heatmap_svg, heatmap_rows, "Temporal Feature Prevalence Heatmap", "feature_label", "collection_year", "prevalence_percent")
     _write_heatmap_png(heatmap_png, heatmap_rows, "feature_label", "collection_year", "prevalence_percent")
+    _write_simple_pdf(
+        heatmap_pdf,
+        "Temporal Feature Prevalence Heatmap",
+        [
+            f"{row.get('feature_label', '')} in {row.get('collection_year', '')}: {row.get('prevalence_percent', '')}% ({row.get('positive_genomes', '')}/{row.get('total_genomes', '')})"
+            for row in heatmap_rows[:30]
+        ],
+    )
     outputs.update({
         "important_temporal_heatmap_data": str(heatmap_data),
         "important_temporal_heatmap_svg": str(heatmap_svg),
         "important_temporal_heatmap_png": str(heatmap_png),
+        "important_temporal_heatmap_pdf": str(heatmap_pdf),
     })
 
     selected_feature = (increasing or decreasing or sorted(trend_rows, key=lambda row: -abs(_float_or_none(row.get("change_percent_points", "")) or 0.0)))[:1]
@@ -8141,9 +8179,18 @@ def write_important_temporal_outputs(sample_dir: Path, out_dir: Path, important_
     selected_data = figures / "temporal_selected_feature_prevalence.data.tsv"
     selected_svg = figures / "temporal_selected_feature_prevalence.svg"
     selected_png = figures / "temporal_selected_feature_prevalence.png"
+    selected_pdf = figures / "temporal_selected_feature_prevalence.pdf"
     write_rows(selected_data, selected_rows, prevalence_fields)
     _write_temporal_series_svg(selected_svg, selected_rows, selected_title)
     _write_temporal_series_png(selected_png, selected_rows)
+    _write_simple_pdf(
+        selected_pdf,
+        selected_title,
+        [
+            f"{row.get('collection_year', '')}: {row.get('prevalence_percent', '')}% ({row.get('positive_genomes', '')}/{row.get('total_genomes', '')})"
+            for row in selected_rows[:30]
+        ],
+    )
 
     slope_rows = (increasing[:top_n] + decreasing[:top_n])[: top_n * 2]
     if not slope_rows:
@@ -8151,9 +8198,18 @@ def write_important_temporal_outputs(sample_dir: Path, out_dir: Path, important_
     slope_data = figures / "temporal_slope_top40.data.tsv"
     slope_svg = figures / "temporal_slope_top40.svg"
     slope_png = figures / "temporal_slope_top40.png"
+    slope_pdf = figures / "temporal_slope_top40.pdf"
     write_rows(slope_data, slope_rows, trend_fields)
     _write_temporal_slope_svg(slope_svg, slope_rows, "Temporal Slope Plot")
     _write_temporal_slope_png(slope_png, slope_rows)
+    _write_simple_pdf(
+        slope_pdf,
+        "Temporal Slope Plot",
+        [
+            f"{row.get('database', '')}:{row.get('feature_id', '')}: {row.get('change_percent_points', '')} percentage points; support={row.get('support_label', '')}"
+            for row in slope_rows[:30]
+        ],
+    )
 
     temporal_html = figures / "temporal_trends.html"
     temporal_html.write_text(
@@ -8181,7 +8237,7 @@ th {{ background: #f0f4f8; }}
 <div id="summary"></div>
 <div class="grid"><div class="panel"><h2>Selected Feature Prevalence</h2><div id="linePlot"></div></div><div class="panel"><h2>First-to-Last Year Slope</h2><div id="slopePlot"></div></div></div>
 <div class="panel"><h2>Filtered Trend Table</h2><div id="trendTable"></div></div>
-<p><a href="temporal_selected_feature_prevalence.png">Download default line PNG</a> | <a href="temporal_selected_feature_prevalence.svg">Download default line SVG</a> | <a href="temporal_slope_top40.png">Download slope PNG</a> | <a href="temporal_slope_top40.svg">Download slope SVG</a> | <a href="temporal_trend_summary.data.tsv">Download trend data TSV</a></p>
+<p><a href="temporal_selected_feature_prevalence.png">Download default line PNG</a> | <a href="temporal_selected_feature_prevalence.svg">Download default line SVG</a> | <a href="temporal_selected_feature_prevalence.pdf">Download default line PDF</a> | <a href="temporal_slope_top40.png">Download slope PNG</a> | <a href="temporal_slope_top40.svg">Download slope SVG</a> | <a href="temporal_slope_top40.pdf">Download slope PDF</a> | <a href="temporal_trend_summary.data.tsv">Download trend data TSV</a></p>
 <script>
 const trends = {json.dumps(trend_rows)};
 const prevalence = {json.dumps(prevalence_rows)};
@@ -8288,9 +8344,11 @@ featureSelect.addEventListener('change', () => {{ renderLine(); }});
         "important_temporal_selected_feature_data": str(selected_data),
         "important_temporal_selected_feature_svg": str(selected_svg),
         "important_temporal_selected_feature_png": str(selected_png),
+        "important_temporal_selected_feature_pdf": str(selected_pdf),
         "important_temporal_slope_data": str(slope_data),
         "important_temporal_slope_svg": str(slope_svg),
         "important_temporal_slope_png": str(slope_png),
+        "important_temporal_slope_pdf": str(slope_pdf),
         "important_temporal_interactive_html": str(temporal_html),
     })
     return outputs
