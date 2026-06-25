@@ -1064,6 +1064,8 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("Balanced highlights by section", report_html)
             for report_phrase in [
                 "Warning triage cards",
+                "Variation reading guide",
+                "Detailed variation tables",
                 "Metadata association reading guide",
                 "Detailed metadata association tables",
                 "Lineage reading guide",

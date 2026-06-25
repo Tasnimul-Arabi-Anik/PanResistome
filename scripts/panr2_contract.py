@@ -13625,6 +13625,14 @@ def write_important_results_report(
         max_rows=20,
         download_href="key_tables/feature_variation_database_summary.tsv",
     )
+    variation_reading_cards_html = (
+        "<div class='finding-grid analysis-guide' aria-label='Variation reading guide'>"
+        f"<div class='finding-card'><h3>1. Check data availability</h3><p>{variation_unique_features:,} feature(s) and {variation_total_hits:,} hit(s) had variation metrics available for review.</p><span class='badge badge-pass'>Metric availability</span></div>"
+        f"<div class='finding-card'><h3>2. Review outliers</h3><p>{variation_high_features:,} high-variation feature(s) and {variation_low_identity + variation_low_coverage:,} low identity/coverage hit flag(s) should be checked before interpretation.</p><span class='badge badge-warning'>Review flags</span></div>"
+        "<div class='finding-card'><h3>3. Use the right plot</h3><p>Identity, coverage, scatter, and top-variable plots answer different questions; start with top-variable bars, then inspect identity/coverage distributions.</p><span class='badge badge-exploratory'>Plot guide</span></div>"
+        f"<div class='finding-card'><h3>4. Open tables last</h3><p>Detailed previews summarize {len(variation_database_rows):,} database row(s) and {len(top_variation):,} top feature row(s); complete TSVs remain downloadable.</p><span class='badge badge-capped'>Preview capped</span></div>"
+        "</div>"
+    )
     variation_figures = []
     for path in sorted((important_dir / "figures").glob("variation_*_top20.svg")):
         figure_name = path.name.replace(".svg", "")
@@ -14373,10 +14381,13 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 <section id="variations" class="section"><h2>Variations</h2><p>Variation summaries use identity, coverage, alignment length, and hit-count values when available. Low identity, low coverage, high variation, and few-hit flags are review cues, not automatic failures.</p>
 <div class="warning-box warning">A feature can be common but conserved, common and variable, or rare with unstable estimates. Use the complete hit-level table when reviewing low-confidence or partial hits.</div>
 {variation_cards_html}
+{variation_reading_cards_html}
 <div class="analysis-card"><h3>Interactive variation explorer</h3><p>Use this to inspect identity, coverage, alignment length, and hit-count variation where those metrics are available.</p><iframe src="figures/variation_analysis.html" title="Feature variation interactive report"></iframe></div>
 <div class="analysis-card"><h3>Variation figures</h3>{variation_figures_html}</div>
+<details class="details-block"><summary>Detailed variation tables</summary>
 <div class="analysis-card"><h3>Variation by database</h3>{variation_database_table_html}</div>
 <div class="analysis-card"><h3>Most variable features</h3>{variation_table_html}</div>
+</details>
 <div class="downloads"><a href="figures/variation_analysis.html">Open interactive variation report</a><a href="variation_figures.zip">Download variation figures ZIP</a><a href="key_tables/feature_variation_database_summary.tsv">Download variation database summary</a><a href="key_tables/feature_variation_summary.tsv">Download variation summary</a><a href="key_tables/feature_variation_hits.tsv">Download hit-level variation table</a></div></section>
 <section id="temporal" class="section"><h2>Temporal Trends</h2><div class="warning-box warning">Temporal trends reflect the analyzed dataset only. They can be affected by sampling year, BioProject, country, lineage, and missing collection-year metadata.</div>
 <p>Prevalence trends use yearly percentages with genome-count denominators. Database burden is summarized as mean detected features per genome by collection year.</p>
