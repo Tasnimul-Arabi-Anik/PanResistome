@@ -99,8 +99,16 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("polygon points", html)
             self.assertIn("overflow-x: hidden", html)
             self.assertIn("window.addEventListener('resize', render)", html)
+            self.assertIn("Map reading guide", html)
+            self.assertIn("Higher selected-gene prevalence", html)
+            self.assertIn("positive / total genomes", html)
+            self.assertIn("small group", html)
+            self.assertIn("Dataset-specific summary", html)
             svg = (sample_dir / "important" / "figures" / "geographic_distribution_map.svg").read_text(encoding="utf-8")
             self.assertIn("Color shows dataset prevalence/burden", svg)
+            self.assertIn("Map reading guide", svg)
+            self.assertIn("positive / total genomes", svg)
+            self.assertIn("higher selected-gene prevalence", svg)
             self.assertIn("not a regional or global prevalence estimate", svg)
             self.assertIn("small group", svg)
 
@@ -760,6 +768,8 @@ class FetchM2AdapterTests(unittest.TestCase):
             geographic_html = (sample_dir / "important" / "figures" / "geographic_distribution.html").read_text(encoding="utf-8")
             for control in ["Database", "Mode", "Feature", "Geographic level", "Metric", "Minimum group size", "Display", "Warning filter"]:
                 self.assertIn(control, geographic_html)
+            for guide_text in ["Map reading guide", "Higher selected-gene prevalence", "positive / total genomes", "small group"]:
+                self.assertIn(guide_text, geographic_html)
             geographic_burden = pd.read_csv(sample_dir / "important" / "tables" / "geographic_database_burden.tsv", sep="\t")
             self.assertTrue({"database", "geo_level", "group_name", "positive_genomes", "prevalence_percent", "warning_flags"}.issubset(geographic_burden.columns))
             country_rows = geographic_burden[(geographic_burden["database"] == "amr") & (geographic_burden["geo_level"] == "country")]

@@ -4478,9 +4478,12 @@ def _svg_geographic_map(rows: list[dict[str, str]], title: str) -> str:
         green = int(226 - 175 * prevalence)
         blue = int(226 - 175 * prevalence)
         fill = "#cbd5e1" if "small_group_warning" in row.get("warning_flags", "") else f"rgb({red},{green},{blue})"
+        prevalence_display = row.get("prevalence_display") or f"{prevalence * 100:.1f}% ({positive}/{row.get('total_genomes', '0')})"
         label = (
-            f"{row.get('country', '')}: {positive}/{row.get('total_genomes', '0')} "
-            f"({prevalence * 100:.1f}%); warnings={row.get('warning_flags', '') or 'none'}"
+            f"{row.get('country', '')}. Dataset prevalence: {prevalence_display}. "
+            f"Positive / total genomes: {positive}/{row.get('total_genomes', '0')}. "
+            f"Warnings: {row.get('warning_flags', '') or 'none'}. "
+            "Dataset-specific summary, not a regional or global prevalence estimate."
         )
         text = ""
         if row.get("country", "") in label_countries:
@@ -4506,24 +4509,25 @@ def _svg_geographic_map(rows: list[dict[str, str]], title: str) -> str:
     note = (
         f"{len(mappable_rows)} of {total_rows} country groups mapped"
         + (f"; {missing_coords} lacked coordinates" if missing_coords else "")
-        + ". Color shows dataset prevalence/burden, point size shows genomes, gray marks small groups."
+        + ". Color shows dataset prevalence/burden, point size shows genomes, gray marks small groups. Tooltips use positive / total genomes."
     )
     legend = (
         f"<g transform='translate(20,{legend_y})' font-family='Arial' font-size='12' fill='#52606d'>"
+        "<text x='0' y='-18' font-size='13' font-weight='700' fill='#102a43'>Map reading guide</text>"
         "<circle cx='8' cy='0' r='6' fill='rgb(190,226,226)' fill-opacity='0.75' stroke='#1f2933'/>"
-        "<text x='22' y='4'>lower prevalence</text>"
-        "<circle cx='158' cy='0' r='10' fill='rgb(222,138,138)' fill-opacity='0.75' stroke='#1f2933'/>"
-        "<text x='176' y='4'>mid</text>"
-        "<circle cx='244' cy='0' r='14' fill='rgb(254,51,51)' fill-opacity='0.75' stroke='#1f2933'/>"
-        "<text x='266' y='4'>higher prevalence</text>"
-        "<circle cx='444' cy='0' r='9' fill='#cbd5e1' fill-opacity='0.75' stroke='#1f2933'/>"
-        "<text x='462' y='4'>small group</text>"
+        "<text x='22' y='4'>lower dataset prevalence</text>"
+        "<circle cx='188' cy='0' r='10' fill='rgb(222,138,138)' fill-opacity='0.75' stroke='#1f2933'/>"
+        "<text x='206' y='4'>mid</text>"
+        "<circle cx='274' cy='0' r='14' fill='rgb(254,51,51)' fill-opacity='0.75' stroke='#1f2933'/>"
+        "<text x='296' y='4'>higher selected-gene prevalence</text>"
+        "<circle cx='534' cy='0' r='9' fill='#cbd5e1' fill-opacity='0.75' stroke='#1f2933'/>"
+        "<text x='552' y='4'>small group</text>"
         f"<text x='0' y='28'>{html.escape(note)}</text>"
         "<text x='0' y='48'>This map describes the analyzed dataset only and is not a regional or global prevalence estimate.</text>"
         "</g>"
     )
     return (
-        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height + 132}' viewBox='0 0 {width} {height + 132}'>"
+        f"<svg xmlns='http://www.w3.org/2000/svg' role='img' aria-label='{html.escape(title)} map with prevalence legend' width='{width}' height='{height + 132}' viewBox='0 0 {width} {height + 132}'>"
         "<rect width='100%' height='100%' fill='#f8fafc'/>"
         f"<text x='20' y='28' font-size='20' font-family='Arial' font-weight='700' fill='#102a43'>{html.escape(title)}</text>"
         f"<g transform='translate(0,48)'><rect x='0' y='0' width='{width}' height='{height}' fill='#eff6ff' stroke='#bcccdc'/>"
@@ -5185,6 +5189,17 @@ select { width: 100%; padding: 0.35rem; box-sizing: border-box; }
 .warning { background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; margin: 1rem 0; }
 .gene-map-hint { background: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 6px; padding: 0.8rem; margin: 1rem 0; }
 .gene-map-hint strong { color: #991b1b; }
+.map-guide { background: #fff; border: 1px solid #d9e2ec; border-radius: 8px; padding: 0.85rem; margin: 1rem 0; }
+.map-guide h2 { margin: 0 0 0.55rem; font-size: 1rem; }
+.legend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 0.55rem; }
+.legend-item { display: flex; gap: 0.55rem; align-items: flex-start; color: #52606d; font-size: 0.9rem; }
+.legend-item strong { color: #102a43; display: block; }
+.bubble-swatch { flex: 0 0 auto; width: 22px; height: 22px; border: 1px solid #1f2933; border-radius: 50%; margin-top: 0.08rem; }
+.bubble-low { background: rgb(190,226,226); }
+.bubble-high { background: rgb(254,51,51); }
+.bubble-large { width: 30px; height: 30px; background: rgb(222,138,138); }
+.bubble-small-group { background: #cbd5e1; }
+.tooltip-note { margin: 0.65rem 0 0; color: #52606d; font-size: 0.9rem; }
 .control-feature { grid-column: span 2; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 0.65rem; margin: 1rem 0; }
 .card { border: 1px solid #d9e2ec; border-radius: 6px; padding: 0.7rem; background: #f8fafc; }
@@ -5203,7 +5218,17 @@ a.button { display: inline-block; padding: 0.45rem 0.65rem; margin: 0.2rem 0.35r
 <h1>Geographic Distribution</h1>
 <p>This section summarizes where selected databases or features were detected in the analyzed dataset. Percentages always use genome-count denominators.</p>
 <div class="warning">Geographic distribution reflects the analyzed dataset and may not represent true regional or global prevalence.</div>
-<div class="gene-map-hint"><strong>Gene map:</strong> choose <em>Individual feature / gene</em>, select an AMR or VFDB feature, and keep Geographic level as <em>Country</em> to map gene prevalence. Redder bubbles indicate higher dataset prevalence; larger bubbles indicate more genomes.</div>
+<div class="gene-map-hint"><strong>Gene map:</strong> choose <em>Individual feature / gene</em>, select an AMR or VFDB feature, and keep Geographic level as <em>Country</em> to map selected-gene prevalence.</div>
+<div class="map-guide" aria-label="Map reading guide">
+<h2>Map reading guide</h2>
+<div class="legend-grid">
+<div class="legend-item"><span class="bubble-swatch bubble-low"></span><span><strong>Lower prevalence</strong>paler bubbles indicate lower dataset prevalence for the selected database or gene.</span></div>
+<div class="legend-item"><span class="bubble-swatch bubble-high"></span><span><strong>Higher selected-gene prevalence</strong>redder bubbles indicate a higher positive-genome fraction in that country.</span></div>
+<div class="legend-item"><span class="bubble-swatch bubble-large"></span><span><strong>More genomes</strong>larger bubbles indicate larger country-level denominators.</span></div>
+<div class="legend-item"><span class="bubble-swatch bubble-small-group"></span><span><strong>Small group</strong>grey bubbles mark groups below the default support threshold.</span></div>
+</div>
+<p class="tooltip-note">Hover over a bubble for positive / total genomes, warning flags, and the dataset-specific interpretation note.</p>
+</div>
 <div class="controls">
 <div><label for="mode">Mode</label><select id="mode"><option value="database_burden">Database burden / any feature</option><option value="individual_feature">Individual feature / gene</option></select></div>
 <div><label for="database">Database</label><select id="database"></select></div>
@@ -5240,6 +5265,14 @@ function xy(country) {
   if (!item) return null;
   const lat = item[0], lon = item[1];
   return projectLonLat(lon, lat);
+}
+function esc(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 const databaseSelect = document.getElementById('database');
 const modeSelect = document.getElementById('mode');
@@ -5303,7 +5336,8 @@ function renderMap(active) {
     document.getElementById('map').innerHTML = '<p>Map view is available for country-level rows. Use the bar plots for continent and region summaries.</p>';
     return;
   }
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height + 45}" viewBox="0 0 ${width} ${height + 45}">`;
+  const svgHeight = height + 145;
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Geographic distribution map with prevalence legend" width="${width}" height="${svgHeight}" viewBox="0 0 ${width} ${svgHeight}">`;
   svg += `<rect width="100%" height="100%" fill="#f8fafc"/><text x="20" y="28" font-size="20" font-family="Arial" font-weight="700" fill="#102a43">Geographic Distribution</text>`;
   svg += `<g transform="translate(0,45)"><rect x="0" y="0" width="${width}" height="${height}" fill="#eff6ff" stroke="#bcccdc"/>`;
   for (let lon = -120; lon <= 180; lon += 60) { const x = ((lon + 180) / 360) * width; svg += `<line x1="${x}" y1="0" x2="${x}" y2="${height}" stroke="#d9e2ec"/>`; }
@@ -5324,14 +5358,21 @@ function renderMap(active) {
   for (const row of active) {
     const point = xy(row.country); if (!point) continue;
     const total = Number(row.total_genomes || 0);
+    const positive = row.positive_genomes || row.positive_genomes_with_database || 0;
     const radius = Math.max(5, Math.min(28, 4 + Math.sqrt(Math.max(total, 1)) * 4));
     const p = Number(row.prevalence_percent || 0) / 100;
     const fill = (row.warning_flags || '').includes('small_group_warning') ? '#cbd5e1' : `rgb(${Math.round(254 - 64 * (1 - p))},${Math.round(226 - 175 * p)},${Math.round(226 - 175 * p)})`;
-    const label = `${row.group_name}: ${row.prevalence_display}; warnings=${row.warning_flags || ''}`;
-    svg += `<circle cx="${point[0].toFixed(1)}" cy="${point[1].toFixed(1)}" r="${radius.toFixed(1)}" fill="${fill}" fill-opacity="0.75" stroke="#1f2933"><title>${label}</title></circle>`;
-    svg += `<text x="${(point[0] + radius + 3).toFixed(1)}" y="${(point[1] + 4).toFixed(1)}" font-size="11" fill="#1f2933">${row.country}</text>`;
+    const label = `${row.group_name}. Dataset prevalence: ${row.prevalence_display}. Positive / total genomes: ${positive}/${row.total_genomes || 0}. Warnings: ${row.warning_flags || 'none'}. Dataset-specific summary, not a regional or global prevalence estimate.`;
+    svg += `<circle cx="${point[0].toFixed(1)}" cy="${point[1].toFixed(1)}" r="${radius.toFixed(1)}" fill="${fill}" fill-opacity="0.75" stroke="#1f2933"><title>${esc(label)}</title></circle>`;
+    svg += `<text x="${(point[0] + radius + 3).toFixed(1)}" y="${(point[1] + 4).toFixed(1)}" font-size="11" fill="#1f2933">${esc(row.country)}</text>`;
   }
-  svg += '</g></svg>';
+  svg += `</g><g transform="translate(20,${height + 78})" font-family="Arial" font-size="12" fill="#52606d">`;
+  svg += `<text x="0" y="-18" font-size="13" font-weight="700" fill="#102a43">Map reading guide</text>`;
+  svg += `<circle cx="8" cy="0" r="6" fill="rgb(190,226,226)" fill-opacity="0.75" stroke="#1f2933"/><text x="22" y="4">lower prevalence</text>`;
+  svg += `<circle cx="166" cy="0" r="14" fill="rgb(254,51,51)" fill-opacity="0.75" stroke="#1f2933"/><text x="188" y="4">higher selected-gene prevalence</text>`;
+  svg += `<circle cx="430" cy="0" r="9" fill="#cbd5e1" fill-opacity="0.75" stroke="#1f2933"/><text x="448" y="4">small group</text>`;
+  svg += `<text x="0" y="30">Redder bubbles show higher prevalence; larger bubbles show more genomes. Hover for positive / total genomes and warnings.</text>`;
+  svg += `<text x="0" y="50">Dataset-specific summary only; geography does not imply regional or global prevalence.</text></g></svg>`;
   document.getElementById('map').innerHTML = svg;
 }
 function renderBars(active) {
