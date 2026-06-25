@@ -5239,7 +5239,7 @@ a.button { display: inline-block; padding: 0.45rem 0.65rem; margin: 0.2rem 0.35r
 <div class="legend-item"><span class="bubble-swatch bubble-large"></span><span><strong>More genomes</strong>larger bubbles indicate larger country-level denominators.</span></div>
 <div class="legend-item"><span class="bubble-swatch bubble-small-group"></span><span><strong>Small group</strong>grey bubbles mark groups below the default support threshold.</span></div>
 </div>
-<p class="tooltip-note">Hover over a bubble for positive / total genomes, warning flags, and the dataset-specific interpretation note.</p>
+<p class="tooltip-note">Only the highest-support countries are labeled to reduce clutter. Hover over any bubble for country, positive / total genomes, warning flags, and the dataset-specific interpretation note.</p>
 </div>
 <div class="controls">
 <div><label for="mode">Mode</label><select id="mode"><option value="database_burden">Database burden / any feature</option><option value="individual_feature">Individual feature / gene</option></select></div>
@@ -5373,6 +5373,15 @@ function renderMap(active) {
       || String(a.country || '').localeCompare(String(b.country || '')))
     .slice(0, 10)
     .map(row => row.country));
+  const placedLabels = [];
+  function canPlaceLabel(x, y, text) {
+    const box = {x1: x, y1: y - 11, x2: x + Math.max(38, String(text || '').length * 6.2), y2: y + 3};
+    for (const placed of placedLabels) {
+      if (!(box.x2 < placed.x1 || box.x1 > placed.x2 || box.y2 < placed.y1 || box.y1 > placed.y2)) return false;
+    }
+    placedLabels.push(box);
+    return true;
+  }
   for (const row of active) {
     const point = xy(row.country); if (!point) continue;
     const total = Number(row.total_genomes || 0);
@@ -5383,7 +5392,11 @@ function renderMap(active) {
     const label = `${row.group_name}. Dataset prevalence: ${row.prevalence_display}. Positive / total genomes: ${positive}/${row.total_genomes || 0}. Warnings: ${row.warning_flags || 'none'}. Dataset-specific summary, not a regional or global prevalence estimate.`;
     svg += `<circle cx="${point[0].toFixed(1)}" cy="${point[1].toFixed(1)}" r="${radius.toFixed(1)}" fill="${fill}" fill-opacity="0.75" stroke="#1f2933"><title>${esc(label)}</title></circle>`;
     if (labelCountries.has(row.country)) {
-      svg += `<text x="${(point[0] + radius + 3).toFixed(1)}" y="${(point[1] + 4).toFixed(1)}" font-size="11" fill="#1f2933">${esc(row.country)}</text>`;
+      const labelX = point[0] + radius + 3;
+      const labelY = point[1] + 4;
+      if (canPlaceLabel(labelX, labelY, row.country)) {
+        svg += `<text x="${labelX.toFixed(1)}" y="${labelY.toFixed(1)}" font-size="11" fill="#1f2933">${esc(row.country)}</text>`;
+      }
     }
   }
   svg += `</g><g transform="translate(20,${height + 78})" font-family="Arial" font-size="12" fill="#52606d">`;
