@@ -191,8 +191,11 @@ genomic-context, metadata-association, lineage/clonal-structure, and
 diversity/pan-feature tables plus final interpretation tables for notable
 genomes, confidence labels, warning summaries, AMR concordance, feature-profile
 ordination, and download manifests, with portable PNG/SVG/PDF/TSV figures and
-`scripts/check_important_report_outputs.py` link/asset QA without adding new runtime plotting
-dependencies. Prevalence includes an interactive HTML viewer with database,
+`scripts/check_important_report_outputs.py` link/asset QA plus
+`scripts/check_important_report_visual_layout.py` visual-layout QA. The
+visual-layout checker has no required browser dependency; it performs static
+HTML/card/accessibility checks everywhere and can optionally use Playwright for
+desktop/laptop/mobile overflow screenshots when available. Prevalence includes an interactive HTML viewer with database,
 Top 10/20/50/Complete, metric, sort, minimum-prevalence, minimum-genome, and
 coordinate/category filters; denominator-aware top-feature plots; database
 summary tables; core/common/accessory/rare summaries; and burden-by-sample

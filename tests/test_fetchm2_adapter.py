@@ -1103,6 +1103,19 @@ class FetchM2AdapterTests(unittest.TestCase):
                 text=True,
             )
             self.assertEqual(qa.returncode, 0, qa.stderr + qa.stdout)
+            visual_qa = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "scripts" / "check_important_report_visual_layout.py"),
+                    str(sample_dir),
+                    "--browser",
+                    "skip",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(visual_qa.returncode, 0, visual_qa.stderr + visual_qa.stdout)
 
     def test_optional_table_inputs_export_contract_features(self):
         with tempfile.TemporaryDirectory() as tmpdir:
