@@ -15087,12 +15087,14 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 <div class="downloads"><a href="figures/prevalence_analysis.html">Open interactive prevalence report</a><a href="prevalence_tables.zip">Download prevalence tables ZIP</a><a href="prevalence_figures.zip">Download prevalence figures ZIP</a><a href="tables/feature_prevalence.tsv">Download full feature prevalence</a><a href="tables/feature_prevalence_top.tsv">Download top feature prevalence</a><a href="tables/prevalence_summary_by_database.tsv">Download database summary</a><a href="tables/prevalence_core_accessory_rare_summary.tsv">Download core/common/accessory/rare summary</a><a href="tables/prevalence_database_burden_by_sample.tsv">Download database burden by sample</a></div></section>
 <section id="geography" class="section"><h2>Geographic Distribution</h2><div class="warning-box warning">Geographic patterns reflect the analyzed dataset only. They are not global prevalence estimates and can be affected by BioProject, lineage, country, and year sampling bias.</div>
 {geographic_focus_html}
-{geographic_cards_html}
-{geographic_summary_html}
-{geographic_reading_cards_html}
 {geographic_map_preview_html}
 {geography_explorer_html}
 {geographic_best_figure_html}
+<details class="details-block"><summary>Geographic denominator, missingness, and reading guide</summary>
+{geographic_cards_html}
+{geographic_summary_html}
+{geographic_reading_cards_html}
+</details>
 <div class="analysis-card"><h3>Geographic figures</h3>{geographic_figures_html}</div>
 <details class="details-block"><summary>Detailed geographic tables</summary>
 <div class="analysis-card"><h3>Top database burden by country</h3>{geographic_burden_table_html}</div>

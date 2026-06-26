@@ -44,12 +44,16 @@ class ImportantReportVisualLayoutCheckerTests(unittest.TestCase):
         self.assertEqual(metrics["overflow"], 0)
         self.assertTrue(metrics["headerVisible"])
 
-    def test_section_scroll_script_targets_requested_anchor(self):
-        script = checker._scroll_to_section_script("geography")
+    def test_section_screenshot_html_isolates_requested_anchor(self):
+        html = checker._section_screenshot_html(
+            "<html><head></head><body><main><section id='featured'></section><section id='geography'></section></main></body></html>",
+            "file:///tmp/report/",
+            "geography",
+        )
 
-        self.assertIn('"geography"', script)
-        self.assertIn("scrollIntoView", script)
-        self.assertIn("window.scrollBy", script)
+        self.assertIn('<base href="file:///tmp/report/">', html)
+        self.assertIn("section#geography", html)
+        self.assertIn("main > section:not(section#geography)", html)
 
     def test_browser_require_fails_when_no_engine_is_available(self):
         errors = []

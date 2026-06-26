@@ -1177,6 +1177,10 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("geographic_country_bar", geography_section)
             self.assertLess(
                 geography_section.index("figures/geographic_distribution_map.svg"),
+                geography_section.index("Geographic denominator, missingness, and reading guide"),
+            )
+            self.assertLess(
+                geography_section.index("figures/geographic_distribution_map.svg"),
                 geography_section.index("geographic_country_bar"),
             )
             metadata_section = report_html.split('id="metadata-associations"', 1)[1].split('id="lineage"', 1)[0]

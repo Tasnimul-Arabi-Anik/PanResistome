@@ -186,26 +186,43 @@ SCROLL_TO_ANCHOR_JS = """
 """
 
 
-def _scroll_to_section_script(section_id: str) -> str:
-    return f"""
-(() => {{
-  const sectionId = {json.dumps(section_id)};
-  const scrollToSection = () => {{
-    const target = document.getElementById(sectionId);
-    if (!target) return;
-    target.scrollIntoView({{block: 'start', inline: 'nearest'}});
-    window.scrollBy(0, -12);
-  }};
-  if (document.readyState === 'complete') {{
-    scrollToSection();
-  }} else {{
-    window.addEventListener('load', scrollToSection);
+def _section_screenshot_html(html_text: str, base_uri: str, section_id: str) -> str:
+    """Return a temporary HTML view that screenshots only one report section.
+
+    Chrome's headless screenshot path can capture before fragment scrolling has
+    taken effect on large local HTML reports. A section-only view avoids scroll
+    timing entirely and makes visual QA screenshots deterministic.
+    """
+    section_selector = f"section#{section_id}"
+    style = f"""
+<style>
+  nav.sidebar,
+  .report-header,
+  .back-to-top,
+  main > section:not({section_selector}) {{
+    display: none !important;
   }}
-  setTimeout(scrollToSection, 250);
-  setTimeout(scrollToSection, 1000);
-  setTimeout(scrollToSection, 2200);
-}})();
+  body {{
+    background: #f8fafc !important;
+    margin: 0 !important;
+    max-width: none !important;
+    overflow-x: hidden !important;
+  }}
+  main {{
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 1rem !important;
+    overflow-x: hidden !important;
+  }}
+  main > {section_selector} {{
+    display: block !important;
+    margin: 0 auto !important;
+    max-width: 1120px !important;
+  }}
+</style>
 """
+    return _html_with_base_and_script(html_text.replace("</head>", style + "</head>", 1), base_uri, "")
 
 
 def _attrs_to_dict(attrs: list[tuple[str, str | None]]) -> dict[str, str]:
@@ -632,7 +649,7 @@ def _run_chrome_browser_checks(
             for section_id in SECTION_SCREENSHOT_IDS:
                 section_html = tmp / f"section_{section_id}.html"
                 section_html.write_text(
-                    _html_with_base_and_script(html_text, base_uri, _scroll_to_section_script(section_id)),
+                    _section_screenshot_html(html_text, base_uri, section_id),
                     encoding="utf-8",
                 )
                 command = _chrome_screenshot_command(
