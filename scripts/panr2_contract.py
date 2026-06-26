@@ -5023,6 +5023,10 @@ def _geographic_map_png(rows: list[dict[str, str]], path: Path) -> None:
 
 def _write_plotly_bundle(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
+    bundled_plotly = Path(__file__).resolve().parent / "assets" / "plotly.min.js"
+    if bundled_plotly.exists():
+        path.write_bytes(bundled_plotly.read_bytes())
+        return path
     try:
         from plotly import offline as plotly_offline  # type: ignore
 

@@ -116,6 +116,7 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertNotIn("country tile", html.lower())
             self.assertNotIn("bubble", html.lower())
             self.assertTrue((sample_dir / "important" / "figures" / "plotly.min.js").exists())
+            self.assertGreater((sample_dir / "important" / "figures" / "plotly.min.js").stat().st_size, 1_000_000)
             svg = (sample_dir / "important" / "figures" / "geographic_distribution_map.svg").read_text(encoding="utf-8")
             self.assertIn("Color shows dataset prevalence/burden", svg)
             self.assertIn("Map reading guide", svg)
