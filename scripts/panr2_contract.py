@@ -5078,17 +5078,7 @@ a.button { display: inline-block; padding: 0.45rem 0.65rem; margin: 0.2rem 0.35r
 </style></head><body>
 <h1>Geographic Gene Map</h1>
 <p>Select a database or individual feature, then read the filled-country map and ranked bars together. Percentages always use genome-count denominators.</p>
-<div class="warning">Geographic distribution reflects the analyzed dataset and may not represent true regional or global prevalence.</div>
 <div class="gene-map-hint"><strong>Gene map workflow:</strong> choose <em>Individual feature / gene</em>, select an AMR, VFDB, plasmid, integron, or other detected feature, and keep Geographic level as <em>Country</em>. Redder countries show higher selected-gene prevalence; gray countries mark low-support groups.</div>
-<div class="map-guide" aria-label="Map reading guide">
-<h2>Map reading guide</h2>
-<div class="legend-grid">
-<div class="legend-item"><span class="swatch swatch-low"></span><span><strong>Lower prevalence</strong>paler country fills indicate lower dataset prevalence for the selected database or gene.</span></div>
-<div class="legend-item"><span class="swatch swatch-high"></span><span><strong>Higher selected-gene prevalence</strong>redder country fills indicate a higher positive-genome fraction.</span></div>
-<div class="legend-item"><span class="swatch swatch-small"></span><span><strong>Small group</strong>gray countries mark groups below the default support threshold.</span></div>
-</div>
-<p class="tooltip-note">Hover over a country for positive / total genomes, prevalence, warning flags, and the dataset-specific interpretation note.</p>
-</div>
 <div class="controls">
 <div><label for="mode">Mode</label><select id="mode"><option value="database_burden">Database burden / any feature</option><option value="individual_feature">Individual feature / gene</option></select></div>
 <div><label for="database">Database</label><select id="database"></select></div>
@@ -5102,6 +5092,16 @@ a.button { display: inline-block; padding: 0.45rem 0.65rem; margin: 0.2rem 0.35r
 </div>
 <div id="summary"></div>
 <div id="map"></div>
+<div class="warning">Geographic distribution reflects the analyzed dataset and may not represent true regional or global prevalence.</div>
+<div class="map-guide" aria-label="Map reading guide">
+<h2>Map reading guide</h2>
+<div class="legend-grid">
+<div class="legend-item"><span class="swatch swatch-low"></span><span><strong>Lower prevalence</strong>paler country fills indicate lower dataset prevalence for the selected database or gene.</span></div>
+<div class="legend-item"><span class="swatch swatch-high"></span><span><strong>Higher selected-gene prevalence</strong>redder country fills indicate a higher positive-genome fraction.</span></div>
+<div class="legend-item"><span class="swatch swatch-small"></span><span><strong>Small group</strong>gray countries mark groups below the default support threshold.</span></div>
+</div>
+<p class="tooltip-note">Hover over a country for positive / total genomes, prevalence, warning flags, and the dataset-specific interpretation note.</p>
+</div>
 <h2>Ranked groups</h2>
 <div id="bars"></div>
 <h2>Preview table</h2>
