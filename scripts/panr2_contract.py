@@ -3747,7 +3747,7 @@ def _figure_caption_for(section: str, stem: str) -> str:
         return "QC figures summarize genome retention and module status before downstream feature interpretation."
     if section == "Geographic Distribution" or stem.startswith("geographic_"):
         if stem.startswith("geographic_map_") or stem == "geographic_distribution_map":
-            return "Country-tile map of selected-gene or database prevalence; redder tiles show higher prevalence, tile size shows genome count, and gray or missing geography groups need caution."
+            return "Filled-country geographic map of selected-gene or database prevalence; redder countries show higher prevalence, gray countries mark low-support groups, and denominators should be checked in the bars and companion TSV."
         if "_country_bar_" in stem or stem.startswith("geographic_country_bar_"):
             return "Country bars rank dataset-specific prevalence or burden with plotted denominators; they are not regional prevalence estimates."
         if "_continent_bar_" in stem or stem.startswith("geographic_continent_bar_"):
@@ -3862,7 +3862,7 @@ def _figure_guidance_for(section: str, stem: str) -> str:
     stem = stem or ""
     if section == "Geographic Distribution" or stem.startswith("geographic_"):
         if stem.startswith("geographic_map_") or stem == "geographic_distribution_map":
-            return "How to read: compare tile color for prevalence and tile size for denominator. Do not treat red countries as global hotspots without checking sampling. Next table: geographic_feature_distribution.tsv or geographic_database_burden.tsv."
+            return "How to read: compare country fill color for prevalence, then verify positive/total denominators in the ranked bars. Do not treat red countries as global hotspots without checking sampling. Next table: geographic_feature_distribution.tsv or geographic_database_burden.tsv."
         return "How to read: compare percentages only with their positive/total denominators. Do not compare tiny groups as if they were equally supported. Next table: geographic_database_burden.tsv."
     if section == "Co-occurrence / Genomic Context" or stem.startswith(("cooccurrence_", "top_context_features_", "genomic_context_evidence_ladder_", "contig_neighborhood_")):
         if stem.startswith("cooccurrence_heatmap_"):
@@ -5021,6 +5021,278 @@ def _geographic_map_png(rows: list[dict[str, str]], path: Path) -> None:
     _write_png(path, width, height, pixels)
 
 
+def _write_plotly_bundle(path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        from plotly import offline as plotly_offline  # type: ignore
+
+        bundle = plotly_offline.get_plotlyjs()
+    except Exception as exc:  # pragma: no cover - depends on optional runtime package
+        bundle = (
+            "window.Plotly = null;\n"
+            f"console.warn('Plotly choropleth renderer unavailable: {html.escape(str(exc))}');\n"
+        )
+    path.write_text(bundle, encoding="utf-8")
+    return path
+
+
+def _geographic_choropleth_html(database_rows: list[dict[str, str]], feature_rows: list[dict[str, str]]) -> str:
+    return """<!doctype html>
+<html><head><meta charset="utf-8"><title>Geographic Distribution</title>
+<script src="plotly.min.js"></script>
+<style>
+* { box-sizing: border-box; }
+html, body { max-width: 100%; overflow-x: hidden; }
+body { font-family: Arial, sans-serif; color: #1f2933; margin: 1.25rem; background: #f8fafc; }
+.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.75rem; align-items: end; }
+label { font-weight: 700; display: block; margin-bottom: 0.25rem; }
+select, input[type="search"] { width: 100%; padding: 0.35rem; box-sizing: border-box; }
+#map { width: 100%; min-height: 580px; border: 1px solid #d9e2ec; background: white; border-radius: 8px; }
+.warning { background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; margin: 1rem 0; }
+.gene-map-hint { background: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 6px; padding: 0.8rem; margin: 1rem 0; }
+.gene-map-hint strong { color: #991b1b; }
+.map-guide { background: #fff; border: 1px solid #d9e2ec; border-radius: 8px; padding: 0.85rem; margin: 1rem 0; }
+.map-guide h2 { margin: 0 0 0.55rem; font-size: 1rem; }
+.legend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.55rem; }
+.legend-item { display: flex; gap: 0.55rem; align-items: flex-start; color: #52606d; font-size: 0.9rem; }
+.legend-item strong { color: #102a43; display: block; }
+.swatch { flex: 0 0 auto; width: 30px; height: 18px; border: 1px solid #1f2933; border-radius: 3px; margin-top: 0.08rem; }
+.swatch-low { background: #fff5f5; }
+.swatch-high { background: #b91c1c; }
+.swatch-small { background: #cbd5e1; }
+.tooltip-note { margin: 0.65rem 0 0; color: #52606d; font-size: 0.9rem; }
+.control-feature { grid-column: span 2; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 0.65rem; margin: 1rem 0; }
+.card { border: 1px solid #d9e2ec; border-radius: 6px; padding: 0.7rem; background: #f8fafc; }
+.card span { display: block; color: #52606d; font-size: 0.8rem; }
+.card strong { font-size: 1.25rem; overflow-wrap: anywhere; }
+.bar { display: grid; grid-template-columns: minmax(150px, 260px) 1fr 130px; gap: 0.5rem; align-items: center; margin: 0.3rem 0; }
+.bar-track { background: #e2e8f0; height: 18px; border-radius: 3px; overflow: hidden; }
+.bar-fill { background: #0f766e; height: 100%; }
+.bar.small .bar-fill { background: #94a3b8; }
+table { border-collapse: collapse; width: 100%; margin-top: 1rem; font-size: 0.9rem; }
+th, td { border: 1px solid #d9e2ec; padding: 0.35rem; text-align: left; }
+th { background: #f0f4f8; }
+a.button { display: inline-block; padding: 0.45rem 0.65rem; margin: 0.2rem 0.35rem 0.2rem 0; background: #0f766e; color: white; text-decoration: none; border-radius: 4px; }
+@media (max-width: 760px) { .control-feature { grid-column: auto; } #map { min-height: 460px; } }
+</style></head><body>
+<h1>Geographic Gene Map</h1>
+<p>Select a database or individual feature, then read the filled-country map and ranked bars together. Percentages always use genome-count denominators.</p>
+<div class="warning">Geographic distribution reflects the analyzed dataset and may not represent true regional or global prevalence.</div>
+<div class="gene-map-hint"><strong>Gene map workflow:</strong> choose <em>Individual feature / gene</em>, select an AMR, VFDB, plasmid, integron, or other detected feature, and keep Geographic level as <em>Country</em>. Redder countries show higher selected-gene prevalence; gray countries mark low-support groups.</div>
+<div class="map-guide" aria-label="Map reading guide">
+<h2>Map reading guide</h2>
+<div class="legend-grid">
+<div class="legend-item"><span class="swatch swatch-low"></span><span><strong>Lower prevalence</strong>paler country fills indicate lower dataset prevalence for the selected database or gene.</span></div>
+<div class="legend-item"><span class="swatch swatch-high"></span><span><strong>Higher selected-gene prevalence</strong>redder country fills indicate a higher positive-genome fraction.</span></div>
+<div class="legend-item"><span class="swatch swatch-small"></span><span><strong>Small group</strong>gray countries mark groups below the default support threshold.</span></div>
+</div>
+<p class="tooltip-note">Hover over a country for positive / total genomes, prevalence, warning flags, and the dataset-specific interpretation note.</p>
+</div>
+<div class="controls">
+<div><label for="mode">Mode</label><select id="mode"><option value="database_burden">Database burden / any feature</option><option value="individual_feature">Individual feature / gene</option></select></div>
+<div><label for="database">Database</label><select id="database"></select></div>
+<div class="control-feature"><label for="featureSearch">Search feature / gene</label><input id="featureSearch" type="search" placeholder="Search detected features"></div>
+<div class="control-feature"><label for="feature">Feature / gene</label><select id="feature"></select></div>
+<div><label for="geo">Geographic level</label><select id="geo"><option value="country">Country</option><option value="continent">Continent</option><option value="subcontinent">Subcontinent / region</option><option value="country_year">Country + collection year</option></select></div>
+<div><label for="metric">Metric</label><select id="metric"><option value="prevalence_percent">Prevalence %</option><option value="positive_genomes">Positive genome count</option><option value="total_genomes">Total genome count</option><option value="mean_feature_burden_per_genome">Mean feature burden per genome</option><option value="median_feature_burden_per_genome">Median feature burden per genome</option><option value="feature_rows">Feature row count</option></select></div>
+<div><label for="minn">Minimum group size</label><select id="minn"><option value="5">n&gt;=5</option><option value="0">All</option><option value="3">n&gt;=3</option><option value="10">n&gt;=10</option></select></div>
+<div><label for="display">Display</label><select id="display"><option value="20">Top 20</option><option value="10">Top 10</option><option value="50">Top 50</option><option value="999999">Complete</option></select></div>
+<div><label for="warnings">Warning filter</label><select id="warnings"><option value="all">Show all</option><option value="hide_small">Hide small groups</option><option value="no_major">No major warnings</option></select></div>
+</div>
+<div id="summary"></div>
+<div id="map"></div>
+<h2>Ranked groups</h2>
+<div id="bars"></div>
+<h2>Preview table</h2>
+<div id="table"></div>
+<p><a class="button" href="../geographic_tables.zip">Download geographic tables ZIP</a><a class="button" href="../geographic_figures.zip">Download geographic figures ZIP</a><a class="button" href="../tables/geographic_database_burden.tsv">Database burden table</a><a class="button" href="../tables/geographic_feature_distribution.tsv">Feature distribution table</a><a class="button" href="../tables/geographic_warning_summary.tsv">Warning summary</a></p>
+<script>
+const databaseRows = __DATABASE_ROWS__;
+const featureRows = __FEATURE_ROWS__;
+const countryAliases = {"usa": "United States", "uk": "United Kingdom", "viet nam": "Vietnam", "czech republic": "Czechia", "south korea": "South Korea", "russia": "Russia"};
+function cleanCountry(value) { return String(value || '').split(':')[0].trim(); }
+function plotCountry(value) {
+  const country = cleanCountry(value);
+  return countryAliases[country.toLowerCase()] || country;
+}
+function esc(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+const databaseSelect = document.getElementById('database');
+const modeSelect = document.getElementById('mode');
+const featureSearchInput = document.getElementById('featureSearch');
+const featureSelect = document.getElementById('feature');
+const geoSelect = document.getElementById('geo');
+const metricSelect = document.getElementById('metric');
+const minSelect = document.getElementById('minn');
+const displaySelect = document.getElementById('display');
+const warningSelect = document.getElementById('warnings');
+for (const value of [...new Set(databaseRows.map(r => r.database).concat(featureRows.map(r => r.database)))].sort()) {
+  const opt = document.createElement('option'); opt.value = value; opt.textContent = value; databaseSelect.appendChild(opt);
+}
+if ([...databaseSelect.options].some(o => o.value === 'amr')) databaseSelect.value = 'amr';
+if (featureRows.length) modeSelect.value = 'individual_feature';
+const featureDatabases = [...new Set(featureRows.map(r => r.database))].sort();
+if (featureRows.length && !featureDatabases.includes(databaseSelect.value)) {
+  databaseSelect.value = featureDatabases.includes('amr') ? 'amr' : featureDatabases[0];
+}
+function topFeatureForDatabase(db) {
+  const candidates = featureRows
+    .filter(r => r.database === db && r.geo_level === 'country')
+    .sort((a, b) => Number(b.positive_genomes || 0) - Number(a.positive_genomes || 0)
+      || Number(b.prevalence_percent || 0) - Number(a.prevalence_percent || 0)
+      || String(a.feature_id || '').localeCompare(String(b.feature_id || '')));
+  return candidates.length ? candidates[0].feature_id : '';
+}
+function updateFeatures() {
+  const db = databaseSelect.value;
+  const current = featureSelect.value;
+  const query = (featureSearchInput.value || '').toLowerCase().trim();
+  featureSelect.innerHTML = '';
+  const allFeatures = [...new Set(featureRows.filter(r => r.database === db).map(r => r.feature_id))].sort();
+  const features = allFeatures.filter(value => !query || String(value).toLowerCase().includes(query));
+  for (const value of features) { const opt = document.createElement('option'); opt.value = value; opt.textContent = value; featureSelect.appendChild(opt); }
+  if (features.includes(current)) featureSelect.value = current;
+  else {
+    const topFeature = topFeatureForDatabase(db);
+    if (features.includes(topFeature)) featureSelect.value = topFeature;
+    else if (features.length) featureSelect.value = features[0];
+  }
+  featureSelect.disabled = modeSelect.value !== 'individual_feature' || allFeatures.length === 0;
+  featureSearchInput.disabled = modeSelect.value !== 'individual_feature' || allFeatures.length === 0;
+  featureSearchInput.placeholder = allFeatures.length ? `Search ${allFeatures.length} detected features` : 'No detected features';
+}
+function rowValue(row, metric) {
+  const fallback = metric === 'feature_rows' ? row.total_feature_rows : 0;
+  return Number(row[metric] || fallback || 0);
+}
+function activeRows() {
+  const db = databaseSelect.value, mode = modeSelect.value, geo = geoSelect.value, minN = Number(minSelect.value || 0);
+  let rows = mode === 'database_burden'
+    ? databaseRows.filter(r => r.database === db && r.geo_level === geo)
+    : featureRows.filter(r => r.database === db && r.feature_id === featureSelect.value && r.geo_level === geo);
+  rows = rows.filter(r => Number(r.total_genomes || 0) >= minN || minN === 0);
+  if (warningSelect.value === 'hide_small') rows = rows.filter(r => !(r.warning_flags || '').includes('small_group_warning'));
+  if (warningSelect.value === 'no_major') rows = rows.filter(r => !/(small_group_warning|bioproject_dominance|lineage_dominance|single_country_dominance)/.test(r.warning_flags || ''));
+  rows = rows.filter(r => !['missing','unknown','missing (unknown)','not applicable','not available','not provided'].includes(String(r.group_name || '').toLowerCase()));
+  const metric = metricSelect.value;
+  rows.sort((a, b) => rowValue(b, metric) - rowValue(a, metric) || (a.group_name || '').localeCompare(b.group_name || ''));
+  return rows.slice(0, Number(displaySelect.value || 20));
+}
+function hoverText(row, metric) {
+  const positive = row.positive_genomes || row.positive_genomes_with_database || 0;
+  return `<b>${esc(row.group_name || row.country)}</b><br>` +
+    `Metric: ${esc(metric)} = ${rowValue(row, metric).toFixed(metric.includes('burden') ? 2 : 1)}<br>` +
+    `Prevalence: ${esc(row.prevalence_display || '')}<br>` +
+    `Positive / total genomes: ${esc(positive)}/${esc(row.total_genomes || 0)}<br>` +
+    `Warnings: ${esc(row.warning_flags || 'none')}<br>` +
+    `Dataset-specific summary, not regional or global prevalence.`;
+}
+function choroplethTrace(rows, metric, smallGroup) {
+  return {
+    type: 'choropleth',
+    locationmode: 'country names',
+    locations: rows.map(r => plotCountry(r.country || r.group_name)),
+    z: rows.map(r => smallGroup ? 1 : rowValue(r, metric)),
+    text: rows.map(r => hoverText(r, metric)),
+    hovertemplate: '%{text}<extra></extra>',
+    colorscale: smallGroup ? [[0, '#cbd5e1'], [1, '#cbd5e1']] : [[0, '#fff5f5'], [0.35, '#fb6a4a'], [1, '#b91c1c']],
+    showscale: !smallGroup,
+    name: smallGroup ? 'Low-support group' : 'Selected metric',
+    marker: {line: {color: '#ffffff', width: 0.6}},
+    colorbar: {title: metric === 'prevalence_percent' ? 'Prevalence %' : metric.replaceAll('_', ' ')}
+  };
+}
+function renderMap(active) {
+  const mapEl = document.getElementById('map');
+  if (geoSelect.value !== 'country') {
+    mapEl.innerHTML = '<p style="padding:1rem">Filled-country map is available for country-level rows. Use ranked bars for continent, region, and country-year summaries.</p>';
+    return;
+  }
+  const countryRows = active.filter(r => cleanCountry(r.country || r.group_name));
+  if (!window.Plotly) {
+    mapEl.innerHTML = '<p style="padding:1rem">Filled-country map renderer is unavailable in this environment. Use the ranked country bars and downloadable TSVs.</p>';
+    return;
+  }
+  if (!countryRows.length) {
+    mapEl.innerHTML = '<p style="padding:1rem">No mappable country rows match the selected filters.</p>';
+    return;
+  }
+  const metric = metricSelect.value;
+  const smallRows = countryRows.filter(r => (r.warning_flags || '').includes('small_group_warning'));
+  const standardRows = countryRows.filter(r => !(r.warning_flags || '').includes('small_group_warning'));
+  const traces = [];
+  if (standardRows.length) traces.push(choroplethTrace(standardRows, metric, false));
+  if (smallRows.length) traces.push(choroplethTrace(smallRows, metric, true));
+  const titleFeature = modeSelect.value === 'individual_feature' ? featureSelect.value : 'any detected feature';
+  const layout = {
+    title: {text: `${databaseSelect.value} | ${titleFeature}`, x: 0.02},
+    height: 600,
+    margin: {l: 12, r: 12, t: 54, b: 12},
+    paper_bgcolor: '#ffffff',
+    geo: {
+      projection: {type: 'natural earth'},
+      showframe: false,
+      showcoastlines: true,
+      coastlinecolor: '#94a3b8',
+      showcountries: true,
+      countrycolor: '#ffffff',
+      showland: true,
+      landcolor: '#f8fafc',
+      showocean: true,
+      oceancolor: '#eff6ff',
+      bgcolor: '#ffffff'
+    },
+    annotations: [{
+      text: 'Dataset-specific map. Check positive / total denominators and warnings before interpreting geography.',
+      x: 0.01, y: 0.01, xref: 'paper', yref: 'paper',
+      showarrow: false, font: {size: 11, color: '#52606d'}, align: 'left'
+    }]
+  };
+  Plotly.react(mapEl, traces, layout, {responsive: true, displaylogo: false});
+}
+function renderBars(active) {
+  const metric = metricSelect.value;
+  const maxValue = Math.max(...active.map(r => rowValue(r, metric)), 1);
+  document.getElementById('bars').innerHTML = active.map(row => {
+    const value = rowValue(row, metric);
+    const width = Math.max(1, value / maxValue * 100);
+    const cls = (row.warning_flags || '').includes('small_group_warning') ? 'bar small' : 'bar';
+    const display = metric === 'prevalence_percent' ? row.prevalence_display : value.toFixed(metric.includes('burden') ? 2 : 0);
+    return `<div class="${cls}"><div>${esc(row.group_name)}</div><div class="bar-track"><div class="bar-fill" style="width:${width}%"></div></div><div>${esc(display)}</div></div>`;
+  }).join('') || '<p>No rows match the selected filters.</p>';
+}
+function renderTable(active) {
+  const headers = ['database','feature_id','geo_level','group_name','total_genomes','positive_genomes','prevalence_display','mean_feature_burden_per_genome','median_feature_burden_per_genome','warning_flags'];
+  let html = '<table><thead><tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+  for (const row of active.slice(0, 50)) html += '<tr>' + headers.map(h => `<td>${esc(row[h] || '')}</td>`).join('') + '</tr>';
+  html += '</tbody></table>';
+  document.getElementById('table').innerHTML = html;
+}
+function render() {
+  updateFeatures();
+  const active = activeRows();
+  const db = databaseSelect.value, mode = modeSelect.value;
+  const positives = active.reduce((a, r) => a + Number(r.positive_genomes || 0), 0);
+  const total = active.reduce((a, r) => a + Number(r.total_genomes || 0), 0);
+  const top = active[0] || {};
+  const selectedFeature = mode === 'individual_feature' ? (featureSelect.value || '-') : 'any feature';
+  document.getElementById('summary').innerHTML = `<div class="cards"><div class="card"><span>Mode</span><strong>${mode === 'database_burden' ? 'Database burden' : 'Gene map'}</strong></div><div class="card"><span>Database</span><strong>${esc(db)}</strong></div><div class="card"><span>Feature</span><strong>${esc(selectedFeature)}</strong></div><div class="card"><span>Groups shown</span><strong>${active.length}</strong></div><div class="card"><span>Top group</span><strong>${esc(top.group_name || '-')}</strong></div><div class="card"><span>Top prevalence</span><strong>${esc(top.prevalence_display || '-')}</strong></div></div><p>Displayed totals across shown groups: ${positives}/${total}. Interpret these summaries as dataset-specific, not global prevalence.</p>`;
+  renderMap(active);
+  renderBars(active);
+  renderTable(active);
+}
+for (const control of [databaseSelect, modeSelect, featureSelect, geoSelect, metricSelect, minSelect, displaySelect, warningSelect]) control.addEventListener('change', render);
+featureSearchInput.addEventListener('input', render);
+updateFeatures(); render();
+</script></body></html>
+""".replace("__DATABASE_ROWS__", json.dumps(database_rows)).replace("__FEATURE_ROWS__", json.dumps(feature_rows))
+
+
 GEOGRAPHIC_DATABASE_FIELDS = [
     "database",
     "geo_level",
@@ -5771,6 +6043,8 @@ updateFeatures(); render();
         .replace("__FEATURE_ROWS__", json.dumps(report_feature_rows))
         .replace("__COUNTRY_COORDS__", json.dumps(COUNTRY_COORDS))
     )
+    plotly_js_path = _write_plotly_bundle(figures / "plotly.min.js")
+    geographic_html = _geographic_choropleth_html(database_rows, report_feature_rows)
     analysis_html_path = figures / "geographic_distribution.html"
     analysis_html_path.write_text(geographic_html, encoding="utf-8")
     html_path = figures / "geographic_distribution_map.html"
@@ -5779,7 +6053,7 @@ updateFeatures(); render();
     table_zip = important_dir / "geographic_tables.zip"
     figure_zip = important_dir / "geographic_figures.zip"
     table_files = [summary_path, feature_path, burden_path, warning_path, data_path]
-    figure_files += [analysis_html_path, html_path, svg_path, png_path, map_pdf_path, map_data_path, figures / "geographic_distribution.data.tsv"]
+    figure_files += [analysis_html_path, html_path, plotly_js_path, svg_path, png_path, map_pdf_path, map_data_path, figures / "geographic_distribution.data.tsv"]
     tables_zip = _write_zip_bundle(table_zip, table_files, important_dir)
     figures_zip = _write_zip_bundle(figure_zip, figure_files, important_dir)
     return {
@@ -14023,42 +14297,14 @@ def write_important_results_report(
     )
     geographic_reading_cards_html = (
         "<div class='finding-grid analysis-guide' aria-label='Geographic distribution reading guide'>"
-        f"<div class='finding-card'><h3>1. Use the map first</h3><p>Maps and country bars summarize {geographic_country_groups:,} country group(s); redder country tiles show higher dataset prevalence or burden.</p><span class='badge badge-exploratory'>Dataset map</span></div>"
+        f"<div class='finding-card'><h3>1. Use the map first</h3><p>The filled-country map and country bars summarize {geographic_country_groups:,} country group(s); redder countries show higher dataset prevalence or burden.</p><span class='badge badge-exploratory'>Dataset map</span></div>"
         f"<div class='finding-card'><h3>2. Check sample size</h3><p>{geographic_min_n_groups:,} country group(s) pass the default n&gt;=5 threshold. Small groups are useful for review but should not drive conclusions.</p><span class='badge badge-warning'>Denominator check</span></div>"
         f"<div class='finding-card'><h3>3. Check missingness</h3><p>{geographic_missing_country:,} genome(s) lack country metadata. Missing geography can change the apparent distribution.</p><span class='badge badge-warning'>Metadata caution</span></div>"
         f"<div class='finding-card'><h3>4. Audit warnings</h3><p>{geographic_warning_count:,} geographic group(s) carry warning flags; complete burden and feature-distribution TSVs remain downloadable.</p><span class='badge badge-capped'>Preview capped</span></div>"
         "</div>"
     )
-    geographic_map_preview_card = _report_figure_card_html(
-        important_dir,
-        "geographic_distribution_map",
-        "Geographic gene map preview",
-        "Static snapshot of the map workflow. Open the interactive gene map to select a feature; redder country tiles show higher selected-feature prevalence, larger tiles show country denominators, and gray tiles mark small groups.",
-        [("Exploratory", "exploratory")],
-    )
-    geographic_map_preview_html = (
-        "<div class='analysis-card geographic-map-preview'><h3>Map-first geographic view</h3>"
-        "<p>Use this static snapshot to orient yourself, then open the full interactive gene map to search AMR, VFDB, plasmid, integron, and other detected features.</p>"
-        f"{geographic_map_preview_card}</div>"
-        if geographic_map_preview_card else ""
-    )
+    geographic_map_preview_html = ""
     geographic_figure_items = []
-    map_first_stems = [path.stem for path in sorted((important_dir / "figures").glob("geographic_map_*.svg"))[:2]]
-    for stem in dict.fromkeys(map_first_stems):
-        if not (important_dir / "figures" / f"{stem}.svg").exists():
-            continue
-        geographic_figure_items.append(
-            (
-                stem,
-                _report_figure_card_html(
-                    important_dir,
-                    stem,
-                    _human_figure_title(stem),
-                    _figure_caption_for("Geographic Distribution", stem),
-                    [("Exploratory", "exploratory")],
-                ),
-            )
-        )
     for path in sorted((important_dir / "figures").glob("geographic_*_bar_*.svg"))[:6]:
         stem = path.stem
         geographic_figure_items.append(
@@ -14812,12 +15058,12 @@ def write_important_results_report(
         "Feature prevalence interactive report",
     )
     geography_explorer_html = _interactive_explorer_card_html(
-        "Interactive geographic gene map",
-        "Open the full map to search a gene or feature, switch databases, and compare the map with ranked country bars. Redder country tiles indicate higher selected-feature prevalence; larger tiles indicate more genomes.",
+        "Filled-country geographic gene map",
+        "Search a gene or feature, switch databases, and compare the FetchM-style choropleth with ranked country bars. Redder countries indicate higher selected-feature prevalence; gray countries indicate low-support groups.",
         "figures/geographic_distribution.html",
         "Geographic distribution interactive report",
-        expanded=False,
-        button_label="Open full interactive gene map",
+        expanded=True,
+        button_label="Open filled-country gene map",
     )
     variation_explorer_html = _interactive_explorer_card_html(
         "Interactive variation explorer",
@@ -14856,7 +15102,7 @@ def write_important_results_report(
         "Diversity and pan-feature summary interactive report",
     )
     prevalence_best_figure_html = _best_figure_note_html("Genomes positive by database", "This is the cleanest denominator-aware entry point before inspecting individual genes.")
-    geographic_best_figure_html = _best_figure_note_html("Geographic gene map preview", "Start with the map, then verify the same pattern in country bars and the full TSV.")
+    geographic_best_figure_html = _best_figure_note_html("Filled-country geographic gene map", "Start with the choropleth map, then verify the same pattern in country bars and the full TSV.")
     variation_best_figure_html = _best_figure_note_html("Most variable features", "Use it to decide which identity/coverage distributions deserve manual review.")
     temporal_best_figure_html = _best_figure_note_html("Selected feature prevalence over time", "It preserves yearly denominators and is easier to interpret than a dense heatmap.")
     cooccurrence_best_figure_html = _best_figure_note_html("Co-occurrence heatmap plus context evidence ladder", "Use the heatmap for screening and the ladder for stronger coordinate-level evidence.")
@@ -15105,7 +15351,7 @@ th {{ background: #f0f4f8; position: sticky; top: 0; z-index: 1; }}
 <div class="analysis-card"><h3>Top database burden by country</h3>{geographic_burden_table_html}</div>
 <div class="analysis-card"><h3>Top feature distributions by country</h3>{geographic_feature_table_html}</div>
 </details>
-<div class="downloads"><a href="figures/geographic_distribution.html">Open interactive geographic report</a><a href="figures/geographic_distribution_map.html">Open compatibility map</a><a href="geographic_tables.zip">Download geographic tables ZIP</a><a href="geographic_figures.zip">Download geographic figures ZIP</a><a href="tables/geographic_distribution_summary.tsv">Download geographic summary</a><a href="tables/geographic_database_burden.tsv">Download database burden table</a><a href="tables/geographic_feature_distribution.tsv">Download feature distribution table</a><a href="tables/geographic_warning_summary.tsv">Download warning summary</a></div></section>
+<div class="downloads"><a href="figures/geographic_distribution.html">Open filled-country geographic report</a><a href="figures/geographic_distribution_map.html">Open standalone geographic map</a><a href="geographic_tables.zip">Download geographic tables ZIP</a><a href="geographic_figures.zip">Download geographic figures ZIP</a><a href="tables/geographic_distribution_summary.tsv">Download geographic summary</a><a href="tables/geographic_database_burden.tsv">Download database burden table</a><a href="tables/geographic_feature_distribution.tsv">Download feature distribution table</a><a href="tables/geographic_warning_summary.tsv">Download warning summary</a></div></section>
 <section id="variations" class="section"><h2>Variations</h2><p>Variation summaries use identity, coverage, alignment length, and hit-count values when available. Low identity, low coverage, high variation, and few-hit flags are review cues, not automatic failures.</p>
 <div class="warning-box warning">A feature can be common but conserved, common and variable, or rare with unstable estimates. Use the complete hit-level table when reviewing low-confidence or partial hits.</div>
 {variation_focus_html}

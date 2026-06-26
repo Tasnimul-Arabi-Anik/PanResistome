@@ -101,21 +101,23 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("featureSearchInput", html)
             self.assertIn("Search detected features", html)
             self.assertIn("Feature / gene", html)
-            self.assertIn("polygon points", html)
+            self.assertIn("plotly.min.js", html)
+            self.assertIn("Plotly.react", html)
+            self.assertIn("type: 'choropleth'", html)
+            self.assertIn("locationmode: 'country names'", html)
+            self.assertIn("natural earth", html)
+            self.assertIn("filled-country map", html)
             self.assertIn("overflow-x: hidden", html)
-            self.assertIn("window.addEventListener('resize', render)", html)
-            self.assertIn("labelCountries", html)
-            self.assertIn("Only the highest-support countries are labeled", html)
             self.assertIn("Map reading guide", html)
             self.assertIn("Higher selected-gene prevalence", html)
             self.assertIn("positive / total genomes", html)
             self.assertIn("small group", html)
             self.assertIn("Dataset-specific summary", html)
-            self.assertIn("country tile", html.lower())
+            self.assertNotIn("country tile", html.lower())
             self.assertNotIn("bubble", html.lower())
+            self.assertTrue((sample_dir / "important" / "figures" / "plotly.min.js").exists())
             svg = (sample_dir / "important" / "figures" / "geographic_distribution_map.svg").read_text(encoding="utf-8")
             self.assertIn("Color shows dataset prevalence/burden", svg)
-            self.assertIn("tile size shows genomes", svg)
             self.assertIn("Map reading guide", svg)
             self.assertIn("positive / total genomes", svg)
             self.assertIn("higher selected-gene prevalence", svg)
@@ -219,7 +221,7 @@ class FetchM2AdapterTests(unittest.TestCase):
             "metadata_volcano_amr_isolation_source_missing": "effect size and FDR support",
             "cooccurrence_heatmap_vfdb_vs_mlst": "feature-pair association direction",
             "prevalence_genomes_positive_by_database": "at least one feature from each database",
-            "geographic_map_amr_burden": "tile size shows genome count",
+            "geographic_map_amr_burden": "Filled-country geographic map",
         }
         for stem, expected_phrase in caption_cases.items():
             with self.subTest(stem=stem):
@@ -822,8 +824,12 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("featureSearchInput", geographic_html)
             for guide_text in ["Map reading guide", "Higher selected-gene prevalence", "positive / total genomes", "small group"]:
                 self.assertIn(guide_text, geographic_html)
-            self.assertIn("labelCountries", geographic_html)
-            self.assertIn("Only the highest-support countries are labeled", geographic_html)
+            self.assertIn("plotly.min.js", geographic_html)
+            self.assertIn("Plotly.react", geographic_html)
+            self.assertIn("type: 'choropleth'", geographic_html)
+            self.assertIn("locationmode: 'country names'", geographic_html)
+            self.assertIn("natural earth", geographic_html)
+            self.assertNotIn("country tile", geographic_html.lower())
             geographic_burden = pd.read_csv(sample_dir / "important" / "tables" / "geographic_database_burden.tsv", sep="\t")
             self.assertTrue({"database", "geo_level", "group_name", "positive_genomes", "prevalence_percent", "warning_flags"}.issubset(geographic_burden.columns))
             country_rows = geographic_burden[(geographic_burden["database"] == "amr") & (geographic_burden["geo_level"] == "country")]
@@ -1030,7 +1036,7 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("interactive-explorer-card", report_html)
             self.assertIn("explorer-frame", report_html)
             self.assertIn("Load embedded explorer", report_html)
-            self.assertIn("Open full interactive gene map", report_html)
+            self.assertIn("Open filled-country gene map", report_html)
             self.assertGreaterEqual(report_html.count("loading='lazy'"), 8)
             if by_section["section"].nunique() >= 5:
                 balanced_preview = report_html.split("<h3>Balanced highlights by section</h3>", 1)[1].split('<div class="downloads"', 1)[0]
@@ -1177,14 +1183,16 @@ class FetchM2AdapterTests(unittest.TestCase):
             ]:
                 self.assertIn(report_phrase, report_html)
             geography_section = report_html.split('id="geography"', 1)[1].split('id="variations"', 1)[0]
-            self.assertIn("figures/geographic_distribution_map.svg", geography_section)
+            self.assertIn("Filled-country geographic gene map", geography_section)
+            self.assertIn("figures/geographic_distribution.html", geography_section)
+            self.assertIn("Embedded explorer", geography_section)
             self.assertIn("geographic_country_bar", geography_section)
             self.assertLess(
-                geography_section.index("figures/geographic_distribution_map.svg"),
+                geography_section.index("figures/geographic_distribution.html"),
                 geography_section.index("Geographic denominator, missingness, and reading guide"),
             )
             self.assertLess(
-                geography_section.index("figures/geographic_distribution_map.svg"),
+                geography_section.index("figures/geographic_distribution.html"),
                 geography_section.index("geographic_country_bar"),
             )
             metadata_section = report_html.split('id="metadata-associations"', 1)[1].split('id="lineage"', 1)[0]
