@@ -14321,14 +14321,17 @@ def write_important_results_report(
         supporting_primary_count=3,
     )
     lineage_summary = {row.get("metric", ""): row.get("value", "") for row in lineage_summary_rows}
+    lineage_dominant_st = lineage_summary.get("dominant_ST", "") or "NA"
+    lineage_dominant_st_display = re.sub(r"([;:])", r"\1 ", lineage_dominant_st)
+    lineage_warning_count = int(_float_or_none(lineage_summary.get("warning_rows", "0")) or 0)
     lineage_cards_html = (
         "<div class='cards'>"
         f"<div class='card'><span>Genomes with MLST ST</span><strong>{html.escape(lineage_summary.get('genomes_with_mlst_ST', '0'))}</strong></div>"
         f"<div class='card'><span>Unique STs</span><strong>{html.escape(lineage_summary.get('unique_STs', '0'))}</strong></div>"
-        f"<div class='card'><span>Dominant ST</span><strong>{html.escape(lineage_summary.get('dominant_ST', '')) or 'NA'}</strong></div>"
+        f"<div class='card'><span>Dominant ST</span><strong title='{html.escape(lineage_dominant_st)}'>{html.escape(lineage_dominant_st_display)}</strong></div>"
         f"<div class='card'><span>ANI clusters</span><strong>{html.escape(lineage_summary.get('unique_ANI_clusters', '0'))}</strong></div>"
         f"<div class='card'><span>BioProjects</span><strong>{html.escape(lineage_summary.get('bioprojects_detected', '0'))}</strong></div>"
-        f"<div class='card'><span>Lineage warnings</span><strong>{html.escape(lineage_summary.get('warning_rows', '0'))}</strong></div>"
+        f"<div class='card'><span>Lineage warning flags</span><strong>{lineage_warning_count:,}</strong><small>row-level flags</small></div>"
         "</div>"
     )
     lineage_summary_html = (
