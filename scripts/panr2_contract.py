@@ -3747,7 +3747,7 @@ def _figure_caption_for(section: str, stem: str) -> str:
         return "QC figures summarize genome retention and module status before downstream feature interpretation."
     if section == "Geographic Distribution" or stem.startswith("geographic_"):
         if stem.startswith("geographic_map_") or stem == "geographic_distribution_map":
-            return "Country bubbles map selected-gene or database prevalence; redder bubbles show higher prevalence, marker size shows genome count, and small or missing geography groups need caution."
+            return "Country-tile map of selected-gene or database prevalence; redder tiles show higher prevalence, tile size shows genome count, and gray or missing geography groups need caution."
         if "_country_bar_" in stem or stem.startswith("geographic_country_bar_"):
             return "Country bars rank dataset-specific prevalence or burden with plotted denominators; they are not regional prevalence estimates."
         if "_continent_bar_" in stem or stem.startswith("geographic_continent_bar_"):
@@ -3862,7 +3862,7 @@ def _figure_guidance_for(section: str, stem: str) -> str:
     stem = stem or ""
     if section == "Geographic Distribution" or stem.startswith("geographic_"):
         if stem.startswith("geographic_map_") or stem == "geographic_distribution_map":
-            return "How to read: compare color for prevalence and bubble size for denominator. Do not treat red countries as global hotspots without checking sampling. Next table: geographic_feature_distribution.tsv or geographic_database_burden.tsv."
+            return "How to read: compare tile color for prevalence and tile size for denominator. Do not treat red countries as global hotspots without checking sampling. Next table: geographic_feature_distribution.tsv or geographic_database_burden.tsv."
         return "How to read: compare percentages only with their positive/total denominators. Do not compare tiny groups as if they were equally supported. Next table: geographic_database_burden.tsv."
     if section == "Co-occurrence / Genomic Context" or stem.startswith(("cooccurrence_", "top_context_features_", "genomic_context_evidence_ladder_", "contig_neighborhood_")):
         if stem.startswith("cooccurrence_heatmap_"):
@@ -4755,9 +4755,12 @@ def _svg_geographic_map(rows: list[dict[str, str]], title: str) -> str:
             key=lambda item: (-item[3], -item[2], item[0].get("country", "")),
         )[:10]
     }
-    points = []
+    tiles = []
     for row, xy, prevalence, total, positive in mappable_rows:
-        radius = max(5, min(28, 4 + math.sqrt(max(total, 1)) * 4))
+        tile_width = max(18, min(42, 14 + math.sqrt(max(total, 1)) * 5))
+        tile_height = max(12, min(28, 10 + math.sqrt(max(total, 1)) * 3))
+        tile_x = max(2, min(width - tile_width - 2, xy[0] - tile_width / 2))
+        tile_y = max(2, min(height - tile_height - 2, xy[1] - tile_height / 2))
         red = int(254 - 64 * (1 - prevalence))
         green = int(226 - 175 * prevalence)
         blue = int(226 - 175 * prevalence)
@@ -4772,14 +4775,14 @@ def _svg_geographic_map(rows: list[dict[str, str]], title: str) -> str:
         text = ""
         if row.get("country", "") in label_countries:
             text = (
-                f"<text x='{xy[0] + radius + 3:.1f}' y='{xy[1] + 4:.1f}' "
+                f"<text x='{tile_x + tile_width + 4:.1f}' y='{tile_y + tile_height / 2 + 4:.1f}' "
                 "font-family='Arial' font-size='11' fill='#1f2933'>"
                 f"{html.escape(row.get('country', ''))}</text>"
             )
-        points.append(
-            f"<circle cx='{xy[0]:.1f}' cy='{xy[1]:.1f}' r='{radius:.1f}' fill='{fill}' "
-            "fill-opacity='0.75' stroke='#1f2933' stroke-width='1'>"
-            f"<title>{html.escape(label)}</title></circle>"
+        tiles.append(
+            f"<rect x='{tile_x:.1f}' y='{tile_y:.1f}' width='{tile_width:.1f}' height='{tile_height:.1f}' "
+            f"rx='2.5' fill='{fill}' fill-opacity='0.82' stroke='#1f2933' stroke-width='1'>"
+            f"<title>{html.escape(label)}</title></rect>"
             f"{text}"
         )
     grid = []
@@ -4793,19 +4796,19 @@ def _svg_geographic_map(rows: list[dict[str, str]], title: str) -> str:
     note = (
         f"{len(mappable_rows)} of {total_rows} country groups mapped"
         + (f"; {missing_coords} lacked coordinates" if missing_coords else "")
-        + ". Color shows dataset prevalence/burden, point size shows genomes, gray marks small groups. Tooltips use positive / total genomes."
+        + ". Color shows dataset prevalence/burden, tile size shows genomes, gray marks small groups. Tooltips use positive / total genomes."
     )
     legend = (
         f"<g transform='translate(20,{legend_y})' font-family='Arial' font-size='12' fill='#52606d'>"
         "<text x='0' y='-18' font-size='13' font-weight='700' fill='#102a43'>Map reading guide</text>"
-        "<circle cx='8' cy='0' r='6' fill='rgb(190,226,226)' fill-opacity='0.75' stroke='#1f2933'/>"
-        "<text x='22' y='4'>lower dataset prevalence</text>"
-        "<circle cx='188' cy='0' r='10' fill='rgb(222,138,138)' fill-opacity='0.75' stroke='#1f2933'/>"
-        "<text x='206' y='4'>mid</text>"
-        "<circle cx='274' cy='0' r='14' fill='rgb(254,51,51)' fill-opacity='0.75' stroke='#1f2933'/>"
-        "<text x='296' y='4'>higher selected-gene prevalence</text>"
-        "<circle cx='534' cy='0' r='9' fill='#cbd5e1' fill-opacity='0.75' stroke='#1f2933'/>"
-        "<text x='552' y='4'>small group</text>"
+        "<rect x='0' y='-9' width='20' height='14' rx='2' fill='rgb(190,226,226)' fill-opacity='0.82' stroke='#1f2933'/>"
+        "<text x='28' y='4'>lower dataset prevalence</text>"
+        "<rect x='198' y='-12' width='28' height='18' rx='2' fill='rgb(222,138,138)' fill-opacity='0.82' stroke='#1f2933'/>"
+        "<text x='234' y='4'>mid</text>"
+        "<rect x='300' y='-15' width='40' height='24' rx='2' fill='rgb(254,51,51)' fill-opacity='0.82' stroke='#1f2933'/>"
+        "<text x='350' y='4'>higher selected-gene prevalence</text>"
+        "<rect x='588' y='-12' width='28' height='18' rx='2' fill='#cbd5e1' fill-opacity='0.82' stroke='#1f2933'/>"
+        "<text x='624' y='4'>small group</text>"
         f"<text x='0' y='28'>{html.escape(note)}</text>"
         "<text x='0' y='48'>This map describes the analyzed dataset only and is not a regional or global prevalence estimate.</text>"
         "</g>"
@@ -4817,7 +4820,7 @@ def _svg_geographic_map(rows: list[dict[str, str]], title: str) -> str:
         f"<g transform='translate(0,48)'><rect x='0' y='0' width='{width}' height='{height}' fill='#eff6ff' stroke='#bcccdc'/>"
         + "".join(grid)
         + _world_land_polygons_svg(width, height)
-        + "".join(points)
+        + "".join(tiles)
         + f"</g>{legend}</svg>\n"
     )
 
@@ -4955,13 +4958,6 @@ def _geographic_map_png(rows: list[dict[str, str]], path: Path) -> None:
                 idx = x * 3
                 row[idx:idx + 3] = bytes(color)
 
-    def draw_circle(cx: float, cy: float, radius: float, color: tuple[int, int, int]) -> None:
-        r2 = radius * radius
-        for y in range(int(cy - radius) - 1, int(cy + radius) + 2):
-            for x in range(int(cx - radius) - 1, int(cx + radius) + 2):
-                if (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r2:
-                    set_pixel(x, y, color)
-
     draw_rect(0, header, width, header + map_height, (239, 246, 255))
     for lon in range(-120, 181, 60):
         x = int((lon + 180) / 360 * width)
@@ -5007,13 +5003,16 @@ def _geographic_map_png(rows: list[dict[str, str]], path: Path) -> None:
         if row.get("prevalence_percent", "") == "":
             prevalence = _float_or_none(row.get("prevalence", "")) or 0.0
         total = int(_float_or_none(row.get("total_genomes", "")) or 0)
-        radius = max(5, min(28, 4 + math.sqrt(max(total, 1)) * 4))
+        tile_width = int(max(18, min(42, 14 + math.sqrt(max(total, 1)) * 5)))
+        tile_height = int(max(12, min(28, 10 + math.sqrt(max(total, 1)) * 3)))
+        tile_x = int(max(2, min(width - tile_width - 2, xy[0] - tile_width / 2)))
+        tile_y = int(max(header + 2, min(header + map_height - tile_height - 2, xy[1] + header - tile_height / 2)))
         color = (
             (203, 213, 225)
             if "small_group_warning" in row.get("warning_flags", "")
             else (int(254 - 64 * (1 - prevalence)), int(226 - 175 * prevalence), int(226 - 175 * prevalence))
         )
-        draw_circle(xy[0], xy[1] + header, radius, color)
+        draw_rect(tile_x, tile_y, tile_x + tile_width, tile_y + tile_height, color)
     legend_y = header + map_height + 18
     for idx, prevalence in enumerate([0.0, 0.5, 1.0]):
         color = (int(254 - 64 * (1 - prevalence)), int(226 - 175 * prevalence), int(226 - 175 * prevalence))
@@ -5517,11 +5516,11 @@ select, input[type="search"] { width: 100%; padding: 0.35rem; box-sizing: border
 .legend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 0.55rem; }
 .legend-item { display: flex; gap: 0.55rem; align-items: flex-start; color: #52606d; font-size: 0.9rem; }
 .legend-item strong { color: #102a43; display: block; }
-.bubble-swatch { flex: 0 0 auto; width: 22px; height: 22px; border: 1px solid #1f2933; border-radius: 50%; margin-top: 0.08rem; }
-.bubble-low { background: rgb(190,226,226); }
-.bubble-high { background: rgb(254,51,51); }
-.bubble-large { width: 30px; height: 30px; background: rgb(222,138,138); }
-.bubble-small-group { background: #cbd5e1; }
+.tile-swatch { flex: 0 0 auto; width: 28px; height: 18px; border: 1px solid #1f2933; border-radius: 3px; margin-top: 0.08rem; }
+.tile-low { background: rgb(190,226,226); }
+.tile-high { background: rgb(254,51,51); }
+.tile-large { width: 36px; height: 24px; background: rgb(222,138,138); }
+.tile-small-group { background: #cbd5e1; }
 .tooltip-note { margin: 0.65rem 0 0; color: #52606d; font-size: 0.9rem; }
 .control-feature { grid-column: span 2; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 0.65rem; margin: 1rem 0; }
@@ -5541,16 +5540,16 @@ a.button { display: inline-block; padding: 0.45rem 0.65rem; margin: 0.2rem 0.35r
 <h1>Geographic Gene Map</h1>
 <p>Select a database or individual feature, then read the map and ranked bars together. Percentages always use genome-count denominators.</p>
 <div class="warning">Geographic distribution reflects the analyzed dataset and may not represent true regional or global prevalence.</div>
-<div class="gene-map-hint"><strong>Gene map workflow:</strong> choose <em>Individual feature / gene</em>, select an AMR, VFDB, plasmid, integron, or other detected feature, and keep Geographic level as <em>Country</em>. Redder bubbles show higher selected-gene prevalence; larger bubbles show stronger country denominators.</div>
+<div class="gene-map-hint"><strong>Gene map workflow:</strong> choose <em>Individual feature / gene</em>, select an AMR, VFDB, plasmid, integron, or other detected feature, and keep Geographic level as <em>Country</em>. Redder country tiles show higher selected-gene prevalence; larger tiles show stronger country denominators.</div>
 <div class="map-guide" aria-label="Map reading guide">
 <h2>Map reading guide</h2>
 <div class="legend-grid">
-<div class="legend-item"><span class="bubble-swatch bubble-low"></span><span><strong>Lower prevalence</strong>paler bubbles indicate lower dataset prevalence for the selected database or gene.</span></div>
-<div class="legend-item"><span class="bubble-swatch bubble-high"></span><span><strong>Higher selected-gene prevalence</strong>redder bubbles indicate a higher positive-genome fraction in that country.</span></div>
-<div class="legend-item"><span class="bubble-swatch bubble-large"></span><span><strong>More genomes</strong>larger bubbles indicate larger country-level denominators.</span></div>
-<div class="legend-item"><span class="bubble-swatch bubble-small-group"></span><span><strong>Small group</strong>grey bubbles mark groups below the default support threshold.</span></div>
+<div class="legend-item"><span class="tile-swatch tile-low"></span><span><strong>Lower prevalence</strong>paler tiles indicate lower dataset prevalence for the selected database or gene.</span></div>
+<div class="legend-item"><span class="tile-swatch tile-high"></span><span><strong>Higher selected-gene prevalence</strong>redder tiles indicate a higher positive-genome fraction in that country.</span></div>
+<div class="legend-item"><span class="tile-swatch tile-large"></span><span><strong>More genomes</strong>larger tiles indicate larger country-level denominators.</span></div>
+<div class="legend-item"><span class="tile-swatch tile-small-group"></span><span><strong>Small group</strong>grey tiles mark groups below the default support threshold.</span></div>
 </div>
-<p class="tooltip-note">Only the highest-support countries are labeled to reduce clutter. Hover over any bubble for country, positive / total genomes, warning flags, and the dataset-specific interpretation note.</p>
+<p class="tooltip-note">Only the highest-support countries are labeled to reduce clutter. Hover over any country tile for country, positive / total genomes, warning flags, and the dataset-specific interpretation note.</p>
 </div>
 <div class="controls">
 <div><label for="mode">Mode</label><select id="mode"><option value="database_burden">Database burden / any feature</option><option value="individual_feature">Individual feature / gene</option></select></div>
@@ -5704,14 +5703,17 @@ function renderMap(active) {
     const point = xy(row.country); if (!point) continue;
     const total = Number(row.total_genomes || 0);
     const positive = row.positive_genomes || row.positive_genomes_with_database || 0;
-    const radius = Math.max(5, Math.min(28, 4 + Math.sqrt(Math.max(total, 1)) * 4));
+    const tileW = Math.max(18, Math.min(42, 14 + Math.sqrt(Math.max(total, 1)) * 5));
+    const tileH = Math.max(12, Math.min(28, 10 + Math.sqrt(Math.max(total, 1)) * 3));
+    const tileX = Math.max(2, Math.min(width - tileW - 2, point[0] - tileW / 2));
+    const tileY = Math.max(2, Math.min(height - tileH - 2, point[1] - tileH / 2));
     const p = Number(row.prevalence_percent || 0) / 100;
     const fill = (row.warning_flags || '').includes('small_group_warning') ? '#cbd5e1' : `rgb(${Math.round(254 - 64 * (1 - p))},${Math.round(226 - 175 * p)},${Math.round(226 - 175 * p)})`;
     const label = `${row.group_name}. Dataset prevalence: ${row.prevalence_display}. Positive / total genomes: ${positive}/${row.total_genomes || 0}. Warnings: ${row.warning_flags || 'none'}. Dataset-specific summary, not a regional or global prevalence estimate.`;
-    svg += `<circle cx="${point[0].toFixed(1)}" cy="${point[1].toFixed(1)}" r="${radius.toFixed(1)}" fill="${fill}" fill-opacity="0.75" stroke="#1f2933"><title>${esc(label)}</title></circle>`;
+    svg += `<rect x="${tileX.toFixed(1)}" y="${tileY.toFixed(1)}" width="${tileW.toFixed(1)}" height="${tileH.toFixed(1)}" rx="2.5" fill="${fill}" fill-opacity="0.82" stroke="#1f2933"><title>${esc(label)}</title></rect>`;
     if (labelCountries.has(row.country)) {
-      const labelX = point[0] + radius + 3;
-      const labelY = point[1] + 4;
+      const labelX = tileX + tileW + 4;
+      const labelY = tileY + tileH / 2 + 4;
       if (canPlaceLabel(labelX, labelY, row.country)) {
         svg += `<text x="${labelX.toFixed(1)}" y="${labelY.toFixed(1)}" font-size="11" fill="#1f2933">${esc(row.country)}</text>`;
       }
@@ -5719,10 +5721,10 @@ function renderMap(active) {
   }
   svg += `</g><g transform="translate(20,${height + 78})" font-family="Arial" font-size="12" fill="#52606d">`;
   svg += `<text x="0" y="-18" font-size="13" font-weight="700" fill="#102a43">Map reading guide</text>`;
-  svg += `<circle cx="8" cy="0" r="6" fill="rgb(190,226,226)" fill-opacity="0.75" stroke="#1f2933"/><text x="22" y="4">lower prevalence</text>`;
-  svg += `<circle cx="166" cy="0" r="14" fill="rgb(254,51,51)" fill-opacity="0.75" stroke="#1f2933"/><text x="188" y="4">higher selected-gene prevalence</text>`;
-  svg += `<circle cx="430" cy="0" r="9" fill="#cbd5e1" fill-opacity="0.75" stroke="#1f2933"/><text x="448" y="4">small group</text>`;
-  svg += `<text x="0" y="30">Redder bubbles show higher prevalence; larger bubbles show more genomes. Hover for positive / total genomes and warnings.</text>`;
+  svg += `<rect x="0" y="-9" width="20" height="14" rx="2" fill="rgb(190,226,226)" fill-opacity="0.82" stroke="#1f2933"/><text x="28" y="4">lower prevalence</text>`;
+  svg += `<rect x="168" y="-15" width="40" height="24" rx="2" fill="rgb(254,51,51)" fill-opacity="0.82" stroke="#1f2933"/><text x="218" y="4">higher selected-gene prevalence</text>`;
+  svg += `<rect x="486" y="-12" width="28" height="18" rx="2" fill="#cbd5e1" fill-opacity="0.82" stroke="#1f2933"/><text x="522" y="4">small group</text>`;
+  svg += `<text x="0" y="30">Redder tiles show higher prevalence; larger tiles show more genomes. Hover for positive / total genomes and warnings.</text>`;
   svg += `<text x="0" y="50">Dataset-specific summary only; geography does not imply regional or global prevalence.</text></g></svg>`;
   document.getElementById('map').innerHTML = svg;
 }
@@ -14021,7 +14023,7 @@ def write_important_results_report(
     )
     geographic_reading_cards_html = (
         "<div class='finding-grid analysis-guide' aria-label='Geographic distribution reading guide'>"
-        f"<div class='finding-card'><h3>1. Use the map first</h3><p>Maps and country bars summarize {geographic_country_groups:,} country group(s); redder bubbles show higher dataset prevalence or burden.</p><span class='badge badge-exploratory'>Dataset map</span></div>"
+        f"<div class='finding-card'><h3>1. Use the map first</h3><p>Maps and country bars summarize {geographic_country_groups:,} country group(s); redder country tiles show higher dataset prevalence or burden.</p><span class='badge badge-exploratory'>Dataset map</span></div>"
         f"<div class='finding-card'><h3>2. Check sample size</h3><p>{geographic_min_n_groups:,} country group(s) pass the default n&gt;=5 threshold. Small groups are useful for review but should not drive conclusions.</p><span class='badge badge-warning'>Denominator check</span></div>"
         f"<div class='finding-card'><h3>3. Check missingness</h3><p>{geographic_missing_country:,} genome(s) lack country metadata. Missing geography can change the apparent distribution.</p><span class='badge badge-warning'>Metadata caution</span></div>"
         f"<div class='finding-card'><h3>4. Audit warnings</h3><p>{geographic_warning_count:,} geographic group(s) carry warning flags; complete burden and feature-distribution TSVs remain downloadable.</p><span class='badge badge-capped'>Preview capped</span></div>"
@@ -14031,7 +14033,7 @@ def write_important_results_report(
         important_dir,
         "geographic_distribution_map",
         "Geographic gene map preview",
-        "Static snapshot of the map workflow. Open the interactive gene map to select a feature; redder bubbles show higher selected-feature prevalence, larger bubbles show country denominators, and gray bubbles mark small groups.",
+        "Static snapshot of the map workflow. Open the interactive gene map to select a feature; redder country tiles show higher selected-feature prevalence, larger tiles show country denominators, and gray tiles mark small groups.",
         [("Exploratory", "exploratory")],
     )
     geographic_map_preview_html = (
@@ -14811,7 +14813,7 @@ def write_important_results_report(
     )
     geography_explorer_html = _interactive_explorer_card_html(
         "Interactive geographic gene map",
-        "Open the full map to search a gene or feature, switch databases, and compare the map with ranked country bars. Redder bubbles indicate higher selected-feature prevalence; larger bubbles indicate more genomes.",
+        "Open the full map to search a gene or feature, switch databases, and compare the map with ranked country bars. Redder country tiles indicate higher selected-feature prevalence; larger tiles indicate more genomes.",
         "figures/geographic_distribution.html",
         "Geographic distribution interactive report",
         expanded=False,

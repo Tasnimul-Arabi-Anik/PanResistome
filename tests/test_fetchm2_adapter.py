@@ -111,13 +111,17 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("positive / total genomes", html)
             self.assertIn("small group", html)
             self.assertIn("Dataset-specific summary", html)
+            self.assertIn("country tile", html.lower())
+            self.assertNotIn("bubble", html.lower())
             svg = (sample_dir / "important" / "figures" / "geographic_distribution_map.svg").read_text(encoding="utf-8")
             self.assertIn("Color shows dataset prevalence/burden", svg)
+            self.assertIn("tile size shows genomes", svg)
             self.assertIn("Map reading guide", svg)
             self.assertIn("positive / total genomes", svg)
             self.assertIn("higher selected-gene prevalence", svg)
             self.assertIn("not a regional or global prevalence estimate", svg)
             self.assertIn("small group", svg)
+            self.assertNotIn("bubble", svg.lower())
 
     def test_important_prevalence_counts_unique_genomes_and_duplicate_rows(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -215,7 +219,7 @@ class FetchM2AdapterTests(unittest.TestCase):
             "metadata_volcano_amr_isolation_source_missing": "effect size and FDR support",
             "cooccurrence_heatmap_vfdb_vs_mlst": "feature-pair association direction",
             "prevalence_genomes_positive_by_database": "at least one feature from each database",
-            "geographic_map_amr_burden": "marker size shows genome count",
+            "geographic_map_amr_burden": "tile size shows genome count",
         }
         for stem, expected_phrase in caption_cases.items():
             with self.subTest(stem=stem):
