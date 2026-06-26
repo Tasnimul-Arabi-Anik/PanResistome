@@ -15060,7 +15060,7 @@ def write_important_results_report(
     geography_explorer_html = _interactive_explorer_card_html(
         "Filled-country geographic gene map",
         "Search a gene or feature, switch databases, and compare the FetchM-style choropleth with ranked country bars. Redder countries indicate higher selected-feature prevalence; gray countries indicate low-support groups.",
-        "figures/geographic_distribution.html",
+        "figures/geographic_distribution.html#map",
         "Geographic distribution interactive report",
         expanded=True,
         button_label="Open filled-country gene map",
