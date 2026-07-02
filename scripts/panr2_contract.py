@@ -5048,11 +5048,12 @@ def _geographic_choropleth_html(database_rows: list[dict[str, str]], feature_row
 * { box-sizing: border-box; }
 html, body { max-width: 100%; overflow-x: hidden; }
 body { font-family: Arial, sans-serif; color: #1f2933; margin: 1.25rem; background: #f8fafc; }
-.map-workspace { border: 1px solid #d9e2ec; background: #ffffff; border-radius: 10px; padding: 0.8rem; }
-.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 0.55rem; align-items: end; }
+.map-workspace { display: grid; grid-template-columns: minmax(270px, 340px) minmax(0, 1fr); gap: 0.8rem; align-items: start; border: 1px solid #d9e2ec; background: #ffffff; border-radius: 10px; padding: 0.8rem; }
+.controls { grid-column: 1; display: grid; grid-template-columns: 1fr; gap: 0.5rem; align-items: end; }
 label { font-weight: 700; display: block; margin-bottom: 0.25rem; }
 select, input[type="search"] { width: 100%; padding: 0.32rem; box-sizing: border-box; }
-#mapPlot { width: 100%; min-height: 580px; border: 1px solid #d9e2ec; background: white; border-radius: 8px; margin-top: 0.6rem; }
+#summary { grid-column: 1; }
+#mapPlot { grid-column: 2; grid-row: 1 / span 2; width: 100%; min-height: 640px; border: 1px solid #d9e2ec; background: white; border-radius: 8px; margin-top: 0; }
 .warning { background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; margin: 1rem 0; }
 .gene-map-hint { background: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 6px; padding: 0.8rem; margin: 1rem 0; }
 .gene-map-hint strong { color: #991b1b; }
@@ -5066,11 +5067,14 @@ select, input[type="search"] { width: 100%; padding: 0.32rem; box-sizing: border
 .swatch-high { background: #b91c1c; }
 .swatch-small { background: #cbd5e1; }
 .tooltip-note { margin: 0.65rem 0 0; color: #52606d; font-size: 0.9rem; }
-.control-feature { grid-column: span 2; }
+.control-feature { grid-column: auto; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 0.65rem; margin: 1rem 0; }
+.map-workspace .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.45rem; margin: 0.7rem 0 0; }
 .card { border: 1px solid #d9e2ec; border-radius: 6px; padding: 0.7rem; background: #f8fafc; }
 .card span { display: block; color: #52606d; font-size: 0.8rem; }
 .card strong { font-size: 1.25rem; overflow-wrap: anywhere; }
+.map-workspace .card { padding: 0.55rem; }
+.map-workspace .card strong { font-size: 1.05rem; }
 .bar { display: grid; grid-template-columns: minmax(150px, 260px) 1fr 130px; gap: 0.5rem; align-items: center; margin: 0.3rem 0; }
 .bar-track { background: #e2e8f0; height: 18px; border-radius: 3px; overflow: hidden; }
 .bar-fill { background: #0f766e; height: 100%; }
@@ -5079,7 +5083,8 @@ table { border-collapse: collapse; width: 100%; margin-top: 1rem; font-size: 0.9
 th, td { border: 1px solid #d9e2ec; padding: 0.35rem; text-align: left; }
 th { background: #f0f4f8; }
 a.button { display: inline-block; padding: 0.45rem 0.65rem; margin: 0.2rem 0.35rem 0.2rem 0; background: #0f766e; color: white; text-decoration: none; border-radius: 4px; }
-@media (max-width: 760px) { .control-feature { grid-column: auto; } #mapPlot { min-height: 460px; } }
+@media (max-width: 920px) { .map-workspace { display: block; } #mapPlot { min-height: 500px; margin-top: 0.6rem; } }
+@media (max-width: 760px) { #mapPlot { min-height: 460px; } .map-workspace .cards { grid-template-columns: 1fr; } }
 </style></head><body>
 <h1>Geographic Gene Map</h1>
 <p>Select a database or individual feature, then read the filled-country map and ranked bars together. Percentages always use genome-count denominators.</p>
