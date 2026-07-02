@@ -5048,10 +5048,11 @@ def _geographic_choropleth_html(database_rows: list[dict[str, str]], feature_row
 * { box-sizing: border-box; }
 html, body { max-width: 100%; overflow-x: hidden; }
 body { font-family: Arial, sans-serif; color: #1f2933; margin: 1.25rem; background: #f8fafc; }
-.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.75rem; align-items: end; }
+.map-workspace { border: 1px solid #d9e2ec; background: #ffffff; border-radius: 10px; padding: 0.8rem; }
+.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 0.55rem; align-items: end; }
 label { font-weight: 700; display: block; margin-bottom: 0.25rem; }
-select, input[type="search"] { width: 100%; padding: 0.35rem; box-sizing: border-box; }
-#map { width: 100%; min-height: 580px; border: 1px solid #d9e2ec; background: white; border-radius: 8px; }
+select, input[type="search"] { width: 100%; padding: 0.32rem; box-sizing: border-box; }
+#mapPlot { width: 100%; min-height: 580px; border: 1px solid #d9e2ec; background: white; border-radius: 8px; margin-top: 0.6rem; }
 .warning { background: #fff7ed; border-left: 4px solid #c2410c; padding: 0.75rem; margin: 1rem 0; }
 .gene-map-hint { background: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 6px; padding: 0.8rem; margin: 1rem 0; }
 .gene-map-hint strong { color: #991b1b; }
@@ -5078,11 +5079,12 @@ table { border-collapse: collapse; width: 100%; margin-top: 1rem; font-size: 0.9
 th, td { border: 1px solid #d9e2ec; padding: 0.35rem; text-align: left; }
 th { background: #f0f4f8; }
 a.button { display: inline-block; padding: 0.45rem 0.65rem; margin: 0.2rem 0.35rem 0.2rem 0; background: #0f766e; color: white; text-decoration: none; border-radius: 4px; }
-@media (max-width: 760px) { .control-feature { grid-column: auto; } #map { min-height: 460px; } }
+@media (max-width: 760px) { .control-feature { grid-column: auto; } #mapPlot { min-height: 460px; } }
 </style></head><body>
 <h1>Geographic Gene Map</h1>
 <p>Select a database or individual feature, then read the filled-country map and ranked bars together. Percentages always use genome-count denominators.</p>
 <div class="gene-map-hint"><strong>Gene map workflow:</strong> choose <em>Individual feature / gene</em>, select an AMR, VFDB, plasmid, integron, or other detected feature, and keep Geographic level as <em>Country</em>. Redder countries show higher selected-gene prevalence; gray countries mark low-support groups.</div>
+<section id="map" class="map-workspace" aria-label="Interactive filled-country map workspace">
 <div class="controls">
 <div><label for="mode">Mode</label><select id="mode"><option value="database_burden">Database burden / any feature</option><option value="individual_feature">Individual feature / gene</option></select></div>
 <div><label for="database">Database</label><select id="database"></select></div>
@@ -5095,7 +5097,8 @@ a.button { display: inline-block; padding: 0.45rem 0.65rem; margin: 0.2rem 0.35r
 <div><label for="warnings">Warning filter</label><select id="warnings"><option value="all">Show all</option><option value="hide_small">Hide small groups</option><option value="no_major">No major warnings</option></select></div>
 </div>
 <div id="summary"></div>
-<div id="map"></div>
+<div id="mapPlot"></div>
+</section>
 <div class="warning">Geographic distribution reflects the analyzed dataset and may not represent true regional or global prevalence.</div>
 <div class="map-guide" aria-label="Map reading guide">
 <h2>Map reading guide</h2>
@@ -5212,7 +5215,7 @@ function choroplethTrace(rows, metric, smallGroup) {
   };
 }
 function renderMap(active) {
-  const mapEl = document.getElementById('map');
+  const mapEl = document.getElementById('mapPlot');
   if (geoSelect.value !== 'country') {
     mapEl.innerHTML = '<p style="padding:1rem">Filled-country map is available for country-level rows. Use ranked bars for continent, region, and country-year summaries.</p>';
     return;
