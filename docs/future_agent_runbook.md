@@ -65,6 +65,13 @@ Use explicit parameters:
 `--container_run_options` is required for Docker/Apptainer-style runs when the
 database path is outside the repository or output directory.
 
+For ABRicate, `--db` is now honored by the PanResistome-native PanR2 feature
+runner path when it differs from the bundled default `./db`. The setup audit
+uses `abricate --datadir <path> --list` and the runner uses the same datadir for
+`ncbi`, `vfdb`, and `plasmidfinder`. If the shared ABRicate path is an absolute
+symlink to a target outside `/mnt/storage/db`, mount the symlink target too or
+use the shared launcher template, which does this automatically.
+
 ## Dulab WGS Workspace Pattern
 
 On the Dulab workstation, use:

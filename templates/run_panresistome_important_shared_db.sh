@@ -51,7 +51,12 @@ if [[ -z "$GENOMAD_DB" ]]; then
 fi
 
 ABRICATE_DB="${ABRICATE_DB:-$DB_ROOT/abricate/legacy_abricate_env/current}"
+ABRICATE_DB_REAL="$(readlink -f "$ABRICATE_DB" 2>/dev/null || true)"
 MOBSUITE_DB_DIR="${MOBSUITE_DB_DIR:-$DB_ROOT/mobsuite}"
+CONTAINER_MOUNTS="-v $DB_ROOT:$DB_ROOT"
+if [[ -n "$ABRICATE_DB_REAL" && "$ABRICATE_DB_REAL" != "$ABRICATE_DB" && "$ABRICATE_DB_REAL" = /* ]]; then
+  CONTAINER_MOUNTS="$CONTAINER_MOUNTS -v $ABRICATE_DB_REAL:$ABRICATE_DB_REAL:ro"
+fi
 
 mkdir -p "$OUTDIR" "$WORKDIR" "$MOBSUITE_DB_DIR"
 
@@ -68,6 +73,9 @@ echo "  CheckM2 DB:   ${CHECKM2_DB:-not found; pass CHECKM2_DB or disable CheckM
 echo "  GTDB-Tk data: ${GTDBTK_DATA_PATH:-not found; GTDB-Tk should stay disabled}"
 echo "  geNomAD DB:   ${GENOMAD_DB:-not found; geNomAD should stay disabled or auto-download elsewhere}"
 echo "  ABRicate DB:  ${ABRICATE_DB:-not found}"
+if [[ -n "$ABRICATE_DB_REAL" && "$ABRICATE_DB_REAL" != "$ABRICATE_DB" ]]; then
+  echo "  ABRicate real target: $ABRICATE_DB_REAL"
+fi
 
 "$NEXTFLOW_BIN" run main.nf \
   -work-dir "$WORKDIR" \
@@ -75,7 +83,7 @@ echo "  ABRicate DB:  ${ABRICATE_DB:-not found}"
   --outdir "$OUTDIR" \
   -profile docker,large \
   --container_image "$CONTAINER_IMAGE" \
-  --container_run_options "-v $DB_ROOT:$DB_ROOT" \
+  --container_run_options "$CONTAINER_MOUNTS" \
   --analysis_profile comprehensive \
   --output_mode important \
   --large_dataset true \

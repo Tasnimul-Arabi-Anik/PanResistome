@@ -2103,6 +2103,74 @@ class FetchM2AdapterTests(unittest.TestCase):
             self.assertIn("abricate-get_db --db vfdb --force", commands)
             self.assertIn("abricate --setupdb", commands)
 
+    def test_setup_abricate_databases_uses_external_datadir_without_force_update(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            db_dir = root / "shared_abricate_db"
+            db_dir.mkdir()
+            log = root / "commands.log"
+            (fake_bin / "panr").write_text(
+                "#!/bin/sh\n"
+                f"printf 'panr %s\\n' \"$*\" >> {log}\n"
+                "printf 'unexpected panr call\\n'\n",
+                encoding="utf-8",
+            )
+            (fake_bin / "abricate-get_db").write_text(
+                "#!/bin/sh\n"
+                f"printf 'abricate-get_db %s\\n' \"$*\" >> {log}\n"
+                "printf 'unexpected update call\\n'\n",
+                encoding="utf-8",
+            )
+            (fake_bin / "abricate").write_text(
+                "#!/bin/sh\n"
+                f"printf 'abricate %s\\n' \"$*\" >> {log}\n"
+                "if [ \"$1\" = \"--datadir\" ]; then shift 2; fi\n"
+                "if [ \"$1\" = \"--list\" ]; then\n"
+                "  printf 'DATABASE\\tSEQUENCES\\n'\n"
+                "  printf 'ncbi\\t10\\n'\n"
+                "  printf 'vfdb\\t10\\n'\n"
+                "elif [ \"$1\" = \"--setupdb\" ]; then\n"
+                "  printf 'indexed\\n'\n"
+                "else\n"
+                "  printf 'abricate 1.0.1\\n'\n"
+                "fi\n",
+                encoding="utf-8",
+            )
+            for executable in fake_bin.iterdir():
+                executable.chmod(0o755)
+
+            out = root / "abricate_database_setup_status.tsv"
+            env = os.environ.copy()
+            env["PATH"] = f"{fake_bin}:{env.get('PATH', '')}"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "scripts" / "setup_abricate_databases.py"),
+                    "--dbs",
+                    "ncbi,vfdb",
+                    "--out",
+                    str(out),
+                    "--datadir",
+                    str(db_dir),
+                    "--update",
+                ],
+                check=True,
+                env=env,
+            )
+
+            status = pd.read_csv(out, sep="\t")
+            self.assertEqual(set(status["status"]), {"PASS"})
+            self.assertTrue(status["database_dir"].astype(str).str.contains(str(db_dir)).all())
+            self.assertEqual(set(status["update_status"]), {"SKIPPED"})
+            commands = log.read_text(encoding="utf-8")
+            self.assertIn(f"abricate --datadir {db_dir} --list", commands)
+            self.assertIn(f"abricate --datadir {db_dir} --setupdb", commands)
+            self.assertNotIn("panr setup-db", commands)
+            self.assertNotIn("abricate-get_db", commands)
+
     def test_setup_mobsuite_database_runs_mob_init_cache(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

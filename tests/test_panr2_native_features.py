@@ -54,6 +54,14 @@ def test_worker_count_bounds_threads_to_tasks():
     assert native.worker_count(16, 0) == 1
 
 
+def test_abricate_command_includes_external_datadir():
+    native = load_native_feature_module()
+
+    command = native.abricate_command("abricate", Path("/shared/abricate_db"), ["--db", "ncbi", "sample.fna"])
+
+    assert command == ["abricate", "--datadir", "/shared/abricate_db", "--db", "ncbi", "sample.fna"]
+
+
 def test_native_runner_audit_writer(tmp_path):
     native = load_native_feature_module()
     audit_path = tmp_path / "native_runner_merge_audit.tsv"

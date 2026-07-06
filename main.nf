@@ -246,8 +246,24 @@ def effectivePanr2Dbs() {
     return params.panr2_abricate_dbs
 }
 
+def defaultAbricateDbPath() {
+    return "${baseDir}/db".toString()
+}
+
+def effectiveExternalAbricateDbPath() {
+    if (!params.db) {
+        return ""
+    }
+    def configured = launchPath(params.db)
+    return configured == defaultAbricateDbPath() ? "" : configured
+}
+
 def abricateSetupCommand(panr2Dbs, sampleDir) {
     def command = "python ${baseDir}/scripts/setup_abricate_databases.py --dbs ${panr2Dbs} --out ${sampleDir}/panr2_inputs/manifest/abricate_database_setup_status.tsv"
+    def abricateDbPath = effectiveExternalAbricateDbPath()
+    if (abricateDbPath) {
+        command += " --datadir ${shellQuote(abricateDbPath)}"
+    }
     if (!params.panr2_setup_abricate_db) {
         command += " --check-only"
     }
@@ -519,7 +535,7 @@ def helpMessage() {
     🔧 Other options:
   --threads          Number of threads for CheckM2, GTDB-Tk, and abricate [default: 8]
                      CheckM2 is capped separately by --checkm2_threads unless explicitly raised.
-      --db               Directory containing abricate databases [default: ./db]
+      --db               Directory containing ABRicate databases [default: ./db]. Legacy ABRicate always uses this path; PanR2 native comprehensive mode uses it as an external shared datadir when it differs from the bundled default.
       --help             Show this help message and exit
 
     Resource profiles can be combined with -profile conda,mamba:
@@ -2505,6 +2521,7 @@ process PANR2_FEATURE_RUNNERS {
     def mobsuiteDbPath = effectiveMobsuiteDbPath()
     def genomadDbPath = effectiveGenomadDbPath()
     def kaptiveDbPath = params.kaptive_db ? launchPath(params.kaptive_db) : ""
+    def abricateDbPath = effectiveExternalAbricateDbPath()
     """
     sequence_dir="${sample_dir}/sequence"
     if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
@@ -2529,6 +2546,7 @@ process PANR2_FEATURE_RUNNERS {
         --out ${sample_dir}/panr2_inputs/manifest/database_setup_status.tsv \\
         --analysis-profile ${analysisProfile()} \\
         --panr2-dbs ${panr2Dbs} \\
+        --abricate-db-dir ${shellQuote(abricateDbPath)} \\
         --qc-filter ${params.qc_filter} \\
         --run-checkm2 ${params.run_checkm2} \\
         --checkm2-db ${shellQuote(checkm2DbPath)} \\
@@ -2564,6 +2582,7 @@ process PANR2_FEATURE_RUNNERS {
         --sample-dir ${sample_dir} \\
         --sequence-dir "\${sequence_dir}" \\
         --abricate-dbs ${panr2Dbs} \\
+        --abricate-db-dir ${shellQuote(abricateDbPath)} \\
         --threads ${params.threads} \\
         --mode ${params.panr2_native_feature_runner_mode} \\
         --force ${params.panr2_force_tool_run} \\
@@ -2639,6 +2658,7 @@ process PANR2_COMPREHENSIVE {
     def mobsuiteDbPath = effectiveMobsuiteDbPath()
     def genomadDbPath = effectiveGenomadDbPath()
     def kaptiveDbPath = params.kaptive_db ? launchPath(params.kaptive_db) : ""
+    def abricateDbPath = effectiveExternalAbricateDbPath()
     """
     sequence_dir="${sample_dir}/sequence"
     if [ "${params.qc_filter}" = "true" ] && [ -d "${sample_dir}/sequence_filtered" ]; then
@@ -2664,6 +2684,7 @@ process PANR2_COMPREHENSIVE {
             --out ${sample_dir}/panr2_inputs/manifest/database_setup_status.tsv \\
             --analysis-profile ${analysisProfile()} \\
             --panr2-dbs ${panr2Dbs} \\
+            --abricate-db-dir ${shellQuote(abricateDbPath)} \\
             --qc-filter ${params.qc_filter} \\
             --run-checkm2 ${params.run_checkm2} \\
             --checkm2-db ${shellQuote(checkm2DbPath)} \\

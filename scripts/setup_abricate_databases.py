@@ -20,6 +20,7 @@ from pathlib import Path
 FIELDS = [
     "database",
     "requested",
+    "database_dir",
     "present_before",
     "setup_requested",
     "update_requested",
@@ -54,10 +55,18 @@ def first_nonempty_line(text: str) -> str:
     return ""
 
 
-def available_abricate_databases() -> tuple[set[str], str]:
+def abricate_command(args: list[str], datadir: Path | None = None) -> list[str]:
+    command = ["abricate"]
+    if datadir:
+        command.extend(["--datadir", str(datadir)])
+    command.extend(args)
+    return command
+
+
+def available_abricate_databases(datadir: Path | None = None) -> tuple[set[str], str]:
     if shutil.which("abricate") is None:
         return set(), "ABRicate executable was not found."
-    code, output = run_command(["abricate", "--list"], timeout=120)
+    code, output = run_command(abricate_command(["--list"], datadir), timeout=120)
     if code != 0:
         return set(), output or "abricate --list failed."
     databases: set[str] = set()
@@ -91,7 +100,14 @@ def write_rows(path: Path, rows: list[dict[str, str]]) -> None:
         writer.writerows(rows)
 
 
-def setup_with_panr(databases: list[str], check_only: bool) -> tuple[str, str]:
+def setup_with_panr(databases: list[str], check_only: bool, datadir: Path | None = None) -> tuple[str, str]:
+    if datadir:
+        if check_only:
+            return "SKIPPED", f"External ABRicate datadir supplied ({datadir}); setup was check-only."
+        code, output = run_command(abricate_command(["--setupdb"], datadir), timeout=1800)
+        status = "PASS" if code == 0 else "FAIL"
+        return status, first_nonempty_line(output) or f"abricate --datadir {datadir} --setupdb exited {code}."
+
     if shutil.which("panr") is None:
         if check_only:
             return "SKIPPED", "panr CLI was not found; check-only mode will rely on abricate --list."
@@ -105,7 +121,15 @@ def setup_with_panr(databases: list[str], check_only: bool) -> tuple[str, str]:
     return status, first_nonempty_line(output) or f"{' '.join(command)} exited {code}."
 
 
-def update_with_abricate_get_db(databases: list[str]) -> tuple[str, str]:
+def update_with_abricate_get_db(databases: list[str], datadir: Path | None = None) -> tuple[str, str]:
+    if datadir:
+        return (
+            "SKIPPED",
+            "External ABRicate datadir supplied; abricate-get_db force-refresh is not attempted because "
+            "the upstream updater does not reliably honor --datadir. Update the shared ABRicate database "
+            "with the owning ABRicate environment, then rerun with --panr2_update_abricate_db false.",
+        )
+
     updater = shutil.which("abricate-get_db")
     if updater is None:
         return "FAIL", "abricate-get_db was not found; cannot force-refresh ABRicate databases."
@@ -133,15 +157,16 @@ def update_with_abricate_get_db(databases: list[str]) -> tuple[str, str]:
 
 def build_rows(args: argparse.Namespace) -> tuple[list[dict[str, str]], int]:
     requested = parse_databases(args.dbs)
-    before, before_message = available_abricate_databases()
+    datadir = Path(args.datadir).resolve() if args.datadir else None
+    before, before_message = available_abricate_databases(datadir)
 
-    setup_status, setup_message = setup_with_panr(requested, args.check_only)
+    setup_status, setup_message = setup_with_panr(requested, args.check_only, datadir)
     update_status = "SKIPPED"
     update_message = "ABRicate force-refresh was not requested."
     if args.update:
-        update_status, update_message = update_with_abricate_get_db(requested)
+        update_status, update_message = update_with_abricate_get_db(requested, datadir)
 
-    after, after_message = available_abricate_databases()
+    after, after_message = available_abricate_databases(datadir)
     rows: list[dict[str, str]] = []
     failures = 0
     for db in requested:
@@ -160,6 +185,7 @@ def build_rows(args: argparse.Namespace) -> tuple[list[dict[str, str]], int]:
             {
                 "database": db,
                 "requested": "true",
+                "database_dir": str(datadir or ""),
                 "present_before": str(db in before).lower(),
                 "setup_requested": str(not args.check_only).lower(),
                 "update_requested": str(bool(args.update)).lower(),
@@ -178,6 +204,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dbs", required=True, help="Comma-separated ABRicate database names.")
     parser.add_argument("--out", required=True, help="Output TSV status path.")
+    parser.add_argument("--datadir", default="", help="Optional external ABRicate datadir to check/use instead of the environment default.")
     parser.add_argument("--check-only", action="store_true", help="Only check database availability.")
     parser.add_argument("--update", action="store_true", help="Force-refresh requested DBs with abricate-get_db when available.")
     parser.add_argument("--allow-missing", action="store_true", help="Do not exit non-zero if requested databases remain missing.")

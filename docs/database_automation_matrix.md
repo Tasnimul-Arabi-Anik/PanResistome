@@ -19,8 +19,8 @@ safe to fetch automatically.
 | --- | --- | --- | --- | --- |
 | FetchM2 metadata/download | Yes | Default metadata workflow | No | Fetches metadata and assemblies from user input. |
 | CheckM2 database | Yes | `--run_checkm2 true` default | No, unless offline/restricted | Downloads under `<outdir>/databases/checkm2`; pass `--checkm2_db` for cached/reproducible runs. The CheckM2 package stack is pinned to build 1 with CPU TensorFlow 2.17 after a 2026-05-16 fixture reproduced the stale Keras model-load failure. |
-| ABRicate `ncbi` | Yes | Comprehensive profiles | No | `panr setup-db` plus default forced refresh with `abricate-get_db --force`; audited in `abricate_database_setup_status.tsv`. |
-| ABRicate `vfdb` | Yes | Comprehensive profiles | No | Same as above. |
+| ABRicate `ncbi` | Yes | Comprehensive profiles | No | `panr setup-db` plus default forced refresh with `abricate-get_db --force`; audited in `abricate_database_setup_status.tsv`. If `--db` points to a non-default shared ABRicate datadir, native comprehensive mode checks that datadir with `abricate --datadir ... --list`, indexes it with `abricate --datadir ... --setupdb`, and does not duplicate it into the container/default environment. |
+| ABRicate `vfdb` | Yes | Comprehensive profiles | No | Same as above. External datadir force-refresh is intentionally skipped because `abricate-get_db` does not reliably honor `--datadir`; update the shared ABRicate environment directly when a frozen/reusable DB is desired. |
 | ABRicate `plasmidfinder` | Yes | Comprehensive profiles | No | Same as above. |
 | AMRFinderPlus database | Yes | `--run_amrfinderplus true` | No | `--amrfinderplus_update_db true` by default. |
 | IntegronFinder | Yes | Comprehensive profiles | No | Tool/environment driven; no separate user database path in the supported route. |

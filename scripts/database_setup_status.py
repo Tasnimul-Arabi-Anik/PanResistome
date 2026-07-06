@@ -151,10 +151,14 @@ def file_has_data(path: Path) -> bool:
     return len(nonempty) > 1
 
 
-def read_abricate_databases() -> tuple[set[str], str]:
+def read_abricate_databases(datadir: str = "") -> tuple[set[str], str]:
     if shutil.which("abricate") is None:
         return set(), "ABRicate executable not found in this environment."
-    code, output = run_command(["abricate", "--list"])
+    command = ["abricate"]
+    if datadir:
+        command.extend(["--datadir", datadir])
+    command.append("--list")
+    code, output = run_command(command)
     if code != 0:
         return set(), output or "abricate --list failed."
     databases: set[str] = set()
@@ -344,7 +348,7 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
     )
 
     abricate_version = command_version("abricate", ["--version"])
-    abricate_databases, abricate_message = read_abricate_databases()
+    abricate_databases, abricate_message = read_abricate_databases(args.abricate_db_dir)
     required_dbs = [item.strip() for item in str(args.panr2_dbs or "").split(",") if item.strip()]
     abricate_setup_report = sample_dir / "panr2_inputs" / "manifest" / "abricate_database_setup_status.tsv"
     abricate_setup_counts = count_status_values(abricate_setup_report)
@@ -372,9 +376,9 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
             bool(required_dbs),
             True,
             "PASS" if abricate_version and abricate_databases else ("FAIL" if required_dbs else "SKIPPED"),
-            "panr_setup_db_update_then_list" if args.panr2_update_abricate_db else "panr_setup_db_then_list",
+            "external_datadir_then_list" if args.abricate_db_dir else ("panr_setup_db_update_then_list" if args.panr2_update_abricate_db else "panr_setup_db_then_list"),
             abricate_version,
-            abricate_message,
+            f"{abricate_message} datadir={args.abricate_db_dir}" if args.abricate_db_dir else abricate_message,
         )
     )
     for db_name in required_dbs:
@@ -384,8 +388,8 @@ def build_rows(args: argparse.Namespace) -> list[dict[str, str]]:
                 True,
                 True,
                 "PASS" if db_name in abricate_databases else "FAIL",
-                "panr_setup_db_or_forced_update" if args.panr2_update_abricate_db else "panr_setup_db",
-                db_name if db_name in abricate_databases else "",
+                "external_datadir" if args.abricate_db_dir else ("panr_setup_db_or_forced_update" if args.panr2_update_abricate_db else "panr_setup_db"),
+                f"{args.abricate_db_dir}:{db_name}" if args.abricate_db_dir and db_name in abricate_databases else (db_name if db_name in abricate_databases else ""),
                 f"ABRicate database {db_name!r} is available." if db_name in abricate_databases else f"ABRicate database {db_name!r} is required but unavailable after setup.",
             )
         )
@@ -548,6 +552,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--out", required=True)
     parser.add_argument("--analysis-profile", default="custom")
     parser.add_argument("--panr2-dbs", default="")
+    parser.add_argument("--abricate-db-dir", default="")
     parser.add_argument("--qc-filter", type=as_bool, default=False)
     parser.add_argument("--run-checkm2", type=as_bool, default=False)
     parser.add_argument("--checkm2-db", default="")

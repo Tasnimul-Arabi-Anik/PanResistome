@@ -275,7 +275,22 @@ def _capture_command(command: list[str]) -> str:
         return f"unavailable: {exc}"
 
 
-def run_abricate_parallel(sequence_dir: Path, sample_dir: Path, databases: list[str], threads: int, force: bool = False) -> dict:
+def abricate_command(executable: str, abricate_db_dir: Path | None, args: list[str]) -> list[str]:
+    command = [executable]
+    if abricate_db_dir:
+        command.extend(["--datadir", str(abricate_db_dir)])
+    command.extend(args)
+    return command
+
+
+def run_abricate_parallel(
+    sequence_dir: Path,
+    sample_dir: Path,
+    databases: list[str],
+    threads: int,
+    force: bool = False,
+    abricate_db_dir: Path | None = None,
+) -> dict:
     from panr2.runners import _parse_abricate_list, find_sequence_files, write_tool_manifest
 
     executable = shutil.which("abricate")
@@ -284,7 +299,7 @@ def run_abricate_parallel(sequence_dir: Path, sample_dir: Path, databases: list[
     sequence_files = find_sequence_files(str(sequence_dir))
     if not sequence_files:
         raise FileNotFoundError(f"No FASTA files found in {sequence_dir}")
-    list_output = _capture_command([executable, "--list"])
+    list_output = _capture_command(abricate_command(executable, abricate_db_dir, ["--list"]))
     available = _parse_abricate_list(list_output)
     if not available:
         raise ValueError("ABRicate did not report any available databases. Run `panr setup-db` or `abricate --setupdb`.")
@@ -328,7 +343,7 @@ def run_abricate_parallel(sequence_dir: Path, sample_dir: Path, databases: list[
         raw_dir.mkdir(parents=True, exist_ok=True)
         raw_path = raw_dir / f"{sequence_label(sequence_file)}.tab"
         if force or not raw_path.exists():
-            _run_command([executable, "--db", db, sequence_file], stdout_path=raw_path)
+            _run_command(abricate_command(executable, abricate_db_dir, ["--db", db, sequence_file]), stdout_path=raw_path)
         return db, sequence_file, raw_path
 
     workers = worker_count(threads, len(sequence_files))
@@ -368,6 +383,7 @@ def run_abricate_parallel(sequence_dir: Path, sample_dir: Path, databases: list[
             "name": "abricate",
             "executable": executable,
             "version": version,
+            "database_dir": str(abricate_db_dir or ""),
             "runs": [],
         }],
     }
@@ -504,6 +520,7 @@ def main() -> int:
     parser.add_argument("--sample-dir", required=True, type=Path)
     parser.add_argument("--sequence-dir", required=True, type=Path)
     parser.add_argument("--abricate-dbs", required=True)
+    parser.add_argument("--abricate-db-dir", default="")
     parser.add_argument("--threads", type=int, default=1)
     parser.add_argument("--mode", choices=["serial", "parallel"], default="serial")
     parser.add_argument("--force", type=as_bool, default=False)
@@ -562,13 +579,17 @@ def main() -> int:
 
     started = utc_now()
     databases = [db.strip() for db in args.abricate_dbs.split(",") if db.strip()]
+    abricate_db_dir = Path(args.abricate_db_dir).resolve() if str(args.abricate_db_dir).strip() else None
     try:
         if args.mode == "parallel":
-            result = run_abricate_parallel(sequence_dir, sample_dir, databases, args.threads, force=args.force)
+            result = run_abricate_parallel(sequence_dir, sample_dir, databases, args.threads, force=args.force, abricate_db_dir=abricate_db_dir)
             abricate_message = (
                 f"ABRicate completed for databases: {','.join(databases)} "
                 f"(per-database sample-parallel workers={result.get('parallel_workers', worker_count(args.threads, sample_count))})"
             )
+        elif abricate_db_dir:
+            result = run_abricate_parallel(sequence_dir, sample_dir, databases, 1, force=args.force, abricate_db_dir=abricate_db_dir)
+            abricate_message = f"ABRicate completed for databases: {','.join(databases)} (serial external datadir={abricate_db_dir})"
         else:
             result = run_abricate_databases(
                 str(sequence_dir),

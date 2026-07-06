@@ -624,7 +624,7 @@ PanResistome/
 | Argument    | Type | Default | Description                             |
 | ----------- | ---- | ------- | --------------------------------------- |
 | `--threads` | int  | 8       | General workflow threads for GTDB-Tk, QUAST, ANI, ABRicate, native PanR2 feature runners, and other tools. CheckM2 is capped separately by `--checkm2_threads`. |
-| `--db`      | str  | ./db    | Directory containing abricate databases |
+| `--db`      | str  | ./db    | Directory containing ABRicate databases. The legacy ABRicate branch always uses this path. PanR2 native comprehensive mode uses it as an external shared ABRicate datadir when it differs from the bundled default; for Docker/Apptainer runs, mount the path with `--container_run_options`. |
 | `--help`    | flag | -       | Show help message and exit              |
 
 ### Resource Profiles
