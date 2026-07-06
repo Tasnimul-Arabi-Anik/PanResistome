@@ -14,6 +14,13 @@ THREADS="${THREADS:-32}"
 FETCH_WORKERS="${FETCH_WORKERS:-4}"
 AMRFINDER_JOBS="${AMRFINDER_JOBS:-24}"
 CONTAINER_IMAGE="${CONTAINER_IMAGE:-ghcr.io/tasnimul-arabi-anik/panresistome:experimental}"
+NEXTFLOW_BIN="${NEXTFLOW_BIN:-nextflow}"
+
+if ! command -v "$NEXTFLOW_BIN" >/dev/null 2>&1; then
+  if [[ -x "$HOME/miniconda3/bin/nextflow" ]]; then
+    NEXTFLOW_BIN="$HOME/miniconda3/bin/nextflow"
+  fi
+fi
 
 if [[ ! -d "$PIPELINE_DIR" ]]; then
   echo "ERROR: PIPELINE_DIR does not exist: $PIPELINE_DIR" >&2
@@ -21,6 +28,10 @@ if [[ ! -d "$PIPELINE_DIR" ]]; then
 fi
 if [[ ! -d "$DB_ROOT" ]]; then
   echo "ERROR: PANRESISTOME_DB_ROOT does not exist: $DB_ROOT" >&2
+  exit 1
+fi
+if ! command -v "$NEXTFLOW_BIN" >/dev/null 2>&1 && [[ ! -x "$NEXTFLOW_BIN" ]]; then
+  echo "ERROR: Nextflow was not found. Set NEXTFLOW_BIN=/path/to/nextflow." >&2
   exit 1
 fi
 
@@ -52,12 +63,13 @@ echo "  db root:      $DB_ROOT"
 echo "  output:       $OUTDIR"
 echo "  work:         $WORKDIR"
 echo "  taxon:        $TAXON"
+echo "  nextflow:     $NEXTFLOW_BIN"
 echo "  CheckM2 DB:   ${CHECKM2_DB:-not found; pass CHECKM2_DB or disable CheckM2}"
 echo "  GTDB-Tk data: ${GTDBTK_DATA_PATH:-not found; GTDB-Tk should stay disabled}"
 echo "  geNomAD DB:   ${GENOMAD_DB:-not found; geNomAD should stay disabled or auto-download elsewhere}"
 echo "  ABRicate DB:  ${ABRICATE_DB:-not found}"
 
-nextflow run main.nf \
+"$NEXTFLOW_BIN" run main.nf \
   -work-dir "$WORKDIR" \
   --taxon "$TAXON" \
   --outdir "$OUTDIR" \
